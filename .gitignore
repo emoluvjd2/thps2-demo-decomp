@@ -1,0 +1,44 @@
+# User-supplied or generated inputs
+original/
+bin/
+Sample/
+toolchain/
+output/
+
+# Archives and binary build products
+.recovery/
+*.7z
+*.rar
+*.zip
+*.tar
+*.tar.gz
+*.tar.xz
+*.a
+*.bin
+*.dll
+*.elf
+*.exe
+*.lib
+*.map
+*.o
+*.obj
+*.sym
+
+# Editors, assistants, worktrees, and local environment files
+.claude/
+.codex/
+.agents/
+.cursor/
+.idea/
+.vscode/
+.worktrees/
+.env
+.env.*
+!.env.example
+
+# Python/test caches and local diagnostics
+__pycache__/
+*.py[cod]
+.pytest_cache/
+debug_*
+match_results.txt

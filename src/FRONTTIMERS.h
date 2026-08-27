@@ -1,0 +1,65 @@
+/*
+ * FRONT physically owns these front-end timers in initialized small data.
+ * Cross-owner consumers retain their target-proven absolute-address views.
+ * This header is intentionally re-entrant so each timer stays at its original
+ * declaration point.
+ */
+#if defined(FRONTTIMERS_TITLE_TIMEOUT_OWNER_DECLARATION) && \
+    defined(FRONTTIMERS_TITLE_TIMEOUT_ABSOLUTE_DECLARATION)
+#error "Select only one TitleTimeout declaration view"
+#endif
+
+#if defined(FRONTTIMERS_LEFT_RIGHT_TIMER_OWNER_DECLARATION) && \
+    defined(FRONTTIMERS_LEFT_RIGHT_TIMER_ABSOLUTE_DECLARATION)
+#error "Select only one LeftRightAutoRepeatTimer declaration view"
+#endif
+
+#if !defined(FRONTTIMERS_TITLE_TIMEOUT_OWNER_DECLARATION) && \
+    !defined(FRONTTIMERS_TITLE_TIMEOUT_ABSOLUTE_DECLARATION) && \
+    !defined(FRONTTIMERS_LEFT_RIGHT_TIMER_OWNER_DECLARATION) && \
+    !defined(FRONTTIMERS_LEFT_RIGHT_TIMER_ABSOLUTE_DECLARATION)
+#error "Select a FRONT timer declaration view"
+#endif
+
+#ifdef FRONTTIMERS_WITHIN_C_LINKAGE
+#define FRONTTIMERS_DECL_LINKAGE extern
+#else
+#define FRONTTIMERS_DECL_LINKAGE extern "C"
+#endif
+
+#if defined(FRONTTIMERS_TITLE_TIMEOUT_OWNER_DECLARATION)
+#define FRONTTIMERS_TITLE_TIMEOUT_DECL_ATTR
+#elif defined(FRONTTIMERS_TITLE_TIMEOUT_ABSOLUTE_DECLARATION)
+#define FRONTTIMERS_TITLE_TIMEOUT_DECL_ATTR \
+    __attribute__((section(".data")))
+#endif
+
+#if defined(FRONTTIMERS_TITLE_TIMEOUT_OWNER_DECLARATION) || \
+    defined(FRONTTIMERS_TITLE_TIMEOUT_ABSOLUTE_DECLARATION)
+/** Frames allowed for the front-end title transition. */
+FRONTTIMERS_DECL_LINKAGE int TitleTimeout
+    FRONTTIMERS_TITLE_TIMEOUT_DECL_ATTR;
+#endif
+
+#if defined(FRONTTIMERS_LEFT_RIGHT_TIMER_OWNER_DECLARATION)
+#define FRONTTIMERS_LEFT_RIGHT_TIMER_DECL_ATTR
+#elif defined(FRONTTIMERS_LEFT_RIGHT_TIMER_ABSOLUTE_DECLARATION)
+#define FRONTTIMERS_LEFT_RIGHT_TIMER_DECL_ATTR \
+    __attribute__((section(".data")))
+#endif
+
+#if defined(FRONTTIMERS_LEFT_RIGHT_TIMER_OWNER_DECLARATION) || \
+    defined(FRONTTIMERS_LEFT_RIGHT_TIMER_ABSOLUTE_DECLARATION)
+/** Horizontal menu-input repeat timer shared with RFRONT. */
+FRONTTIMERS_DECL_LINKAGE int LeftRightAutoRepeatTimer
+    FRONTTIMERS_LEFT_RIGHT_TIMER_DECL_ATTR;
+#endif
+
+#undef FRONTTIMERS_TITLE_TIMEOUT_DECL_ATTR
+#undef FRONTTIMERS_LEFT_RIGHT_TIMER_DECL_ATTR
+#undef FRONTTIMERS_DECL_LINKAGE
+#undef FRONTTIMERS_TITLE_TIMEOUT_OWNER_DECLARATION
+#undef FRONTTIMERS_TITLE_TIMEOUT_ABSOLUTE_DECLARATION
+#undef FRONTTIMERS_LEFT_RIGHT_TIMER_OWNER_DECLARATION
+#undef FRONTTIMERS_LEFT_RIGHT_TIMER_ABSOLUTE_DECLARATION
+#undef FRONTTIMERS_WITHIN_C_LINKAGE
