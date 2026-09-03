@@ -3,11 +3,11 @@
 set -u
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PSYQ_SDK_HEADER_HELPER="$SCRIPT_DIR/tools/psyq_sdk_headers.py"
-EGCS_JUMP_PATCH_HELPER="$SCRIPT_DIR/toolchain/patch_egcs_1_1_1_jump.py"
+EGCS_COMPILER_VERIFIER="$SCRIPT_DIR/toolchain/verify_egcs_1_1_2.py"
 COMPILER_DIR="$SCRIPT_DIR/toolchain/gcc-2.91.66-psx"
 
-if ! python3 "$EGCS_JUMP_PATCH_HELPER" --check "$COMPILER_DIR" >/dev/null; then
-    echo "Canonical compiler jump-behavior validation failed; refusing compilation." >&2
+if ! python3 "$EGCS_COMPILER_VERIFIER" --check "$COMPILER_DIR" >/dev/null; then
+    echo "Canonical stock compiler validation failed; refusing compilation." >&2
     exit 1
 fi
 
@@ -99,8 +99,8 @@ done
 echo ""
 echo "Results: $pass passed, $fail failed out of $((pass + fail)) TU files"
 
-if ! python3 "$EGCS_JUMP_PATCH_HELPER" --check "$COMPILER_DIR" >/dev/null; then
-    echo "Canonical compiler jump behavior changed during compilation; refusing success." >&2
+if ! python3 "$EGCS_COMPILER_VERIFIER" --check "$COMPILER_DIR" >/dev/null; then
+    echo "Canonical compiler identity changed during compilation; refusing success." >&2
     exit 1
 fi
 if ! python3 "$PSYQ_SDK_HEADER_HELPER" --check >/dev/null; then

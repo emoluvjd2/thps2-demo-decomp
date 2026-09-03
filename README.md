@@ -9,14 +9,15 @@ Neversoft, Activision, Sony, or any other rights holder.
 
 ## Status
 
-**1,637 of 1,646 functions reproduce the original object code exactly
-(99.45%).** "Exactly" means every instruction agrees, relocations included —
+**1,635 of 1,646 functions reproduce the original object code exactly
+(99.33%).** "Exactly" means every instruction agrees, relocations included —
 not merely equivalent behaviour.
 
-The nine remaining are `StartGrind` (PHYSICS), `Front_Display` (FRONT),
-`Redbook_XAPlay` (REDBOOK), `Bit_Display` (BIT), `CreateZonePacket`
-(LEVELGEN), `setData` (IMAGE), `ReactToCollision` (CAMERA),
-`M3dColij_LineToThisItemCached` (M3DCOLIJ) and `Wireframe_ProcessPolys` (M3D).
+The eleven remaining are `StartGrind`, `DoInAirPhysics` and
+`DoWallRidePhysics` (PHYSICS), `Front_Display` (FRONT), `Redbook_XAPlay`
+(REDBOOK), `Bit_Display` (BIT), `CreateZonePacket` (LEVELGEN), `setData`
+(IMAGE), `ReactToCollision` (CAMERA), `M3dColij_LineToThisItemCached`
+(M3DCOLIJ) and `Wireframe_ProcessPolys` (M3D).
 
 The measurement itself is not reproducible from this repository: verifying it
 requires the target disassembly and debug symbols, which are target-derived and
@@ -80,16 +81,17 @@ are deliberately outside this repository.
 and match pipeline and depends on tooling and target data this snapshot
 excludes, so it will not run here.
 
-### The compiler is patched, deliberately
+### The compiler is stock, and checked
 
-The compiler `setup_toolchain.sh` downloads is built from egcs 1.1.2, which
-added a guard in `jump.c:delete_computation` disabling recursive jump deletion
-after the second scheduler. egcs 1.1.1 had no such guard, and the target
-requires the earlier behaviour. `toolchain/patch_egcs_1_1_1_jump.py`
-reproduces that reversion against pinned SHA-256 hashes and refuses an unknown
-binary; `--check` verifies without modifying. Both `setup_toolchain.sh` and
-`test_all_tu.sh` run that check and fail closed, so a stock or tampered
+Canonical builds use the unmodified egcs 1.1.2 `cc1` and `cc1plus` that
+`setup_toolchain.sh` downloads. `toolchain/verify_egcs_1_1_2.py` checks both
+against their stock SHA-256 identities, and `setup_toolchain.sh` and
+`test_all_tu.sh` run that check and fail closed, so a modified or unknown
 compiler is rejected rather than quietly producing different code.
+
+Compiler patches are out of bounds for this project by policy: a patched or
+hybrid compiler is a noncanonical experiment and may not publish matcher
+artifacts or milestone counts.
 
 ## Evidence and rights
 

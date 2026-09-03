@@ -122,17 +122,21 @@ struct t9AnimParam1Z5CQuat {
 /** Camera tripod, lens, and focus snapshot (184 bytes). */
 struct CamPos {
     struct CClass CClass;
-    void *calc_mTripod;
+    /** Whether to derive the tripod position from the tracked body. */
+    bool calc_mTripod;
     struct CBody *mTripod;
     struct CVector mTripodPos;
-    void *lock_mStickO;
+    /** Whether to retain the current stick orientation. */
+    bool lock_mStickO;
     struct CQuat mStickO;
     struct CVector mStickOffset;
     s16 mStickLength;
-    void *calc_mLenseO;
+    /** Whether to calculate the lens orientation. */
+    bool calc_mLenseO;
     struct CQuat mLenseO;
     struct CVector mLenseOffset;
-    void *calc_mFocusPos;
+    /** Whether to calculate the tracked focus position. */
+    bool calc_mFocusPos;
     struct CBody *mFocus;
     struct CVector mFocusPos;
     struct CQuat mWorldO;
@@ -165,14 +169,17 @@ struct CCamera : CBody {
     u32 mCamPosRate;
     struct CBody *mTripod;
     struct CBody *mOldTripod;
-    void *mCalcTripod;
+    /** Whether the camera should calculate its tripod position. */
+    bool mCalcTripod;
     struct CVector mOldTripodPos;
-    void *new_focus;
+    /** Whether the focus target changed during this update. */
+    bool new_focus;
     struct CVector mTripodPos;
     struct CVector mTripodPosIncrement;
     u32 mTripodTime;
     struct CBody *mFocus;
-    void *mCalcFocus;
+    /** Whether the camera should calculate its focus position. */
+    bool mCalcFocus;
     struct CVector mOldFocusPos;
     struct CVector mFocusPos;
     struct CVector mFocusPosIncrement;
@@ -180,7 +187,8 @@ struct CCamera : CBody {
     int mZoom;
     u16 mZoomTime;
     int mZoomIncrement;
-    void *mOnRail;
+    /** Whether the camera is following a rail. */
+    bool mOnRail;
     struct CVector mRailStart;
     struct CVector mRailEnd;
     s16 mPitchDamper;
@@ -191,7 +199,8 @@ struct CCamera : CBody {
     struct CQuat mPrevO;
     struct CQuat mPreFocusO;
     struct CQuat mStoppedO;
-    void *mStoppedOValid;
+    /** Whether mStoppedO contains a usable stopped orientation. */
+    bool mStoppedOValid;
     struct CSVector mCamAngles;
     struct CVector mPosOffset;
     struct CVector mDesiredPos;
@@ -220,13 +229,15 @@ struct CCamera : CBody {
     u32 mColCheckCycleCounter;
     int mDownDist;
     int mCompIntroTimer;
-    void *mSpeedUpIntro;
+    /** Whether the competition-intro camera should run at increased speed. */
+    bool mSpeedUpIntro;
     struct CVector mCompIntroEndPos;
     int extra_YRot;
     struct CVector mVFront;
     struct CVector mOldVFront;
     int prev_speed_lag_dist;
-    void *big_air;
+    /** Whether the camera is handling a big-air transition. */
+    bool big_air;
     int big_air_timer;
     int big_air_end_timer;
     int big_air_mph;
@@ -597,12 +608,12 @@ static inline u16 Camera_InitializeDerivedBase(CCamera *camera, u16 mikeIndex) {
 CCamera::CCamera(struct CBody *tripod, u16 mike_index)
     : mMikeIndex(Camera_InitializeDerivedBase(this, mike_index)),
       mTripod(tripod),
-      mCalcTripod((void *)1),
-      new_focus(0),
+      mCalcTripod(true),
+      new_focus(false),
       mFocus(tripod),
-      mCalcFocus((void *)1),
+      mCalcFocus(true),
       mZoom(0xc0),
-      mOnRail(0),
+      mOnRail(false),
       mPitchDamper(0),
       mTripodPosYDamper(0),
       mCollisionRayLR(-1),
@@ -618,7 +629,7 @@ CCamera::CCamera(struct CBody *tripod, u16 mike_index)
       mColCheckIndex(0),
       mColCheckCycleCounter(0),
       mDownDist(0),
-      mSpeedUpIntro(0),
+      mSpeedUpIntro(false),
       mStoppedExtraYRot(0),
       loose_cam_timer(0) {
     real_cam_offset.vx = 0;
@@ -639,7 +650,7 @@ CCamera::CCamera(struct CBody *tripod, u16 mike_index)
     vFront = CVector(0, 0, 0x1000);
 
     in_pool_timer = 0x3e8;
-    big_air = 0;
+    big_air = false;
     extra_YRot = 0;
     {
         // Three ordinary pointer/reference forms shift 21 instructions in the
@@ -962,7 +973,7 @@ void CCamera::ResetOrientation() {
     CM_Normal();
 
     mStoppedO = mPrevO = mO = mDesiredO;
-    mStoppedOValid = (void *)1;
+    mStoppedOValid = true;
 
     LoadIntoMikeCamera();
 }
@@ -1446,7 +1457,7 @@ void CCamera::ReactToCollision() {
         if (mStoppedOValid == 0 && mDownDist >= 0) {
             Quat_Slerp(
                 mO, mDesiredO, 0x600, mStoppedO);
-            mStoppedOValid = (void *)1;
+            mStoppedOValid = true;
         }
 
         if (GState == 0 && mStoppedOValid != 0) {
@@ -2466,7 +2477,7 @@ void CCamera::CM_Normal() {
                 Utils_GetVecFromMagDir(
                     vFront, 0x1000, ang1);
             }
-            big_air = (void *)1;
+            big_air = true;
             in_pool_timer = 0;
             goto front_selected;
         }
@@ -2475,7 +2486,7 @@ void CCamera::CM_Normal() {
     if ((dot_front >> 12) >= 0x7d1 ||
         temp_vel.Length() < 5) {
         turn_delay_timer = 0;
-        if (dot_up < 0xdf4 && big_air == (void *)1) {
+        if (dot_up < 0xdf4 && big_air == true) {
             in_pool_timer = 0;
         }
         big_air = 0;
@@ -2483,7 +2494,7 @@ void CCamera::CM_Normal() {
         turn_delay_timer = 0;
         Utils_GetVecFromMagDir(
             vFront, 0x1000, ang1);
-        if (dot_up < 0xdf4 && big_air == (void *)1) {
+        if (dot_up < 0xdf4 && big_air == true) {
             in_pool_timer = 0;
         }
         big_air = 0;
@@ -2666,7 +2677,7 @@ void CCamera::CM_CompetitionIntro() {
             activated = 1;
         }
         if (activated) {
-            mSpeedUpIntro = (void *)1;
+            mSpeedUpIntro = true;
         }
 
         if (mSpeedUpIntro != 0) {

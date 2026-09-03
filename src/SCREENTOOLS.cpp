@@ -28,8 +28,10 @@ struct SlicedImage2 : Image {
     short SliceH;
     short SliceCountX;
     short SliceCountY;
-    void *InMemory;
-    void *Packed;
+    /** True after owned pixel buffers have been allocated for the slices. */
+    bool InMemory;
+    /** True after the slice rectangles have been allocated in VRAM. */
+    bool Packed;
     int BppShift;
     unsigned short Clut;
 

@@ -15,7 +15,7 @@ COMPILER_DIR="$TOOLCHAIN_DIR/gcc-2.91.66-psx"
 MASPSX_DIR="$TOOLCHAIN_DIR/maspsx"
 PSYQ_SDK_DIR="$TOOLCHAIN_DIR/psyq-4.6-sdk"
 PSYQ_SDK_HEADER_HELPER="$SCRIPT_DIR/tools/psyq_sdk_headers.py"
-EGCS_JUMP_PATCH_HELPER="$TOOLCHAIN_DIR/patch_egcs_1_1_1_jump.py"
+EGCS_COMPILER_VERIFIER="$TOOLCHAIN_DIR/verify_egcs_1_1_2.py"
 COMPILER_ARCHIVE_SHA256="25667f9cc2be6fcce38ada9b466fdf9dccf7fd02f86af2fda7019173f308c833"
 
 echo "=== PSX Cross-Compiler Setup ==="
@@ -51,7 +51,10 @@ python3 "$PSYQ_SDK_HEADER_HELPER" --prepare
 # Step 3: Download GCC 2.91.66-psx
 echo "[3/5] Downloading GCC 2.91.66-psx..."
 mkdir -p "$TOOLCHAIN_DIR"
-if [ -f "$COMPILER_DIR/cc1" ] && [ -f "$COMPILER_DIR/cc1plus" ]; then
+if [ -f "$COMPILER_DIR/cc1" ] \
+        && [ -f "$COMPILER_DIR/cc1plus" ] \
+        && python3 "$EGCS_COMPILER_VERIFIER" \
+            --check "$COMPILER_DIR" >/dev/null 2>&1; then
     echo "  Already downloaded."
 else
     DOWNLOAD_STAGE="$(mktemp -d "$TOOLCHAIN_DIR/.gcc-2.91.66-psx.XXXXXXXX")"
@@ -70,11 +73,10 @@ else
     fi
     chmod +x "$STAGED_COMPILER_DIR"/*
 
-    # Patch and verify the complete staged pair before replacing any live
-    # compiler files. A partial existing installation can therefore repair
-    # itself without ever exposing a half-installed canonical toolchain.
-    python3 "$EGCS_JUMP_PATCH_HELPER" --apply "$STAGED_COMPILER_DIR"
-    python3 "$EGCS_JUMP_PATCH_HELPER" --check "$STAGED_COMPILER_DIR" >/dev/null
+    # Verify the complete stock pair before replacing any live compiler files.
+    # A partial or formerly patched installation therefore repairs itself
+    # without ever becoming a canonical input.
+    python3 "$EGCS_COMPILER_VERIFIER" --check "$STAGED_COMPILER_DIR" >/dev/null
 
     COMPILER_BACKUP="$TOOLCHAIN_DIR/.gcc-2.91.66-psx.backup.$$"
     if [ -e "$COMPILER_DIR" ]; then
@@ -90,12 +92,8 @@ else
     echo "  Installed: cc1, gcc, cpp, cc1plus, g++"
 fi
 
-# The target proves EGCS 1.1.1's recursive final-jump deletion behavior.  The
-# downloadable 1.1.2 binaries added a post-scheduler guard which changes two
-# recovered PHYSICS functions.  Restore that genuine historical behavior with
-# an exact-hash, fail-closed binary patch.
-python3 "$EGCS_JUMP_PATCH_HELPER" --apply "$COMPILER_DIR"
-python3 "$EGCS_JUMP_PATCH_HELPER" --check "$COMPILER_DIR" >/dev/null
+# Canonical builds use the downloaded compiler without binary modifications.
+python3 "$EGCS_COMPILER_VERIFIER" --check "$COMPILER_DIR" >/dev/null
 
 # Step 4: Clone maspsx
 echo "[4/5] Setting up maspsx..."
@@ -120,7 +118,7 @@ chmod +x "$COMPILER_DIR/as"
 echo ""
 echo "=== Verification ==="
 echo -n "cc1:      " && "$COMPILER_DIR/cc1" -version < /dev/null 2>&1 | head -1 || echo "FAILED"
-echo -n "EGCS jump: " && python3 "$EGCS_JUMP_PATCH_HELPER" --check "$COMPILER_DIR" >/dev/null \
+echo -n "EGCS stock: " && python3 "$EGCS_COMPILER_VERIFIER" --check "$COMPILER_DIR" >/dev/null \
     && echo "verified"
 echo -n "as:       " && mips-linux-gnu-as --version | head -1
 echo -n "objdump:  " && mips-linux-gnu-objdump --version | head -1

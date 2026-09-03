@@ -389,32 +389,35 @@ struct EditorRuntimeCameraView
     unsigned char opaqueToTripod[0x3f4 - 0x4c];
     EditorCameraBodyView *mTripod;
     EditorCameraBodyView *mOldTripod;
-    void *mCalcTripod;
+    /** Whether the runtime camera should calculate its tripod position. */
+    bool mCalcTripod;
     CVector mOldTripodPos;
-    int newFocus;
+    /** Whether the runtime camera's focus target changed. */
+    bool new_focus;
     CVector mTripodPos;
     CVector mTripodPosIncrement;
     unsigned int mTripodTime;
     EditorCameraBodyView *mFocus;
-    int mCalcFocus;
+    /** Whether the runtime camera should calculate its focus position. */
+    bool mCalcFocus;
     unsigned char opaqueToCameraMode[0x558 - 0x434];
     int mCameraMode;
 
     /** Select an explicit tripod position for the next camera update. */
     void SetTripodPosition(const CVector &position)
     {
-        mCalcTripod = 0;
+        mCalcTripod = false;
         mTripodPos = position;
         mTripod = 0;
-        newFocus = 1;
+        new_focus = true;
     }
 
     /** Select the body that the runtime camera should follow. */
     void SetFocus(EditorCameraBodyView *focus)
     {
-        mCalcFocus = 1;
+        mCalcFocus = true;
         mFocus = focus;
-        newFocus = 1;
+        new_focus = true;
     }
 
     /** Dispatch the camera's virtual update method. */
@@ -1945,12 +1948,12 @@ EditorCamera::EditorCamera()
     EditorRuntimeCameraView *c1 =
         (EditorRuntimeCameraView *)this->Camera;
     asm volatile("" : "+r"(c1));
-    int one = 1;
+    bool one = true;
     asm volatile("" : "+r"(one));
     this->Tripod.vx = 0;
     this->Tripod.vy = yval;
     this->Tripod.vz = 0;
-    c1->mCalcTripod = 0;
+    c1->mCalcTripod = false;
     register int tx asm("$7") = this->Tripod.vx;
     register int ty asm("$8") = this->Tripod.vy;
     register int tz asm("$9") = this->Tripod.vz;
@@ -1959,7 +1962,7 @@ EditorCamera::EditorCamera()
     c1->mTripodPos.vz = tz;
     asm volatile("");
     c1->mTripod = 0;
-    c1->newFocus = one;
+    c1->new_focus = one;
 
     CBody *body2 = static_cast<CBody *>(::CItem::operator new(size2));
     if (body2 != 0)
@@ -1981,7 +1984,7 @@ EditorCamera::EditorCamera()
         (EditorCameraBodyView *)this->Target;
     camPtr->mCalcFocus = one;
     camPtr->mFocus = focus;
-    camPtr->newFocus = one;
+    camPtr->new_focus = one;
     this->Type = one;
     this->Rot = 0xc00;
     this->TargetRot = 0xc00;

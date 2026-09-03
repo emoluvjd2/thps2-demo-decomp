@@ -26,7 +26,7 @@ LINKER_SCRIPT="$SCRIPT_DIR/psxexe.ld"
 COMPILER_DIR="$SCRIPT_DIR/toolchain/gcc-2.91.66-psx"
 CC1_C="$COMPILER_DIR/cc1"
 CC1="$COMPILER_DIR/cc1plus"
-EGCS_JUMP_PATCH_HELPER="$SCRIPT_DIR/toolchain/patch_egcs_1_1_1_jump.py"
+EGCS_COMPILER_VERIFIER="$SCRIPT_DIR/toolchain/verify_egcs_1_1_2.py"
 ASPSX_EXE="$SCRIPT_DIR/toolchain/psyq4.6/ASPSX.EXE"
 PSYLINK_EXE="$SCRIPT_DIR/toolchain/psyq4.6/PSYLINK.EXE"
 FILL_DS="$SCRIPT_DIR/tools/fill_delay_slots.py"
@@ -110,9 +110,9 @@ PYTHON_BIN="$(command -v python3)"
 PSYQ_INCLUDE_ROOT=""
 ASSEMBLY_PIPELINE_START_IDENTITY=""
 if $DO_COMPILE; then
-    if ! "$PYTHON_BIN" "$EGCS_JUMP_PATCH_HELPER" \
+    if ! "$PYTHON_BIN" "$EGCS_COMPILER_VERIFIER" \
             --check "$COMPILER_DIR" >/dev/null; then
-        echo "Canonical compiler jump-behavior validation failed; refusing compilation." >&2
+        echo "Canonical stock compiler validation failed; refusing compilation." >&2
         exit 1
     fi
     if ! PSYQ_INCLUDE_ROOT="$("$PYTHON_BIN" "$PSYQ_SDK_HEADER_HELPER" \
@@ -217,7 +217,7 @@ PY
         "$COMBINE_ASM_SOURCES"
         "$GLABEL2GAS"
         "$GENERATE_SQRTTAB"
-        "$EGCS_JUMP_PATCH_HELPER"
+        "$EGCS_COMPILER_VERIFIER"
         "$CC1_C"
         "$CC1"
         "$ASPSX_EXE"
@@ -521,9 +521,9 @@ PY
     done
     rm -rf "$BUILD_STATUS_DIR"
 
-    if ! "$PYTHON_BIN" "$EGCS_JUMP_PATCH_HELPER" \
+    if ! "$PYTHON_BIN" "$EGCS_COMPILER_VERIFIER" \
             --check "$COMPILER_DIR" >/dev/null; then
-        echo "Canonical compiler jump behavior changed during compilation; refusing success." >&2
+        echo "Canonical compiler identity changed during compilation; refusing success." >&2
         exit 1
     fi
     if ! "$PYTHON_BIN" "$PSYQ_SDK_HEADER_HELPER" --check >/dev/null; then
@@ -995,9 +995,9 @@ if $DO_DIFF && [ -f "$OUTPUT_DIR/rebuilt.bin" ]; then
 fi
 
 if $DO_COMPILE; then
-    if ! "$PYTHON_BIN" "$EGCS_JUMP_PATCH_HELPER" \
+    if ! "$PYTHON_BIN" "$EGCS_COMPILER_VERIFIER" \
             --check "$COMPILER_DIR" >/dev/null; then
-        echo "Canonical compiler jump behavior changed during build; refusing success." >&2
+        echo "Canonical compiler identity changed during build; refusing success." >&2
         exit 1
     fi
     if ! ASSEMBLY_PIPELINE_FINAL_IDENTITY="$(assembly_pipeline_identity)"; then

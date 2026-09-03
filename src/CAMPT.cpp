@@ -42,13 +42,16 @@ struct CCamera {
     unsigned char _padToTripod[0x3f4 - 0x10];
     CBruce *mTripod;
     unsigned char _padToCalcTripod[0x3fc - 0x3f8];
-    int mCalcTripod;
+    /** Whether the runtime camera should calculate its tripod position. */
+    bool mCalcTripod;
     unsigned char _padToNewFocus[0x40c - 0x400];
-    int new_focus;
+    /** Whether the runtime camera's focus target changed. */
+    bool new_focus;
     CVector mTripodPos;
     unsigned char _padToFocus[0x42c - 0x41c];
     CBruce *mFocus;
-    int mCalcFocus;
+    /** Whether the runtime camera should calculate its focus position. */
+    bool mCalcFocus;
     unsigned char _padToCameraMode[0x558 - 0x434];
     int mCameraMode;
     unsigned char _padToExtraYRot[0x5c4 - 0x55c];
@@ -61,23 +64,23 @@ struct CCamera {
 
     /** Follow a body as the camera's focus target. */
     void SetFocus(CBruce *focus) {
-        mCalcFocus = 1;
+        mCalcFocus = true;
         mFocus = focus;
-        new_focus = 1;
+        new_focus = true;
     }
 
     /** Follow a body as the camera's tripod target. */
     void SetTripod(CBruce *tripod) {
-        mCalcTripod = 1;
+        mCalcTripod = true;
         mTripod = tripod;
     }
 
     /** Select an explicit tripod position. */
     void SetTripodPosition(const CVector &position) {
-        mCalcTripod = 0;
+        mCalcTripod = false;
         mTripodPos = position;
         mTripod = 0;
-        new_focus = 1;
+        new_focus = true;
     }
 };
 
