@@ -11,7 +11,7 @@ enum
  * 4095.5.  The checked-in initializer is reproducibly generated from the
  * integer formula documented in tools/generate_sqrttab.py.
  */
-extern "C" unsigned short SqrtTable[SQRT_TABLE_ENTRY_COUNT]
+unsigned short SqrtTable[SQRT_TABLE_ENTRY_COUNT]
     __attribute__((section(".data"))) = {
 #include "SQRTTAB.inc"
 };

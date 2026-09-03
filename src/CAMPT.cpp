@@ -5,7 +5,6 @@
 //
 // Compiled with cc1plus (GCC 2.91.66-psx). Compiler auto-mangles symbol names.
 
-extern "C" int CamPtIndex;
 #define CAMERA_TUNING_ABSOLUTE_DECLARATIONS
 #include "CAMERATUNING.h"
 
@@ -105,21 +104,20 @@ typedef char campt_bruce_slice_size_must_be_0x10c4[
 
 // === Owner-local globals ===
 // $gp-relative camera point count (0x282c($gp)).
-extern "C" int CamPtIndex
+int CamPtIndex
     __attribute__((section(".sdata"))) = 0;
 
 // === Absolute-addressed tables ===
-extern "C" int CamModes[70]
+int CamModes[70]
     __attribute__((section(".data"))) = {
         0x532, 0x550, 0x51e, 0x53c,
         0x532, 0x550, 0x51e, 0x800,
     };
-extern "C" u16 CamPtNode[70]
+u16 CamPtNode[70]
     __attribute__((section(".data"))) = {};
 
 // === Absolute-addressed globals ===
 #include "GSKATER_STATE.h"
-#define DPQGLOBALS_C_LINKAGE
 #define DPQGLOBALS_DECLARE_HISTORY
 #include "DPQGLOBALS.h"
 #define VIDEOINFO_DECLARE_GVINFO1
@@ -151,13 +149,10 @@ void CamPt_Init(void) {
  */
 void CamPt_Cleanup(void) {
     // Restore the camera-point defaults and clear the live count.
-    int cleanupA = 0x122;
-    int cleanupB = 0x96;
-    camDist = cleanupA;
-    int cleanupC = -0x6c;
+    camDist = 0x122;
     CamPtIndex = 0;
-    camPitch = cleanupB;
-    camYOffset = cleanupC;
+    camPitch = 0x96;
+    camYOffset = -0x6c;
 }
 
 
@@ -174,13 +169,7 @@ void CamPt_Cleanup(void) {
 void CamPt_New(int Node) {
     CVector Dummy;
     Trig_GetPosition(Dummy, Node);
-    // Ordinary locals select $v1/$a0 and change eight of the 19 instructions.
-    // Retain the target's MAIN.SYM-visible pointer/index registers at this ABI
-    // boundary until an exact clean expression shape is found.
-    register u16 *nodeBase asm("$2") = CamPtNode;
-    register int nodeIndex asm("$6") = CamPtIndex;
-    nodeBase[nodeIndex] = (u16)Node;
-    CamPtIndex = nodeIndex + 1;
+    CamPtNode[CamPtIndex++] = (u16)Node;
 }
 
 

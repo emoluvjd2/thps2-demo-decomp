@@ -74,6 +74,10 @@ char *DefaultHighScoreInitials[25] __attribute__((section(".data"))) = {
 /** Persistent option values mirrored into each career save. */
 GamePreferences GPreferences __attribute__((section(".data"))) = {};
 
+// === Owner-local function declarations ===
+void Options_SetPreferences(void);
+void Options_RemapControllers(void);
+
 // === Function implementations (address order) ===
 
 /**

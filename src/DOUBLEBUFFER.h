@@ -16,7 +16,7 @@ struct SDoubleBuffer;
 #define DOUBLEBUFFER_DECL_BOUND
 #endif
 
-extern "C" SDoubleBuffer DoubleBuffer[DOUBLEBUFFER_DECL_BOUND];
+extern SDoubleBuffer DoubleBuffer[DOUBLEBUFFER_DECL_BOUND];
 
 #undef DOUBLEBUFFER_DECL_BOUND
 

@@ -1,4 +1,25 @@
 // Shared message-animation layout and callable renderer interface.
+#ifdef MESS_DECLARE_OWNER_STATE_VIEW
+struct Message;
+
+/** Palette slot currently assigned to the active message font. */
+extern unsigned short Clut;
+
+/** Index of the font used by message measurement and rendering. */
+extern int Current_font;
+
+/** Selects the loaded-font renderer instead of the legacy panel font. */
+extern unsigned char NewFont;
+
+/** Number of populated entries in the MESS-owned font table. */
+extern int Num_fonts;
+
+/** Head of the active intrusive message list. */
+extern Message *pMessages;
+
+#undef MESS_DECLARE_OWNER_STATE_VIEW
+#endif
+
 #ifndef MESS_INC_H
 #define MESS_INC_H
 
@@ -84,9 +105,6 @@ int Mess_TextHeight(const char *message);
 /** Return the rendered height above the active font baseline. */
 int Mess_TextHeightAboveBaseline(const char *message);
 
-/** Return the rendered height below the active font baseline. */
-int Mess_TextHeightBelowBaseline(const char *message);
-
 /** Draw one message string with the active font and render state. */
 int Mess_DrawText(int x, int y, const char *message, int drawSolid,
                   unsigned int fireRGB, int fireSquash, bool isPanel);
@@ -118,3 +136,10 @@ typedef char message_program_size_must_be_32[
     (sizeof(SMessageProg) == 32) ? 1 : -1];
 
 #endif // MESS_INC_H
+
+#ifdef MESS_DECLARE_SAVED_COLOR_STATE_VIEW
+/** GP-relative access view of MESS's owner-local saved text color. */
+extern unsigned int LastFlagsBGR __attribute__((section(".sbss")));
+
+#undef MESS_DECLARE_SAVED_COLOR_STATE_VIEW
+#endif

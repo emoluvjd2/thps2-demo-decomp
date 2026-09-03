@@ -5,6 +5,9 @@
 
 #include "globals.h"
 
+/** Return caller-owned storage for an ordinary placement construction. */
+inline void *operator new(unsigned int, void *storage) { return storage; }
+
 struct CBit;
 
 /** GCC 2.x virtual-table prefix shared by the bit hierarchy. */
@@ -31,6 +34,8 @@ struct CBit {
     unsigned char mType;
     LightBitVTable *_vf;
 
+    /** Allocate zero-initialized storage from the transient-bit heap. */
+    static void *operator new(unsigned int size);
     static void operator delete(void *p);
 };
 
@@ -71,7 +76,8 @@ struct CBody
 // The vtable is 12 bytes, but LIGHT addresses it through the target's
 // one-word small-data anchor.  A full-table declaration selects absolute
 // addressing and changes both constructor and destructor scheduling.
-extern int __vt_6CLight;
+#define CLIGHT_DECLARE_VTABLE_ABI
+#include "CLIGHT.h"
 
 static inline LightBitVTable *Light_VTable()
 {
@@ -184,11 +190,11 @@ void CLight::Move()
             // Writing allocation/construction results directly through
             // mpGlow changes thirty-nine instructions and three relocations.
             CWobblyGlow *obj = static_cast<CWobblyGlow *>(
-                Bit_AllocateStorage(sizeof(CWobblyGlow)));
+                CBit::operator new(sizeof(CWobblyGlow)));
             if (obj != 0)
             {
-                obj = CWobblyGlow_Construct(
-                    obj, mPos, mInnerRadius,
+                obj = ::new (obj) CWobblyGlow(
+                    mPos, mInnerRadius,
                     mFringeRadius, mAmp, mr0, mg0, mb0, mr1, mg1, mb1);
             }
             mpGlow = obj;

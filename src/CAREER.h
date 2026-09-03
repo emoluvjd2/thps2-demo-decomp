@@ -45,17 +45,8 @@ enum EMedalType
     MEDAL_NONE = 8,
 };
 
-/** Populate a demo career with randomized progress. */
-void Career_Test(void);
-
 /** Initialize career storage, scores, and saved preferences. */
 void Career_Init(void);
-
-/** Copy live preferences into the current career. */
-void Options_SetPreferences(void);
-
-/** Rebuild controller button mappings from saved preferences. */
-void Options_RemapControllers(void);
 
 /** Restore default option values. */
 void Options_Init(void);
@@ -99,10 +90,13 @@ struct SCareer {
 #include "GAMEPREFERENCES.h"
 
 // === Variables (absolute in this TU) ===
-extern "C" int GHasCareerLoaded __attribute__((section(".data")));     // 0x800D7E00
+#define CAREERLOADSTATE_ABSOLUTE_DECLARATION
+#define CAREERLOADSTATE_DECLARE_HAS_CAREER_LOADED
+#include "CAREERLOADSTATE.h"
 #include "GLEVEL.h"
-extern "C" int GLoadedCareerIsSaved __attribute__((section(".data"))); // 0x800D7E04
-extern "C" GamePreferences GPreferences;                               // 0x800B4F80
+#define CAREERLOADSTATE_ABSOLUTE_DECLARATION
+#define CAREERLOADSTATE_DECLARE_LOADED_CAREER_IS_SAVED
+#include "CAREERLOADSTATE.h"
 #define SOUNDLEVELS_DECLARE_SFXLEVEL
 #define SOUNDLEVELS_DECLARE_XALEVEL
 #include "SOUNDLEVELS.h"

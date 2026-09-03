@@ -17,6 +17,9 @@ struct Image {
     unsigned char JustX;
     unsigned char JustY;
     int Scale;
+
+    /** Draw the image at the requested screen position. */
+    void draw(int x, int y);
 };
 
 #endif // IMAGEBASE_INC_H

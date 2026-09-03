@@ -2,8 +2,14 @@
 original/
 bin/
 Sample/
-toolchain/
 output/
+
+# The toolchain is user-supplied or downloaded, except for the one helper this
+# repository authors: patch_egcs_1_1_1_jump.py. setup_toolchain.sh and
+# test_all_tu.sh both require it, so excluding it would leave the published
+# scripts unable to run. It contains no third-party code.
+toolchain/*
+!toolchain/patch_egcs_1_1_1_jump.py
 
 # Archives and binary build products
 .recovery/

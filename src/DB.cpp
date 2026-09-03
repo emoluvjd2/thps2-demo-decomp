@@ -11,17 +11,18 @@
  * translation unit.  Their declaration spelling and encounter point preserve
  * the target's absolute-versus-GP-relative addressing decisions.
  */
-extern "C" int Db_Background;
-extern "C" int CurrentOTSize;
-extern "C" int POLYBUFFERSIZE;
+#define DB_DECLARE_OWNER_ADDRESS_VIEWS
+#include "DB.h"
+#define POLYBUFFERSIZE_OWNER_DECLARATION
+#include "POLYBUFFERSIZE.h"
 #define DOUBLEBUFFER_DECLARE_KNOWN_BOUND
 #include "DOUBLEBUFFER.h"
 #undef DOUBLEBUFFER_DECLARE_KNOWN_BOUND
 #define PDOUBLEBUFFER_OWNER_DECLARATIONS
 #include "PDOUBLEBUFFER.h"
 #undef PDOUBLEBUFFER_OWNER_DECLARATIONS
-extern "C" SDoubleBuffer *pOtherBuffer;
-extern "C" SDoubleBuffer *pVB;
+#define PDOUBLEBUFFER_DECLARE_OWNER_ADDRESS_VIEWS
+#include "PDOUBLEBUFFER.h"
 
 #include "GLEVEL.h"
 #include "BMR.h"
@@ -43,18 +44,15 @@ enum {
 };
 
 /** The two GPU display buffers, initialized before the first frame is built. */
-extern "C" SDoubleBuffer DoubleBuffer[DbBufferCount]
+SDoubleBuffer DoubleBuffer[DbBufferCount]
     __attribute__((section(".data"))) = {{0}};
 
 /**
  * The ordering-table word follows Db_Init's display-area constant and the two
  * reserved buffer-pointer words in this owner's small-data contribution.
  */
-extern "C"
-{
-    /** Legacy global ordering-table pointer owned by the display-buffer module. */
-    unsigned int *OrderingTable;
-}
+/** Legacy global ordering-table pointer owned by the display-buffer module. */
+unsigned int *OrderingTable;
 
 #include <LIBAPI.H>
 #include "MAIN.h"

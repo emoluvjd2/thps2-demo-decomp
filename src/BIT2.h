@@ -16,10 +16,20 @@ struct CVector;
 /** Target-proven storage size of one grind spark. */
 enum { BIT2_GRIND_SPARK_STORAGE_SIZE = 120 };
 
-/** Construct a grind spark in storage returned by the CBit allocator. */
-extern "C" CGrindSpark *Bit2_ConstructGrindSpark(
+#ifndef BIT2_OWNER_DECLARATIONS
+/** ABI entry for constructing a grind spark in CBit-owned storage. */
+extern "C" CGrindSpark *__11CGrindSparkP5CBodyR7CVectoriii(
     CGrindSpark *storage, CBody *parent, CVector &position,
-    int velocity, int gravity, int lifetime)
-    asm("__11CGrindSparkP5CBodyR7CVectoriii");
+    int velocity, int gravity, int lifetime);
+
+/** Semantic source name for the client-visible constructor entry. */
+#define Bit2_ConstructGrindSpark __11CGrindSparkP5CBodyR7CVectoriii
+#endif
 
 #endif // BIT2_INC_H
+
+#ifdef BIT2_DECLARE_MOTION_BLUR_ANIMATION_VIEW
+/** Absolute-address view of BIT2's owner-local motion-blur animation name. */
+extern char DAT_800d98b8[];
+#undef BIT2_DECLARE_MOTION_BLUR_ANIMATION_VIEW
+#endif

@@ -4,8 +4,6 @@
 
 #include "globals.h"
 
-struct CSmokeJet;
-
 /** Target-proven storage size of one smoke jet. */
 enum { SMOKE_JET_STORAGE_SIZE = 364 };
 
@@ -14,13 +12,6 @@ enum
     SMOKE_POINT_COUNT = 10,
     SMOKE_LAST_POINT = SMOKE_POINT_COUNT - 1,
 };
-
-/** Construct a smoke jet in caller-provided CBit storage. */
-extern "C" CSmokeJet *Smoke_Construct(
-    CSmokeJet *storage, const CVector &BasePos, const CSVector &Angles,
-    int Length, unsigned short Duration, int Damage,
-    int r, int g, int b, unsigned char ScrollSpeed, unsigned int Checksum)
-    asm("__9CSmokeJetRC7CVectorRC8CSVectoriUsiiiiUcUi");
 
 #ifdef SMOKE_OWNER_DECLARATIONS
 

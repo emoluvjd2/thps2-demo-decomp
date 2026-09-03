@@ -7,11 +7,6 @@ enum {
 
 struct SViewport;
 
-extern "C" {
-extern SViewport HiResViewport;
-extern int SkaterRegion[HiresSkaterRegionCount];
-}
-
 /** Initializes high-resolution rendering state. */
 void HiRes_Init(bool clear_screen);
 

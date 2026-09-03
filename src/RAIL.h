@@ -3,12 +3,6 @@
 #ifndef RAIL_INC_H
 #define RAIL_INC_H
 
-/** Return the flags stored on one rail node, or zero if it has no rail data. */
-unsigned short Rail_Flags(unsigned short node);
-
-/** Return the mutable flags word stored on one rail node. */
-unsigned short *Rail_FlagsPointer(unsigned short node);
-
 /** Return whether one trigger node carries rail data. */
 int Rail_IsRailNode(unsigned short node);
 
@@ -70,9 +64,9 @@ struct CRail : CClass {
 };
 
 // === Variables (gp-relative in this TU) ===
-extern "C" CRail *RailList;    // 0x800DA524
-extern "C" NodeSort *RailNodeLookup; // 0x800DA548
-extern "C" int TotalRailNodes;       // 0x800DA54C
+extern CRail *RailList;              // 0x800DA524
+extern NodeSort *RailNodeLookup;     // 0x800DA548
+extern int TotalRailNodes;           // 0x800DA54C
 
 // === Variables (absolute in this TU) ===
 #include "GENERATELEVEL.h"

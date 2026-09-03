@@ -15,6 +15,7 @@ typedef unsigned char u8;
 typedef unsigned short u16;
 typedef signed short s16;
 
+#include <INLINE_C.H>
 #include "CFRICTION.h"
 
 /** Compact three-component vector used for angles and directions. */
@@ -51,16 +52,7 @@ struct CVector {
 };
 
 // === Free function declarations ===
-CVector operator+(const CVector &a, const CVector &b);
-CVector operator-(const CVector &a, const CVector &b);
-CVector operator*(const CVector &a, const int &scalar);
-CVector operator*(const int &scalar, const CVector &a);
-CVector operator/(const CVector &a, const int &scalar);
-CVector operator>>(const CVector &a, const int &scalar);
-CVector operator<<(const CVector &a, const int &scalar);
-CSVector operator-(const CSVector &a, const CSVector &b);
-CSVector operator*(const int &scalar, const CSVector &a);
-CSVector operator>>(const CSVector &a, const int &scalar);
+#include "CVECTOROPS.h"
 
 // === External helper declarations ===
 #include "M3DMATHS.h"
@@ -75,43 +67,13 @@ CSVector operator>>(const CSVector &a, const int &scalar);
  */
 int CVector::Length() const {
     CVector u;
-    int xSquared;
-    int ySquared;
-    int zSquared;
-
-    // The target interleaves construction of u with the GTE transfers.  Keep
-    // that sequence together, but expose its inputs, outputs, and memory use
-    // to the compiler instead of binding C++ locals to fixed registers.
-    asm(
-        "lw $2, 0(%3)\n\t"
-        "nop\n\t"
-        "sra $2, $2, 12\n\t"
-        "sw $2, %4\n\t"
-        "addiu $2, $sp, 16\n\t"
-        "lw %0, 4(%3)\n\t"
-        "lw %1, 8(%3)\n\t"
-        "sra %0, %0, 12\n\t"
-        "sra %1, %1, 12\n\t"
-        "sw %0, %5\n\t"
-        "sw %1, %6\n\t"
-        "lwc2 $9, 0($2)\n\t"
-        "lwc2 $10, 4($2)\n\t"
-        "lwc2 $11, 8($2)\n\t"
-        "nop\n\t"
-        "nop\n\t"
-        ".word 0x4AA00428\n\t"
-        "swc2 $25, 0($2)\n\t"
-        "swc2 $26, 4($2)\n\t"
-        "swc2 $27, 8($2)\n\t"
-        "lw %2, %4\n\t"
-        "lw %0, %5\n\t"
-        "lw %1, %6\n\t"
-        : "=r"(ySquared), "=r"(zSquared), "=r"(xSquared)
-        : "r"(this), "m"(u.vx), "m"(u.vy), "m"(u.vz)
-        : "$2", "memory"
-    );
-    xSquared += ySquared;
-    return M3dMaths_SquareRoot0(xSquared + zSquared);
+    u.vx = vx >> 12;
+    u.vy = vy >> 12;
+    u.vz = vz >> 12;
+    gte_ldlvl(&u);
+    gte_sqr0();
+    gte_stlvnl(&u);
+    return M3dMaths_SquareRoot0(u.vx + u.vy + u.vz);
 }
 
 

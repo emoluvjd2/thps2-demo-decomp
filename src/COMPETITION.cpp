@@ -114,7 +114,8 @@ typedef char CCompetition_size_must_be_0x130[
 #define FRONTFLOWSTATE_DECLARE_ROLL_CREDITS
 #include "FRONTFLOWSTATE.h"
 #include "LOCALTXT.h"
-extern "C" int POLYBUFFERSIZE __attribute__((section(".data")));
+#define POLYBUFFERSIZE_ABSOLUTE_DECLARATION
+#include "POLYBUFFERSIZE.h"
 
 #include "GAMEFMV.h"
 
@@ -217,44 +218,17 @@ typedef char Competition_CBruce_size_must_be_5228[
 #include "CAREER.h"
 #include "FLASH.h"
 #include "MEM.h"
+#include <LIBCD.H>
 #include <STDIO.H>
 
 // === Forward type declarations ===
 
 // Competition globals — non-$gp (accessed via lui/addiu absolute addressing)
 // Base struct at 0x800C596C with various fields
-extern CCompetition theCompetition;
-extern "C" char s_HEAT__d_OVER__800db9a0[];
-extern "C" char s_SCOREBOARD_800db9b0[];
-extern "C" char s_JUDGE__d__d__d_800b393c[];
-extern "C" char s_JUDGE__d_800db9c0[];
-extern "C" char s_HEAT__d_SCORE___800b3950[];
-extern "C" char s__d__d_800db994[];
-extern "C" char s_Congratulations__800b3734[];
-extern "C" char s_You_scored_all_golds__800b37e8[];
-extern "C" char s_Your_are_the_top_pro_skater_800b3800[];
-extern "C" char s_Watch_this_then_get_off_your_800b3820[];
-extern "C" char s_couch_and_go_skate__800b3840[];
-extern "C" char s_Your_third_medal_Good_going__800b3854[];
-extern "C" char s_You_just_might_become_800b3874[];
-extern "C" char s_an_average_skater_800b388c[];
-extern "C" char s_pro_skaters_get_all_golds_800b38a0[];
-extern "C" char s_COMPETITION_STANDINGS_800b38fc[];
-extern "C" char s_1_2_3_Total_800b3914[];
-extern "C" char s_Heat_800db980[];
-extern "C" char s__s_800db990[];
-extern "C" char s___800db99c[];
-extern "C" char s_You_win_the_Gold__800b38c0[];
-extern "C" char s_You_win_the_Silver__800b38d4[];
-extern "C" char s_You_win_the_Bronze__800b38e8[];
-extern "C" char s_You_lose__800db93c[];
-extern "C" char s__s__1st_place_800db948[];
-extern "C" char s__s__2nd_place_800db958[];
-extern "C" char s__s__3rd_place_800db968[];
-extern "C" char s__dth_800db978[];
-extern "C" char s__s__s___HEAT__d_800db92c[];
-
-extern SMedalMessage MedalMessage[3];
+#define COMPETITION_DECLARE_OWNER_STATE_VIEW
+#include "COMPETITION.h"
+#define COMPETITION_DECLARE_ADDRESS_VIEWS
+#include "COMPETITION.h"
 
 
 // === External function declarations ===
@@ -264,25 +238,34 @@ CPowerUp *Medal_Create(EMedalType type, int x, int y, int z, int size,
 // === Extern "C" forward declarations ===
 /*
  * Keep the original call-site declaration opaque to this TU's optimizer.
- * The descriptive owner below binds the same assembler label locally without
+ * The owner-local C-linkage identity below binds the same symbol without
  * exposing the three-instruction body early enough for GCC to inline it.
  */
-extern "C" int GotMedal__12CCompetition(CCompetition *);
-static int CompetitionGotMedalOwner(CCompetition *)
-    asm("GotMedal__12CCompetition");
+/** Opaque external call view of the owner-local medal query. */
+extern "C" int GotMedal__12CCompetition(CCompetition *competition);
+namespace CompetitionOwnerFunctions
+{
+extern "C"
+{
+static int GotMedal__12CCompetition(CCompetition *);
+}
+}
 
-static void CompetitionDestructorOwner(CCompetition *, int)
-    asm("__DOT__12CCompetition");
+extern "C" {
+static void __DOT__12CCompetition(CCompetition *, int);
+}
 static void JudgeDestructorOwner(CJudge *, int)
     asm("_._6CJudge");
-static void BaseJudgeDestructorOwner(CClass *, int)
-    asm("__DOT__6CClass_800781E4");
+extern "C" {
+static void __DOT__6CClass_800781E4(CClass *, int);
+}
 
 /*
  * Original COMPETITION.CPP small-data contribution. These owners precede the
  * functions which use them so ASPSX retains the original GP-relative forms.
- * Descriptive static owner names remove false XDEFs while their asm labels and
- * the incomplete declarations above preserve the target compiler view.
+ * Namespace-scoped C-linkage owners retain the target's natural identifiers
+ * without publishing XDEFs. The incomplete declarations above preserve the
+ * target compiler view at use sites.
  */
 u16 HOLYCOW_PLACE = 0x03CF;
 u16 FIRST_PLACE = 0x0398;
@@ -290,52 +273,45 @@ u16 SECOND_PLACE = 0x0366;
 u16 THIRD_PLACE = 0x0334;
 u16 LAST_PLACE = 0x0208;
 
-static char Competition_HeatMarqueeFormatOwner[]
-    asm("s__s__s___HEAT__d_800db92c")
+namespace CompetitionAddressViewOwners
+{
+extern "C"
+{
+static char s__s__s___HEAT__d_800db92c[]
     __attribute__((section(".sdata"), aligned(4))) = "%s %s - HEAT %d";
-static char Competition_LoseMessageOwner[]
-    asm("s_You_lose__800db93c")
+static char s_You_lose__800db93c[]
     __attribute__((section(".sdata"), aligned(4))) = "You lose!";
-static char Competition_FirstPlaceFormatOwner[]
-    asm("s__s__1st_place_800db948")
+static char s__s__1st_place_800db948[]
     __attribute__((section(".sdata"), aligned(4))) = "%s: 1st place";
-static char Competition_SecondPlaceFormatOwner[]
-    asm("s__s__2nd_place_800db958")
+static char s__s__2nd_place_800db958[]
     __attribute__((section(".sdata"), aligned(4))) = "%s: 2nd place";
-static char Competition_ThirdPlaceFormatOwner[]
-    asm("s__s__3rd_place_800db968")
+static char s__s__3rd_place_800db968[]
     __attribute__((section(".sdata"), aligned(4))) = "%s: 3rd place";
-static char Competition_OtherPlaceFormatOwner[]
-    asm("s__dth_800db978")
+static char s__dth_800db978[]
     __attribute__((section(".sdata"), aligned(4))) = "%dth";
-static char Competition_HeatHeadingOwner[]
-    asm("s_Heat_800db980")
+static char s_Heat_800db980[]
     __attribute__((section(".sdata"), aligned(4))) = "        Heat";
-static char Competition_StringFormatOwner[]
-    asm("s__s_800db990")
+static char s__s_800db990[]
     __attribute__((section(".sdata"), aligned(4))) = "%s";
-static char Competition_DecimalFormatOwner[]
-    asm("s__d__d_800db994")
+static char s__d__d_800db994[]
     __attribute__((section(".sdata"), aligned(4))) = "%d.%d";
-static char Competition_DashOwner[]
-    asm("s___800db99c")
+static char s___800db99c[]
     __attribute__((section(".sdata"), aligned(4))) = "-";
-static char Competition_HeatOverFormatOwner[]
-    asm("s_HEAT__d_OVER__800db9a0")
+static char s_HEAT__d_OVER__800db9a0[]
     __attribute__((section(".sdata"), aligned(4))) = "HEAT %d OVER!";
-static char Competition_ScoreboardHeadingOwner[]
-    asm("s_SCOREBOARD_800db9b0")
+static char s_SCOREBOARD_800db9b0[]
     __attribute__((section(".sdata"), aligned(4))) = "JUDGES SCORES";
-static char Competition_JudgeHeadingFormatOwner[]
-    asm("s_JUDGE__d_800db9c0")
+static char s_JUDGE__d_800db9c0[]
     __attribute__((section(".sdata"), aligned(4))) = "JUDGE %d";
+}
+}
 
 /** Small-data vtables emitted by the original static-object machinery. */
 static int DAT_800db9d0
     __attribute__((section(".sdata"), aligned(16))) = 0;
 static int CompetitionVtableReserved = 0;
 static void (*CompetitionDestructorSlot)(CCompetition *, int)
-    = CompetitionDestructorOwner;
+    = __DOT__12CCompetition;
 static int CompetitionVtableEnd = 0;
 
 static int DAT_800db9e0 = 0;
@@ -347,7 +323,7 @@ static int JudgeVtableEnd = 0;
 static int DAT_800d7ca0_plus_0x3d50 = 0;
 static int BaseVtableReserved = 0;
 static void (*BaseDestructorSlot)(CClass *, int)
-    = BaseJudgeDestructorOwner;
+    = __DOT__6CClass_800781E4;
 
 // === Function implementations (address order) ===
 
@@ -1121,8 +1097,6 @@ void Competition_LadderDisplay(void)
  * @param Status  Receives the next paused-game state.
  * @param Activated  Nonzero once the player confirms the screen.
  */
-extern "C" void CdControlB(int, int, int);
-
 #define COMP_RELEASE(powerUp) do { \
     if ((powerUp) != 0) \
         (powerUp)->_vf->Destructor((powerUp), 3); \
@@ -2068,7 +2042,7 @@ void Competition_EndGameDisplay(void)
  *
  * Address: 0x80078070
  */
-extern "C" void Competition_GlobalDtor(void) asm("_GLOBAL_.D.MedalMessage");
+void Competition_GlobalDtor(void) asm("_GLOBAL_.D.MedalMessage");
 
 void Competition_GlobalDtor(void)
 {
@@ -2098,7 +2072,7 @@ void Competition_GlobalDtor(void)
  *
  * Address: 0x800780E0
  */
-extern "C" void Competition_GlobalInit(void) asm("_GLOBAL_.I.MedalMessage");
+void Competition_GlobalInit(void) asm("_GLOBAL_.I.MedalMessage");
 
 void Competition_GlobalInit(void)
 {
@@ -2131,9 +2105,15 @@ void Competition_GlobalInit(void)
  * @param competition  Competition state whose medal presentation is queried.
  * @return Nonzero once the first medal has been created.
  */
-static int CompetitionGotMedalOwner(CCompetition *competition)
+namespace CompetitionOwnerFunctions
+{
+extern "C"
+{
+static int GotMedal__12CCompetition(CCompetition *competition)
 {
     return competition->mMedal1 != 0;
+}
+}
 }
 
 /**
@@ -2146,7 +2126,7 @@ static int CompetitionGotMedalOwner(CCompetition *competition)
  * @param _this  Competition object being destroyed.
  * @param flags  GCC 2.x in-charge flag (bit 0 → also invoke `operator delete` on `this`).
  */
-static void CompetitionDestructorOwner(CCompetition *_this, int flags)
+static void __DOT__12CCompetition(CCompetition *_this, int flags)
 {
     CCompetition *competition = _this;
     int fl = flags;
@@ -2204,7 +2184,7 @@ static void JudgeDestructorOwner(CJudge *_this, int flags)
  * @param _this  Base judge object being destroyed.
  * @param flags  GCC 2.x in-charge flag (bit 0 → also invoke `operator delete` on `this`).
  */
-static void BaseJudgeDestructorOwner(CClass *_this, int flags)
+static void __DOT__6CClass_800781E4(CClass *_this, int flags)
 {
     _this->vtable = &DAT_800d7ca0_plus_0x3d50;
     if (flags & 1)
@@ -2218,12 +2198,17 @@ static void BaseJudgeDestructorOwner(CClass *_this, int flags)
  *
  * The read-only strings are kept as separate semantic objects because the
  * medal-message table below points into this exact owner-local pool. Their
- * static owner names retain the original asm labels without publishing XDEFs;
- * the incomplete declarations above preserve the target access forms.
+ * target-named namespace owners keep C linkage without publishing XDEFs; the
+ * incomplete declarations above preserve the target access forms.
  */
-static char Competition_CongratulationsOwner[]
-    asm("s_Congratulations__800b3734")
+namespace CompetitionAddressViewOwners
+{
+extern "C"
+{
+static char s_Congratulations__800b3734[]
     __attribute__((section(".rdata"), aligned(4))) = "Congratulations!";
+}
+}
 static char Competition_NextDowntown[]
     __attribute__((section(".rdata"), aligned(4))) =
         "Next stop, the DOWNTOWN level.";
@@ -2239,66 +2224,57 @@ static char Competition_AllMedalsBody[]
 static char Competition_AllMedalsEnding[]
     __attribute__((section(".rdata"), aligned(4))) =
         "Now sit back and enjoy the show...";
-static char Competition_AllGoldsOwner[]
-    asm("s_You_scored_all_golds__800b37e8")
+namespace CompetitionAddressViewOwners
+{
+extern "C"
+{
+static char s_You_scored_all_golds__800b37e8[]
     __attribute__((section(".rdata"), aligned(4))) =
         "You scored all golds!";
-static char Competition_TopProOwner[]
-    asm("s_Your_are_the_top_pro_skater_800b3800")
+static char s_Your_are_the_top_pro_skater_800b3800[]
     __attribute__((section(".rdata"), aligned(4))) =
         "Your are the top pro skater.";
-static char Competition_WatchThisOwner[]
-    asm("s_Watch_this_then_get_off_your_800b3820")
+static char s_Watch_this_then_get_off_your_800b3820[]
     __attribute__((section(".rdata"), aligned(4))) =
         "Watch this, then get off your";
-static char Competition_GoSkateOwner[]
-    asm("s_couch_and_go_skate__800b3840")
+static char s_couch_and_go_skate__800b3840[]
     __attribute__((section(".rdata"), aligned(4))) =
         "couch and go skate!";
-static char Competition_ThirdMedalOwner[]
-    asm("s_Your_third_medal_Good_going__800b3854")
+static char s_Your_third_medal_Good_going__800b3854[]
     __attribute__((section(".rdata"), aligned(4))) =
         "Your third medal.. Good going!";
-static char Competition_MightBecomeOwner[]
-    asm("s_You_just_might_become_800b3874")
+static char s_You_just_might_become_800b3874[]
     __attribute__((section(".rdata"), aligned(4))) =
         "You just might become";
-static char Competition_AverageSkaterOwner[]
-    asm("s_an_average_skater_800b388c")
+static char s_an_average_skater_800b388c[]
     __attribute__((section(".rdata"), aligned(4))) =
         "an average skater.";
-static char Competition_AllGoldsAdviceOwner[]
-    asm("s_pro_skaters_get_all_golds_800b38a0")
+static char s_pro_skaters_get_all_golds_800b38a0[]
     __attribute__((section(".rdata"), aligned(4))) =
         "pro skaters get all golds...";
-static char Competition_GoldMessageOwner[]
-    asm("s_You_win_the_Gold__800b38c0")
+static char s_You_win_the_Gold__800b38c0[]
     __attribute__((section(".rdata"), aligned(4))) =
         "You win the Gold!";
-static char Competition_SilverMessageOwner[]
-    asm("s_You_win_the_Silver__800b38d4")
+static char s_You_win_the_Silver__800b38d4[]
     __attribute__((section(".rdata"), aligned(4))) =
         "You win the Silver!";
-static char Competition_BronzeMessageOwner[]
-    asm("s_You_win_the_Bronze__800b38e8")
+static char s_You_win_the_Bronze__800b38e8[]
     __attribute__((section(".rdata"), aligned(4))) =
         "You win the Bronze!";
-static char Competition_StandingsHeadingOwner[]
-    asm("s_COMPETITION_STANDINGS_800b38fc")
+static char s_COMPETITION_STANDINGS_800b38fc[]
     __attribute__((section(".rdata"), aligned(4))) =
         "COMPETITION STANDINGS";
-static char Competition_StandingsColumnsOwner[]
-    asm("s_1_2_3_Total_800b3914")
+static char s_1_2_3_Total_800b3914[]
     __attribute__((section(".rdata"), aligned(4))) =
         "1         2         3           Total";
-static char Competition_JudgeScoreFormatOwner[]
-    asm("s_JUDGE__d__d__d_800b393c")
+static char s_JUDGE__d__d__d_800b393c[]
     __attribute__((section(".rdata"), aligned(4))) =
         "JUDGE %d     %d.%d";
-static char Competition_HeatScoreFormatOwner[]
-    asm("s_HEAT__d_SCORE___800b3950")
+static char s_HEAT__d_SCORE___800b3950[]
     __attribute__((section(".rdata"), aligned(4))) =
         "HEAT %d SCORE - ";
+}
+}
 
 /** Messages displayed for the first, second, and all-medal milestones. */
 SMedalMessage MedalMessage[3]

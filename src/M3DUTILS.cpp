@@ -102,8 +102,7 @@ void M3dUtils_InterpolateVectors(int NumVectors, int Interval,
 #include "M3DMATHS.h"
 
 /** Fixed-point vector operations provided by VECTOR.cpp. */
-CVector operator-(const CVector &left, const CVector &right);
-CVector operator>>(const CVector &vector, const int &shift);
+#include "CVECTOROPS.h"
 
 typedef char M3dUtils_SMatrix_size_must_be_24[
     (sizeof(SMatrix) == 24) ? 1 : -1];
@@ -124,13 +123,9 @@ typedef char M3dUtils_CSuper_pose_buffer_offset_must_be_356[
 typedef char M3dUtils_CSuper_size_must_be_400[
     (sizeof(CSuper) == 400) ? 1 : -1];
 
-extern "C" {
 /** Scratch transforms produced while interpolating up to thirty model parts. */
-#define TWEENBUFFER_OWNER_DECLARATION
-#include "TWEENBUFFER.h"
 SMatrix TweenBuffer[M3DUTILS_MAX_TWEEN_PARTS]
     __attribute__((section(".data"))) = {};
-}
 
 /**
  * Attach the hook array from a model packet to the item's active region.

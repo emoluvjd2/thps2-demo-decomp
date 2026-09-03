@@ -38,12 +38,12 @@ enum
 #define Smoke_Sine(angle) \
     (reinterpret_cast<const SSinCos *>( \
         &rcossin_tbl + ((angle) & SMOKE_ANGLE_MASK))->Sin)
-CVector operator-(const CVector &, const CVector &);
+#include "CVECTOROPS.h"
 #include "M3DCOLIJ.h"
-extern "C" void Smoke_Destroy(CSmokeJet *, int) asm("_._9CSmokeJet");
-extern "C" void Smoke_Move(CSmokeJet *) asm("Move__9CSmokeJet");
-extern "C" void Smoke_DisplayRibbon(CTexturedRibbon *)
-    asm("Display__15CTexturedRibbon");
+
+// C++ cannot take a destructor's address, so the owner keeps a local view of
+// the symbol used by its manual virtual table.
+void Smoke_Destroy(CSmokeJet *jet, int inCharge) asm("_._9CSmokeJet");
 
 /** Exact five-slot virtual table shape emitted for CSmokeJet. */
 struct SmokeJetVTable
@@ -65,13 +65,13 @@ struct SmokeBodyVTable
 /**
  * Smoke-jet virtual dispatch table in its original read-only owner section.
  */
-extern "C" SmokeJetVTable __vt_9CSmokeJet
+SmokeJetVTable __vt_9CSmokeJet
     __attribute__((section(".rdata"), aligned(8))) = {
         0,
         0,
         Smoke_Destroy,
-        Smoke_Move,
-        Smoke_DisplayRibbon,
+        (void (*)(CSmokeJet *))&CSmokeJet::Move,
+        (void (*)(CTexturedRibbon *))&CTexturedRibbon::Display,
 };
 
 // === Function implementations (address order) ===
@@ -114,21 +114,20 @@ CSmokeJet::CSmokeJet(
     unsigned int Checksum)
     : CTexturedRibbon(SMOKE_POINT_COUNT, 0)
 {
-    CSmokeJet *_this = this;
-    _this->_vf = &__vt_9CSmokeJet;
-    _this->mAngles = Angles;
-    _this->mLength = Length;
-    _this->SetPos(BasePos);
+    _vf = &__vt_9CSmokeJet;
+    mAngles = Angles;
+    mLength = Length;
+    SetPos(BasePos);
 
-    _this->mLifetime = Duration;
-    _this->mDamage = Damage;
-    if (_this->mDamage >= 1000) {
-        _this->mDamageBaddies = 1;
-        _this->mDamage = Damage - 1000;
+    mLifetime = Duration;
+    mDamage = Damage;
+    if (mDamage >= 1000) {
+        mDamageBaddies = 1;
+        mDamage = Damage - 1000;
     }
 
-    _this->mScrollSpeed = ScrollSpeed;
-    _this->SetTexture(Checksum);
+    mScrollSpeed = ScrollSpeed;
+    SetTexture(Checksum);
 
     {
         int i;
@@ -139,10 +138,10 @@ CSmokeJet::CSmokeJet(
             int scaledb;
             int *amp;
 
-            amp = &_this->mAmp[i];
-            _this->mOrgX[i] = _this->mpPoints[i].Pos.vx;
-            _this->mPhase[i] = Rnd(SMOKE_ANGLE_COUNT);
-            _this->mFreq[i] = 80;
+            amp = &mAmp[i];
+            mOrgX[i] = mpPoints[i].Pos.vx;
+            mPhase[i] = Rnd(SMOKE_ANGLE_COUNT);
+            mFreq[i] = 80;
 
             if (i != 0) {
                 *amp = Length / 80;
@@ -150,33 +149,31 @@ CSmokeJet::CSmokeJet(
                 *amp = 0;
             }
 
-            _this->mWidthWobble[i].TChange = Rnd(16);
+            mWidthWobble[i].TChange = Rnd(16);
             if (i == 0) {
-                _this->mWidthWobble[0].TargetWidth = Rnd(60) + 20;
+                mWidthWobble[0].TargetWidth = Rnd(60) + 20;
             } else {
-                _this->mWidthWobble[i].TargetWidth =
-                    _this->mWidthWobble[i - 1].TargetWidth * 148 / 128;
+                mWidthWobble[i].TargetWidth =
+                    mWidthWobble[i - 1].TargetWidth * 148 / 128;
             }
 
             scaledr = (SMOKE_LAST_POINT - i) * r / SMOKE_LAST_POINT;
             scaledg = (SMOKE_LAST_POINT - i) * g / SMOKE_LAST_POINT;
             scaledb = (SMOKE_LAST_POINT - i) * b / SMOKE_LAST_POINT;
 
-            _this->mpPoints[i].Width =
-                _this->mWidthWobble[i].TargetWidth;
-            _this->mpPoints[i].WidthB =
-                _this->mpPoints[i].Width + 40;
-            _this->mpPoints[i].r = scaledr;
-            _this->mpPoints[i].g = scaledg;
-            _this->mpPoints[i].b = scaledb;
+            mpPoints[i].Width = mWidthWobble[i].TargetWidth;
+            mpPoints[i].WidthB = mpPoints[i].Width + 40;
+            mpPoints[i].r = scaledr;
+            mpPoints[i].g = scaledg;
+            mpPoints[i].b = scaledb;
 
             scaledr = scaledr * 48 / 256;
             scaledg = scaledg * 48 / 256;
             scaledb = scaledb * 48 / 256;
 
-            _this->mpPoints[i].rB = scaledr;
-            _this->mpPoints[i].gB = scaledg;
-            _this->mpPoints[i].bB = scaledb;
+            mpPoints[i].rB = scaledr;
+            mpPoints[i].gB = scaledg;
+            mpPoints[i].bB = scaledb;
         }
     }
 }
@@ -207,17 +204,16 @@ CSmokeJet::~CSmokeJet()
  */
 void CSmokeJet::SetPos(const CVector &Pos)
 {
-    CSmokeJet *_this = this;
     CVector Off;
     CVector pos;
 
-    Utils_GetVecFromMagDir(Off, _this->mLength, _this->mAngles);
+    Utils_GetVecFromMagDir(Off, mLength, mAngles);
     Off /= SMOKE_LAST_POINT;
     pos = Pos;
 
     for (int i = 0; i < SMOKE_POINT_COUNT; i++)
     {
-        _this->mpPoints[i].Pos = pos;
+        mpPoints[i].Pos = pos;
         pos += Off;
     }
 }

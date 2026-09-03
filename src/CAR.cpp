@@ -32,11 +32,32 @@
 #undef BADDY_LAYOUT_DECLARATIONS
 #include "BIT.h"
 
+/** Narrow natural interface to the transient-bit allocator owned by BIT. */
+struct CBit
+{
+    /** Allocate zero-initialized storage from the transient-bit heap. */
+    static void *operator new(unsigned int size);
+};
+
+/** Whether a bail should clamp the skater's velocity. */
+enum ELimitBailVel {
+    DO_LIMIT = 0,
+    DONT_LIMIT = 1
+};
+
 /** Opaque skater method surface used by car collisions. */
 struct CBruce
 {
     /** Adds one named trick to the active scoring sequence. */
     void Trick_Trick(char *name, int points, int lock);
+    /** Emit one blood burst from a skater body hook. */
+    void BloodSplat(int bodyPart, int maxBloodBits);
+    /** Drive one controller vibration actuator for this skater. */
+    void Vibrate(int time, int motor, int value);
+    /** Copy the current heading matrix into the skater angle vector. */
+    void SetAnglesFromHeading();
+    /** Reset this skater into the requested bail state. */
+    void Bail(int bailNumber, ELimitBailVel limitVelocity);
 };
 struct CGrindSpark;
 
@@ -46,12 +67,6 @@ struct CGrindSpark;
  * cast stays centralized while each target load remains independently shaped.
  */
 #define CAR_ROTATION_WORD(matrix, index) (((const int *)&(matrix))[index])
-
-/** Whether a bail should clamp the skater's velocity. */
-enum ELimitBailVel {
-    DO_LIMIT = 0,
-    DONT_LIMIT = 1
-};
 
 /** Script subtype codes for the six traffic-car assets. */
 enum ECarType {
@@ -103,6 +118,9 @@ enum ECarSound {
 };
 
 #include "CCAR.h"
+
+/** Target-era external compiler view of the traffic-car sound volume. */
+extern int CarVol;
 
 /** Target-sized virtual dispatch record owned by CAR.cpp. */
 struct CCarVTable {
@@ -161,10 +179,14 @@ typedef char car_bruce_collision_slice_size_must_be_0x1070[
 typedef char car_video_info_size_must_be_192[(sizeof(SVideoInfo) == 192) ? 1 : -1];
 
 /* CAR-owned virtual methods use readable source names at their target ABIs. */
-extern "C" void CCar_Destroy(CCar *, int) asm("_._4CCar");
-extern "C" void CCar_Update(CCar *) asm("AI__4CCar");
-extern "C" int CCar_ExecuteCommand(CCar *, unsigned short)
-    asm("ExecuteCommand__4CCarUs");
+namespace CarMethodABI
+{
+extern "C" void AI__4CCar(CCar *);
+}
+#define CCar_Update CarMethodABI::AI__4CCar
+
+/** Addressable destructor entry used by CAR's owner-local virtual table. */
+void CCar_Destroy(CCar *, int) asm("_._4CCar");
 
 /** Reinterpret the common owner-local vector storage as its public type. */
 static inline CVector &Car_Vector(CVectorOwner &vector)
@@ -192,30 +214,16 @@ static inline const CSVector &Car_ShortVector(const CSVectorOwner &vector)
 
 #include "M3DMATHS.h"
 
-extern "C" void Car_VibrateSkater(CBruce *, int, int, int)
-    asm("Vibrate__6CBruceiii");
-extern "C" void Car_SetSkaterAnglesFromHeading(CBruce *)
-    asm("SetAnglesFromHeading__6CBruce");
-extern "C" void Car_BailSkater(CBruce *, int, ELimitBailVel)
-    asm("Bail__6CBrucei13ELimitBailVel");
-extern "C" void Car_CreateBloodSplat(CBruce *, int, int)
-    asm("BloodSplat__6CBruceii");
-
-extern "C" void Car_DestroyBaddy(CCar *, int) asm("_._6CBaddy");
-extern "C" void Car_InitItem(CCar *, char *) asm("InitItem__5CItemPc");
-/* A distinct typed source identity preserves the van arm's original branch. */
-extern "C" void Car_InitVanItem(CCar *, char *) asm("InitItem__5CItemPc");
-extern "C" void Car_BaddyDie(CBaddy *) asm("Die__6CBaddy");
-extern "C" void Car_BodyLightingSetup(CBodyOwner *)
-    asm("DoLightingSetup__5CBody");
-extern "C" int Car_BodyHit(CBodyOwner *, int, const CVector &, int)
-    asm("Hit__5CBodyiRC7CVectori");
-extern "C" void Car_BodyDeleteStuff(CBodyOwner *)
-    asm("DeleteStuff__5CBody");
-extern "C" void Car_SetBaddyVariable(CBaddy *, unsigned short)
-    asm("SetVariable__6CBaddyUs");
-extern "C" short Car_GetBaddyVariable(CBaddy *, unsigned short)
-    asm("GetVariable__6CBaddyUs");
+#define CBADDY_DECLARE_DESTRUCTOR
+#define CBADDY_DESTRUCTOR_NAME Car_DestroyBaddy
+#define CBADDY_DESTRUCTOR_RECEIVER CCar
+#include "CBADDYABI.h"
+namespace CarInitItemABI
+{
+extern "C" void InitItem__5CItemPc(CCar *, char *);
+}
+void Car_InitVanItem(CCar *, char *) asm("InitItem__5CItemPc");
+#define Car_InitItem CarInitItemABI::InitItem__5CItemPc
 
 #include "SFX.h"
 #include "OB.h"
@@ -236,7 +244,7 @@ static inline int CarAbs(int value)
 static void CollideWithSkater(CCar *pCar, CBruce *pSkater, const MATRIX &tm, short *pBox);
 static void CollideWithSkaters(CCar *pCar);
 static void HonkAtSkaters(CCar *pCar, CVector Front);
-CVector operator-(const CVector &left, const CVector &right);
+#include "CVECTOROPS.h"
 /*
  * ZeroVector really holds a 12-byte CVector, but this TU sees it through a
  * small (<= -G8) declaration.  That is what makes cc1plus emit an unsplit
@@ -244,8 +252,9 @@ CVector operator-(const CVector &left, const CVector &right);
  * splits the address into a %hi/%lo pair whose %hi half loop-invariant
  * motion then hoists out of the loop into a callee-saved register.
  */
-struct ZeroVectorDecl { int lo, hi; };
-extern "C" ZeroVectorDecl ZeroVector __attribute__((section(".data")));
+#define ZEROVECTOR_EIGHT_BYTE_DECLARATION
+#include "ZEROVECTOR.h"
+#undef ZEROVECTOR_EIGHT_BYTE_DECLARATION
 
 /** Recover the complete vector stored behind ZeroVector's small-data view. */
 static inline CVector &Car_ZeroVector()
@@ -257,32 +266,35 @@ static inline CVector &Car_ZeroVector()
 #include "LOCALTXT.h"
 
 // Car model names loaded from the original small-data contribution.
-extern "C" char Car_TaxiModelName[] asm("DAT_800EA844");
-extern "C" char Car_PoliceModelName[] asm("DAT_800EA84C");
-extern "C" char Car_VanModelName[] asm("DAT_800EA858");
-extern "C" char Car_CableModelName[] asm("DAT_800EA860");
-extern "C" char Car_KartModelName[] asm("DAT_800EA868");
-extern "C" char Car_MarModelName[] asm("DAT_800EA870");
+extern char DAT_800EA844[];
+extern char DAT_800EA858[];
+extern char DAT_800EA860[];
+extern char DAT_800EA868[];
+extern char DAT_800EA870[];
 
 extern "C" {
 /**
  * Car model names in their original small-data owner contribution.
  *
- * The separate incomplete-array aliases above preserve the target absolute
- * address materialization at use sites while these arrays provide storage.
+ * The five incomplete-array aliases above preserve the target absolute
+ * address materialization for the eight-byte names.  The twelve-byte police
+ * name already exceeds CAR's -G8 threshold and is referenced directly.
  */
-static char Car_TaxiModelStorage[8] asm("DAT_800EA844")
+namespace CarAddressViewOwners
+{
+static char DAT_800EA844[8]
     __attribute__((section(".sdata"), aligned(4))) = "c_taxi";
-static char Car_PoliceModelStorage[12] asm("DAT_800EA84C")
+static char DAT_800EA84C[12]
     __attribute__((section(".sdata"), aligned(4))) = "c_police";
-static char Car_VanModelStorage[8] asm("DAT_800EA858")
+static char DAT_800EA858[8]
     __attribute__((section(".sdata"), aligned(4))) = "c_van";
-static char Car_CableModelStorage[8] asm("DAT_800EA860")
+static char DAT_800EA860[8]
     __attribute__((section(".sdata"), aligned(4))) = "c_cable";
-static char Car_KartModelStorage[8] asm("DAT_800EA868")
+static char DAT_800EA868[8]
     __attribute__((section(".sdata"), aligned(4))) = "c_kart";
-static char Car_MarModelStorage[8] asm("DAT_800EA870")
+static char DAT_800EA870[8]
     __attribute__((section(".sdata"), aligned(4))) = "c_mar";
+}
 }
 
 #include "GSKATER_STATE.h"
@@ -290,20 +302,20 @@ static char Car_MarModelStorage[8] asm("DAT_800EA870")
 /**
  * Car virtual dispatch table in its original read-only owner section.
  */
-extern "C" CCarVTable __vt_4CCar
+CCarVTable __vt_4CCar
     __attribute__((section(".rdata"), aligned(8))) = {
         0,
         0,
         CCar_Destroy,
-        Car_BaddyDie,
-        CCar_Update,
-        (void (*)(CBodyOwner *))CBody_EveryFrame,
-        Car_BodyLightingSetup,
-        Car_BodyHit,
-        Car_BodyDeleteStuff,
-        CCar_ExecuteCommand,
-        Car_SetBaddyVariable,
-        Car_GetBaddyVariable,
+        (void (*)(CBaddy *))&CBaddy::Die,
+        (void (*)(CCar *))&CCar::AI,
+        (void (*)(CBodyOwner *))&CBody::EveryFrame,
+        (void (*)(CBodyOwner *))&CBody::DoLightingSetup,
+        (int (*)(CBodyOwner *, int, const CVector &, int))&CBody::Hit,
+        (void (*)(CBodyOwner *))&CBody::DeleteStuff,
+        (int (*)(CCar *, unsigned short))&CCar::ExecuteCommand,
+        (void (*)(CBaddy *, unsigned short))&CBaddy::SetVariable,
+        (short (*)(CBaddy *, unsigned short))&CBaddy::GetVariable,
 };
 
 // === Function implementations (address order) ===
@@ -320,9 +332,7 @@ extern "C" CCarVTable __vt_4CCar
  */
 CCar::CCar(short *pInfo, int NodeIndex, int Type)
 {
-    CCar *self = this;
-
-    self->CSuper.CBody.CItem.mType = Type;
+    CSuper.CBody.CItem.mType = Type;
     /*
      * GCC otherwise selects $2 for this address and commutes the adjacent
      * type/update stores.  Direct assignment, an ordinary local, and both
@@ -330,69 +340,69 @@ CCar::CCar(short *pInfo, int NodeIndex, int Type)
      * instructions and two relocation positions.
      */
     register CCarVTable *carVtable asm("$3") = &__vt_4CCar;
-    self->CSuper.CBody.CItem._vf = carVtable;
-    self->mLoopingSoundUpdate = 1;
+    CSuper.CBody.CItem._vf = carVtable;
+    mLoopingSoundUpdate = 1;
 
     int soundId;
     switch (Type)
     {
     case CAR_TYPE_TAXI:
-        Car_InitItem(self, Car_TaxiModelName);
+        Car_InitItem(this, DAT_800EA844);
         soundId = CAR_SOUND_TAXI_ENGINE;
         goto play_sound;
     case CAR_TYPE_POLICE:
-        self->mLoopingSoundUpdate = 0;
-        Car_InitItem(self, Car_PoliceModelName);
+        mLoopingSoundUpdate = 0;
+        Car_InitItem(this, CarAddressViewOwners::DAT_800EA84C);
         break;
     case CAR_TYPE_VAN:
-        Car_InitVanItem(self, Car_VanModelName);
+        Car_InitVanItem(this, DAT_800EA858);
         soundId = CAR_SOUND_VAN_ENGINE;
         goto play_sound;
     case CAR_TYPE_CABLE:
-        Car_InitItem(self, Car_CableModelName);
+        Car_InitItem(this, DAT_800EA860);
         soundId = CAR_SOUND_CABLE_ENGINE;
         goto play_sound;
     case CAR_TYPE_KART:
-        Car_InitItem(self, Car_KartModelName);
+        Car_InitItem(this, DAT_800EA868);
         soundId = CAR_SOUND_VAN_ENGINE;
         goto play_sound;
     case CAR_TYPE_MAR:
-        Car_InitItem(self, Car_MarModelName);
+        Car_InitItem(this, DAT_800EA870);
         soundId = CAR_SOUND_MAR_ENGINE;
         goto play_sound;
     }
     goto after_sound;
 
 play_sound:
-    self->mLoopingSound = SFX_PlayPos(
-        soundId, Car_Vector(self->CSuper.CBody.CItem.mPos), 0);
+    mLoopingSound = SFX_PlayPos(
+        soundId, Car_Vector(CSuper.CBody.CItem.mPos), 0);
 
 after_sound:
-    if (self->mLoopingSoundUpdate != 0)
+    if (mLoopingSoundUpdate != 0)
     {
-        SFX_ModifyVol(self->mLoopingSound, 0, 0);
+        SFX_ModifyVol(mLoopingSound, 0, 0);
     }
 
     CarVol = 300;
-    ::CBody *body = reinterpret_cast< ::CBody *>(self);
+    ::CBody *body = reinterpret_cast< ::CBody *>(this);
     body->AttachTo(&BaddyList);
-    self->CSuper.mAnimSpeed = CAR_ANIMATION_SPEED;
-    reinterpret_cast< ::CSuper *>(&self->CSuper)->CycleAnim(0, 1);
+    CSuper.mAnimSpeed = CAR_ANIMATION_SPEED;
+    reinterpret_cast< ::CSuper *>(&CSuper)->CycleAnim(0, 1);
 
-    self->mGroundToOrigin = 52;
-    self->mOriginToEye = 32;
-    self->CSuper.CBody.mHealth = 60;
+    mGroundToOrigin = 52;
+    mOriginToEye = 32;
+    CSuper.CBody.mHealth = 60;
     short *pos = body->SquirtPos(pInfo);
     body->SquirtAngles(pos);
 
-    self->CSuper.CBody.mNode = NodeIndex;
+    CSuper.CBody.mNode = NodeIndex;
     unsigned short *links = Trig_GetLinksPointer(NodeIndex);
-    self->mCurrentRoadSegment = links[1];
+    mCurrentRoadSegment = links[1];
     Trig_GetPosition(
-        Car_Vector(self->CSuper.CBody.CItem.mPos),
-        self->mCurrentRoadSegment);
+        Car_Vector(CSuper.CBody.CItem.mPos),
+        mCurrentRoadSegment);
 
-    self->CSuper.CBody.CItem.mPos.y -= CAR_ROAD_HEIGHT;
+    CSuper.CBody.CItem.mPos.y -= CAR_ROAD_HEIGHT;
 }
 
 /**
@@ -563,7 +573,7 @@ static void CollideWithSkater(CCar *pCar, CBruce *pSkater, const MATRIX &tm, sho
         skater->CSuper.CBody.mVel.z >>= 1;
         skater->CSuper.CBody.mVel.y -= CAR_OVERHEAD_Y_IMPULSE;
 
-        Car_VibrateSkater(pSkater, 8, 1, 150);
+        pSkater->Vibrate(8, 1, 150);
         SFX_Grunt(pSkater);
         SFX_PlayX(CAR_SOUND_OVERHEAD_HIT, CAR_SOUND_VOLUME, 0);
         pSkater->Trick_Trick(GameText.pCarPlant, -1000, 0);
@@ -572,7 +582,7 @@ static void CollideWithSkater(CCar *pCar, CBruce *pSkater, const MATRIX &tm, sho
 
         if (canSpawnBits)
         {
-            Car_SetSkaterAnglesFromHeading(pSkater);
+            pSkater->SetAnglesFromHeading();
             Bit_SetSparkTrajectory(
                 Car_ShortVector(skater->CSuper.CBody.CItem.mAngles));
 
@@ -586,7 +596,7 @@ static void CollideWithSkater(CCar *pCar, CBruce *pSkater, const MATRIX &tm, sho
             for (int i = 0; i < 20; i++)
             {
                 CGrindSpark *spark =
-                    static_cast<CGrindSpark *>(Bit_AllocateStorage(
+                    static_cast<CGrindSpark *>(CBit::operator new(
                         BIT2_GRIND_SPARK_STORAGE_SIZE));
                 if (spark != 0)
                 {
@@ -645,9 +655,9 @@ static void CollideWithSkater(CCar *pCar, CBruce *pSkater, const MATRIX &tm, sho
     }
 
     skater->mIgnoreCar = pCar;
-    Car_BailSkater(pSkater, 1, DO_LIMIT);
-    Car_CreateBloodSplat(pSkater, 1, 100);
-    Car_VibrateSkater(pSkater, 12, 1, 255);
+    pSkater->Bail(1, DO_LIMIT);
+    pSkater->BloodSplat(1, 100);
+    pSkater->Vibrate(12, 1, 255);
     SFX_Grunt(pSkater);
     SFX_PlayX(CAR_SOUND_BODY_HIT, CAR_SOUND_VOLUME, 0);
 
@@ -997,13 +1007,12 @@ void CCar_Update(CCar *car)
  *
  * Traffic cars currently acknowledge every command without additional work.
  *
- * @param self Car receiving the command.
  * @param command Command identifier.
  * @return One to report that the command was handled.
  */
-int CCar_ExecuteCommand(CCar *self, unsigned short command)
+int CCar::ExecuteCommand(unsigned short command)
 {
-    (void)self;
+    (void)this;
     (void)command;
     return 1;
 }

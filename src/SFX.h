@@ -11,7 +11,6 @@ void SFX_Init(char *filename);
 void SFX_SpoolInLevelSFX(const char *name);
 void SFX_SpoolInMIDI(const char *name);
 void SFX_SpoolOutMIDI(void);
-int SFX_OpenVABFile(char *filename, void **soundBuffer);
 /** Play a sound effect at equal left/right volume. */
 unsigned int SFX_PlayX(
     unsigned int sound, short volume, int pitchOffset);
@@ -38,43 +37,36 @@ void SFX_MIDIStop(void);
 void SFX_MIDIFadeIn(int ticks);
 void SFX_MIDIChannelMute(unsigned short mute);
 void SFX_ProcessingPerFrame(void);
-void SFX_ParseSFXFile(char *name, unsigned int *entries,
-                      unsigned short *aliases, int maxEntries, int mask);
 
 #ifdef SFX_OWNER_DECLARATIONS
 
 // Primitive aliases retained for the owner's target-era type vocabulary.
-#ifdef __cplusplus
-extern "C"
+typedef unsigned char u8;
+typedef unsigned short u16;
+typedef unsigned int u32;
+typedef signed char s8;
+typedef signed short s16;
+typedef signed int s32;
+typedef unsigned char uchar;
+typedef unsigned short ushort;
+typedef unsigned int uint;
+typedef unsigned char byte;
+typedef int undefined;
+typedef char undefined1;
+typedef short undefined2;
+typedef int undefined4;
+typedef unsigned long ulong;
+typedef unsigned char undefined3[3];
+
+// Game vector types
+struct CVector
 {
-#endif
-
-    typedef unsigned char u8;
-    typedef unsigned short u16;
-    typedef unsigned int u32;
-    typedef signed char s8;
-    typedef signed short s16;
-    typedef signed int s32;
-    typedef unsigned char uchar;
-    typedef unsigned short ushort;
-    typedef unsigned int uint;
-    typedef unsigned char byte;
-    typedef int undefined;
-    typedef char undefined1;
-    typedef short undefined2;
-    typedef int undefined4;
-    typedef unsigned long ulong;
-    typedef unsigned char undefined3[3];
-
-    // Game vector types
-    struct CVector
-    {
-        int vx, vy, vz;
-    };
-    struct CSVector
-    {
-        short vx, vy, vz;
-    };
+    int vx, vy, vz;
+};
+struct CSVector
+{
+    short vx, vy, vz;
+};
 #include "CFRICTION.h"
 
 /* PsyQ owns the exact VabHdr, ProgAtr, and VagAtr layouts used below. */
@@ -120,35 +112,16 @@ union SFXVoiceSpatialData {
 typedef char sfx_spatial_data_size_must_be_4[
     (sizeof(SFXVoiceSpatialData) == 4) ? 1 : -1];
 
-#ifdef __cplusplus
-}
-#endif
-
 // Canonical PsyQ SPU types and API declarations.
 #include <LIBSPU.H>
 
 // === Variables (gp-relative in this TU) ===
-extern "C" int SFXPaused;                  // 0x800DA3A0
-extern "C" int SFX_ReverbDepthSetTimer;    // 0x800DA3CC
-extern "C" int TotalVabUsage;              // 0x800DA38C
-extern "C" int exp_flag;                   // 0x800DA3BC
-extern "C" int keyoff_queue;               // 0x800DA3B4
-extern "C" int keyon_queue;                // 0x800DA3AC
-extern "C" int loop_flag;                  // 0x800DA3C0
-extern "C" int nko_flag;                   // 0x800DA3A8
-extern "C" void *pLevelSpecificSFXVABHeader; // 0x800DA394
-extern "C" void *pSFXVABHeader;              // 0x800DA390
-extern "C" char reverb_changed;            // 0x800DA3C8
-extern "C" int reverb_queue;               // 0x800DA3B0
-extern "C" int voicefree_flag;             // 0x800DA3C4
-extern "C" int voiceon_flag;               // 0x800DA3B8
+#define SFXREVERBTIMER_OWNER_DECLARATION
+#include "SFXREVERBTIMER.h"
+#define TOTALVABUSAGE_OWNER_DECLARATION
+#include "TOTALVABUSAGE.h"
 
 // === Variables (absolute in this TU) ===
-extern "C" unsigned int SFXArray[];                       // 0x800B9290
-extern "C" unsigned short SFXAliasArray[];                 // 0x800B9590
-extern "C" unsigned int SFXLevelSpecificArray[];           // 0x800B9610
-extern "C" unsigned short SFXLevelSpecificAliasArray[];    // 0x800B9910
-extern "C" SFXVoiceSpatialData SFXFalloffArray[];          // 0x800B9990
 #define SOUNDLEVELS_DECLARE_SFXLEVEL
 #include "SOUNDLEVELS.h"
 

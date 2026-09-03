@@ -36,7 +36,6 @@ struct CSuper;
 struct EditorOutModel;
 struct EditorInModel;
 struct LevelGenerator;
-struct CBruce;
 struct CBaddy;
 struct SModel;
 struct SHook;
@@ -44,7 +43,6 @@ struct SHook;
 #define MECHLIST_OWNER_DECLARATIONS
 #include "MECHLIST.h"
 #undef MECHLIST_OWNER_DECLARATIONS
-extern "C" int NumMechs;
 
 #define BITSTATE_DECLARE_BIT_COUNT
 #include "BITSTATE.h"
@@ -63,7 +61,7 @@ extern "C" int NumMechs;
 #include "MECH.h"
 #undef MECH_OWNER_DECLARATIONS
 #include "MAIN.h"
-#define STATS_UNSIZED_STATS_DECLARATION
+#define STATSTABLE_UNSIZED_STATS_DECLARATION
 #include "STATS.h"
 #include "BADDY.h"
 #include "FRONT.h"
@@ -121,17 +119,6 @@ struct CPanelDataMech {
 };
 
 /**
- * Three-component vector view exposing each component's low halfword.  The
- * skater's velocity-flip routine deliberately reads those halfwords before
- * writing the sign-extended values back to the full vector components.
- */
-struct CVectorHalfwordMech {
-    union { int vx; u16 vxLow; };
-    union { int vy; u16 vyLow; };
-    union { int vz; u16 vzLow; };
-};
-
-/**
  * Complete-size CBruce overlay exposing only fields owned by MECH.cpp.
  * Offsets are from original/MAIN_STRUCTS.h.
  */
@@ -151,14 +138,8 @@ struct CBruce {
     u8 _padToPhysicsState[4204 - 4172];
     int mPhysicsState;                                // 0x106c
     u8 _padToFront[4256 - 4208];
-    union {
-        struct CVectorOwner mFront;
-        struct CVectorHalfwordMech mFrontHalfwords;
-    };                                                // 0x10a0
-    union {
-        struct CVectorOwner mRight;
-        struct CVectorHalfwordMech mRightHalfwords;
-    };                                                // 0x10ac
+    struct CVectorOwner mFront;                       // 0x10a0
+    struct CVectorOwner mRight;                       // 0x10ac
     struct CVectorOwner mUp;                          // 0x10b8
     u8 _padToGlow[4380 - 4292];
     u8 mGlowR;                                        // 0x111c
@@ -174,6 +155,50 @@ struct CBruce {
 
     /** Refresh the orientation basis vectors from the skater matrix. */
     void FRUVectorsFromRotMatrix();
+    /** Add one trick occurrence to the skater's history. */
+    int History_Add(char *name, int spinAndStance);
+    /** Clear this skater's recent-event history. */
+    void History_Reset();
+    /** Find one trick occurrence in the skater's history. */
+    int History_Find(char *name, int spinAndStance);
+    /** Initialize the inherited item and load this skater's hook packet. */
+    void InitItem(char *name);
+    /** Fill one displayed-stat slot for this skater. */
+    void GetStats(int skaterSlot);
+    /** Apply dynamic lighting from one collision face. */
+    void CalculateDynamicLighting(unsigned int *face, Item *item);
+    /** Flip the skater's orientation to follow current velocity. */
+    int FlipToVelocity();
+    /** Emit one blood burst from a skater body hook. */
+    void BloodSplat(int bodyPart, int maxBloodBits);
+    /** Hide this skater's board and wheel subobjects. */
+    void BoardOff();
+    /** Show this skater's board and wheel subobjects. */
+    void BoardOn();
+    /** Advance all per-frame skater physics state. */
+    void DoPhysics();
+    /** Cast a downward ray and refresh this skater's shadow. */
+    void DoShadowCheck();
+    /** Handle a collision with another body. */
+    void CollideWithObject(CBody *body);
+    /** Cache the current analogue-stick input. */
+    void ReadAnalogueInput();
+    /** Read one model-hook position in world space. */
+    void GetHookPosition(CVector &position, u8 hook);
+    /** Update water contact and emit periodic surface ripples. */
+    void HandleWater();
+    /** Advance the glow color toward its current target. */
+    void GlowUpdate();
+    /** Set up lighting for this skater. */
+    void DoLightingSetup();
+    /** Mark this skater as dead. */
+    void Die();
+    /** Release owner-specific skater resources. */
+    void DeleteStuff();
+    /** Handle a hit against this skater. */
+    int Hit(int Damage, const CVector &knock, int whathit);
+    /** Run this skater's per-frame gameplay update. */
+    void AI();
 };
 
 /** CBruce vtable prefix through the dynamic-lighting setup callback. */
@@ -184,10 +209,13 @@ struct CBruceVtableMech {
 
 /**
  * CSpark overlay: velocity inherited from CBit plus the spark's floor
- * plane.  sizeof(CSparkMech) == 0x5C is the allocation size passed to
+ * plane.  sizeof(CSpark) == 0x5C is the allocation size passed to
  * CBit's operator new by BloodSplat.
  */
-struct CSparkMech {
+struct CSpark {
+    /** Construct one transient spark. */
+    CSpark(CVector &position, int velocity, int gravity, int life);
+
     u8 _padToVel[36];
     struct CVectorOwner mVel;                         // 0x24 (CBit.mVel)
     u8 _padToFloorY[88 - 48];
@@ -462,12 +490,6 @@ struct CBruceCtorSlice {
     int mAnimLeanAngle;                               // 0x10f4
     u8 _opaqueTail[5228 - 4344];
 
-    /** Clear the skater's recent-event history. */
-    void History_Reset() asm("History_Reset__6CBruce");
-
-    /** Refresh the orientation basis vectors from the skater matrix. */
-    void FRUVectorsFromRotMatrix() asm("FRUVectorsFromRotMatrix__6CBruce");
-
 };
 
 /** Camera field selected for the player camera during skater construction. */
@@ -489,15 +511,14 @@ typedef CCamera CCameraMechCtor;
 
 typedef char SFaceLightingMech_size_check[
     (sizeof(struct SFaceLightingMech) == 12) ? 1 : -1];
-typedef char CPanelDataMech_size_check[(sizeof(struct CPanelDataMech) == 2276) ? 1 : -1];
-typedef char CVectorHalfwordMech_size_check[
-    (sizeof(struct CVectorHalfwordMech) == 12) ? 1 : -1];
+typedef char CPanelDataMech_size_check[
+    (sizeof(struct CPanelDataMech) == 2276) ? 1 : -1];
 typedef char CCameraMech_size_check[
     (sizeof(CCamera) == 1668) ? 1 : -1];
 typedef char CBruce_mech_size_check[(sizeof(struct CBruce) == 5228) ? 1 : -1];
 typedef char CBruceVtableMech_size_check[
     (sizeof(struct CBruceVtableMech) == 28) ? 1 : -1];
-typedef char CSparkMech_size_check[(sizeof(struct CSparkMech) == 0x5C) ? 1 : -1];
+typedef char CSpark_size_check[(sizeof(struct CSpark) == 0x5C) ? 1 : -1];
 typedef char SBoardMech_size_check[(sizeof(struct SBoardMech) == 32) ? 1 : -1];
 typedef char SStatsMech_size_check[(sizeof(struct SStatsMech) == 344) ? 1 : -1];
 typedef char Mech_SCharacterProgress_size_check[
@@ -551,6 +572,7 @@ typedef char Mech_SLight_size_check[
     (sizeof(SLight) == 52) ? 1 : -1];
 
 #include "OB.h"
+#include "CSUPER.h"
 #include "FONT.h"
 #include "UTILS.h"
 #define BIT_DUST_MANAGER_LAYOUT
@@ -563,19 +585,18 @@ typedef char CFlatRipple_size_check[
     (sizeof(CFlatRipple) == 0x74) ? 1 : -1];
 
 // === External function declarations ===
-extern "C" void CItem_InitItem(CItemOwner *, char *) asm("InitItem__5CItemPc");
 #include "VIDEO.h"
-extern "C" CSparkMech *CSpark_ctor(
-    CSparkMech *, CVector &, int, int, int)
-    asm("__6CSparkR7CVectoriii");
-extern "C" void CSuper_dtor(CSuperOwner *, int) asm("_._6CSuper");
-extern "C" int __vt_6CBruce[];
-extern "C" CSuperOwner *CSuper_ctor(CSuperOwner *) asm("__6CSuper");
-extern "C" CPanelDataMech *CPanelData_ctor(
-    CPanelDataMech *, CBruceCtorSlice *) asm("__10CPanelDataP6CBruce");
-extern "C" void CBruce_HistoryReset(CBruceHistorySlice *)
-    asm("History_Reset__6CBruce");
-extern "C" void CBruce_DoPhysics(CBruce *) asm("DoPhysics__6CBruce");
+#include "BIT.h"
+namespace MechConstructorABI
+{
+#define PANEL_DECLARE_DATA_CONSTRUCTOR_ABI
+#define PANEL_DATA_CONSTRUCTOR_RECEIVER CPanelDataMech
+#define PANEL_DATA_CONSTRUCTOR_PLAYER CBruceCtorSlice
+#include "PANEL.h"
+}
+#define CSUPER_DECLARE_DESTRUCTOR
+#define CSUPER_DESTRUCTOR_NAME CSuper_dtor
+#include "CSUPER.h"
 #include <STDIO.H>
 
 #include "GSKATER_STATE.h"
@@ -663,40 +684,7 @@ static inline int MechAbs(int value)
 }
 
 // === Extern "C" forward declarations ===
-extern "C" void CBruce_BoardOff(CBruce *) asm("BoardOff__6CBruce");
-extern "C" void CBruce_BoardOn(CBruce *) asm("BoardOn__6CBruce");
-extern "C" void CBruce_GetStats(CBruce *, int) asm("GetStats__6CBrucei");
-extern "C" CBruceCtorSlice *CBruce_ctor(CBruceCtorSlice *) asm("__6CBruce");
-extern "C" int CBruce_HistoryFind(CBruceHistorySlice *, char *, int)
-    asm("History_Find__6CBrucePci");
-extern "C" int CBruce_HistoryAdd(CBruceHistorySlice *, char *, int)
-    asm("History_Add__6CBrucePci");
-extern "C" void CBruce_dtor(CBruce *, int) asm("_._6CBruce");
-extern "C" void CBruce_GlowUpdate(CBruceGlowSlice *)
-    asm("GlowUpdate__6CBruce");
-extern "C" void CBruce_DoLightingSetup(CBruce *)
-    asm("DoLightingSetup__6CBruce");
-extern "C" void CBruce_CalculateDynamicLighting(
-    CBruce *, unsigned int *, Item *)
-    asm("CalculateDynamicLighting__6CBrucePUiP4Item");
-extern "C" void CBruce_ReadAnalogueInput(CBruceInputSlice *)
-    asm("ReadAnalogueInput__6CBruce");
-extern "C" void CBruce_GetHookPosition(CBruce *, CVector &, u8)
-    asm("GetHookPosition__6CBruceR7CVectorUc");
-extern "C" void CBruce_Die(CBruce *) asm("Die__6CBruce");
-extern "C" void CBruce_DeleteStuff(CBruce *) asm("DeleteStuff__6CBruce");
-extern "C" int CBruce_Hit(CBruce *, int, const CVector &, int)
-    asm("Hit__6CBruceiRC7CVectori");
-extern "C" void CBruce_CollideWithObject(CBruce *, CBody *)
-    asm("CollideWithObject__6CBruceP5CBody");
-extern "C" void CBruce_DoShadowCheck(CBruce *) asm("DoShadowCheck__6CBruce");
-extern "C" void CBruce_InitItem(CBruce *, char *) asm("InitItem__6CBrucePc");
-extern "C" int CBruce_FlipToVelocity(CBruce *)
-    asm("FlipToVelocity__6CBruce");
-extern "C" void CBruce_BloodSplat(CBruce *, int, int)
-    asm("BloodSplat__6CBruceii");
-extern "C" void CBruce_AI(CBruceAISlice *) asm("AI__6CBruce");
-extern "C" void CBruce_HandleWater(CBruce *) asm("HandleWater__6CBruce");
+void CBruce_dtor(CBruce *, int) asm("_._6CBruce");
 #include "RCOSSIN.h"
 
 /**
@@ -707,12 +695,12 @@ int __vt_6CBruce[9]
         0,
         0,
         (int)&CBruce_dtor,
-        (int)&CBruce_Die,
-        (int)&CBruce_AI,
-        (int)&CBody_EveryFrame,
-        (int)&CBruce_DoLightingSetup,
-        (int)&CBruce_Hit,
-        (int)&CBruce_DeleteStuff,
+        (int)(void (*)(CBruce *))&CBruce::Die,
+        (int)(void (*)(CBruce *))&CBruce::AI,
+        (int)(void (*)(CBruce *))&CBody::EveryFrame,
+        (int)(void (*)(CBruce *))&CBruce::DoLightingSetup,
+        (int)(int (*)(CBruce *, int, const CVector &, int))&CBruce::Hit,
+        (int)(void (*)(CBruce *))&CBruce::DeleteStuff,
 };
 
 
@@ -725,24 +713,23 @@ int __vt_6CBruce[9]
  * Mangled:   BoardOff__6CBruce
  * Demangled: CBruce::BoardOff(void)
  *
- * @param bruce  Skater instance whose board should be hidden.
  */
-void CBruce_BoardOff(CBruce *bruce)
+void CBruce::BoardOff()
 {
     register SStats *stats asm("$5") = Stats;
-    int idx = bruce->mSkaterType;
+    int idx = this->mSkaterType;
     stats += idx;
     int bit = 1;
     int b0 = stats->Board;
     int b1 = stats->Wheel1;
     int b2 = stats->Wheel2;
-    int flags = bruce->CSuper.mSubObjectDisplayMask;
+    int flags = this->CSuper.mSubObjectDisplayMask;
     int m0 = bit << b0;
     int m1 = bit << b1;
     m0 = m0 | m1;
     int m2 = bit << b2;
     m0 = m0 | m2;
-    bruce->CSuper.mSubObjectDisplayMask = flags | m0;
+    this->CSuper.mSubObjectDisplayMask = flags | m0;
 }
 
 /**
@@ -752,24 +739,23 @@ void CBruce_BoardOff(CBruce *bruce)
  * Mangled:   BoardOn__6CBruce
  * Demangled: CBruce::BoardOn(void)
  *
- * @param bruce  Skater instance whose board should be shown.
  */
-void CBruce_BoardOn(CBruce *bruce)
+void CBruce::BoardOn()
 {
-    int idx = bruce->mSkaterType;
+    int idx = this->mSkaterType;
     register SStats *stats asm("$5") = Stats;
     stats += idx;
     int bit = 1;
     int b0 = stats->Board;
     int b1 = stats->Wheel1;
     int b2 = stats->Wheel2;
-    int flags = bruce->CSuper.mSubObjectDisplayMask;
+    int flags = this->CSuper.mSubObjectDisplayMask;
     b0 = bit << b0;
     b1 = bit << b1;
     b0 = b0 | b1;
     int m2 = bit << b2;
     m2 = ~(b0 | m2);
-    bruce->CSuper.mSubObjectDisplayMask = flags & m2;
+    this->CSuper.mSubObjectDisplayMask = flags & m2;
 }
 
 /**
@@ -786,8 +772,9 @@ void CBruce_BoardOn(CBruce *bruce)
  * @param bruce  Skater instance whose stat display is being filled.
  * @param Skater  Output-panel slot to update.
  */
-void CBruce_GetStats(CBruce *bruce, int Skater)
+void CBruce::GetStats(int Skater)
 {
+    CBruce *bruce = this;
     CBruce *selfReg = bruce;
     register char *gp asm("$28");
 
@@ -895,7 +882,6 @@ void CBruce_GetStats(CBruce *bruce, int Skater)
         highest_board = (int)stats + highest_board;
         skater2 =
             ((SStatsMech *)highest_board)->Boards[0].balanceByte;
-        asm volatile("" : "+r"(skater2));
         slotOffset = slotOffset + dst3;
         *(u8 *)slotOffset = skater2;
         return;
@@ -934,13 +920,13 @@ clear_stats:
  * @param bruce Storage supplied for the new skater.
  * @return `bruce` (the GCC 2.x constructor return convention).
  */
-CBruceCtorSlice *CBruce_ctor(CBruceCtorSlice *bruce)
+CBruceCtorSlice *CBruceConstructorABI::__6CBruce(CBruceCtorSlice *bruce)
 {
     int maxKickSpeed;
 
-    CSuper_ctor(&bruce->Inherited.CSuper);
+    ::new (reinterpret_cast<CSuper *>(&bruce->Inherited.CSuper)) CSuper();
     bruce->Inherited.CSuper.CBody.CItem.vtable = (void *)__vt_6CBruce;
-    CPanelData_ctor(&bruce->mPanelData, bruce);
+    MechConstructorABI::__10CPanelDataP6CBruce(&bruce->mPanelData, bruce);
     ::new ((Dust *)bruce->mDust) Dust;
     ::new ((Blood *)bruce->mBlood) Blood;
 
@@ -999,7 +985,7 @@ CBruceCtorSlice *CBruce_ctor(CBruceCtorSlice *bruce)
     bruce->mComboCounter = 0;
     bruce->Inherited.CSuper.mExtraFlags |= 1;
 
-    bruce->History_Reset();
+    reinterpret_cast<CBruce *>(bruce)->History_Reset();
 
     bruce->mStickToInvisible = 0;
     bruce->mIsOnTaggedPoly = 0;
@@ -1023,7 +1009,7 @@ CBruceCtorSlice *CBruce_ctor(CBruceCtorSlice *bruce)
     bruce->mRotationMatrix.m[1][2] = 0;
     bruce->mRotationMatrix.m[2][2] = -0x1000;
 
-    bruce->FRUVectorsFromRotMatrix();
+    reinterpret_cast<CBruce *>(bruce)->FRUVectorsFromRotMatrix();
     bruce->mOldRotationMatrix = bruce->mRotationMatrix;
 
     {
@@ -1126,12 +1112,12 @@ void CBruce_dtor(CBruce *bruce, int __in_chrg)
     reinterpret_cast<CBody *>(&bruce->CSuper.CBody)->DeleteFrom(
         reinterpret_cast<CBody **>(&MechList));
     NumMechs = NumMechs - 1;
-    CBruce_DeleteStuff(bruce);
+    bruce->DeleteStuff();
 
     ((Blood *)bruce->mBlood)->~Blood();
     ((Dust *)bruce->mDust)->~Dust();
     bruce->mPanelData.mOutOfBoundsText.~FallingTextEffect();
-    TrickTextEffect_DestroyAbi(&bruce->mPanelData.mTrickTextEffect, 2);
+    bruce->mPanelData.mTrickTextEffect.~TrickTextEffect();
     bruce->mPanelData.mFallingTextEffect.~FallingTextEffect();
     FontFromStorage(&bruce->mPanelData.mScoreFont)->~Font();
     FontFromStorage(&bruce->mPanelData.mTrickFont)->~Font();
@@ -1177,14 +1163,13 @@ int History_Checksum(char *pName, int Spins)
  * Mangled:   History_Find__6CBrucePci
  * Demangled: CBruce::History_Find(char *, int)
  *
- * @param bruce  Skater whose recent-event history is searched.
  * @param pName  Asset / object name string.
  * @param Spins  Initial low-bit seed mixed into the checksum.
  * @return Matching history index, or -1 when absent.
  */
-int CBruce_HistoryFind(
-    CBruceHistorySlice *bruce, char *pName, int Spins)
+int CBruce::History_Find(char *pName, int Spins)
 {
+    CBruceHistorySlice *bruce = reinterpret_cast<CBruceHistorySlice *>(this);
     int c = History_Checksum(pName, Spins);
     int i = 0;
     register int count asm("$4") = bruce->mHistoryPos;
@@ -1212,11 +1197,10 @@ int CBruce_HistoryFind(
  *          Target: jr $ra; sw $zero, 0x1148($a0)
  * Mangled: History_Reset__6CBruce
  *
- * @param bruce  Skater whose recent-event history is cleared.
  */
-void CBruce_HistoryReset(CBruceHistorySlice *bruce)
+void CBruce::History_Reset()
 {
-    bruce->mHistoryPos = 0;
+    reinterpret_cast<CBruceHistorySlice *>(this)->mHistoryPos = 0;
 }
 
 /**
@@ -1231,10 +1215,10 @@ void CBruce_HistoryReset(CBruceHistorySlice *bruce)
  * @param Spins  Initial low-bit seed mixed into the checksum.
  * @return Updated occurrence count for the history entry.
  */
-int CBruce_HistoryAdd(
-    CBruceHistorySlice *bruce, char *pName, int Spins)
+int CBruce::History_Add(char *pName, int Spins)
 {
-    int i = CBruce_HistoryFind(bruce, pName, Spins);
+    CBruceHistorySlice *bruce = reinterpret_cast<CBruceHistorySlice *>(this);
+    int i = reinterpret_cast<CBruce *>(bruce)->History_Find(pName, Spins);
     if (i != -1)
         goto done;
     {
@@ -1307,10 +1291,10 @@ int GlowTowards(int A, int B, int Speed)
  * Demangled: CBruce::GlowUpdate(void)
  *            Drive the skater glow toward its target color and clear the cycle when settled.
  *
- * @param bruce  Skater whose glow state is advanced.
  */
-void CBruce_GlowUpdate(CBruceGlowSlice *bruce)
+void CBruce::GlowUpdate()
 {
+    CBruceGlowSlice *bruce = reinterpret_cast<CBruceGlowSlice *>(this);
     int glow = GlowTowards(bruce->mGlowR, bruce->mTargetGlowR, bruce->mGlowSpeed);
     bruce->mGlowR = glow;
     glow = GlowTowards(bruce->mGlowG, bruce->mTargetGlowG, bruce->mGlowSpeed);
@@ -1357,12 +1341,9 @@ void CBruce_GlowUpdate(CBruceGlowSlice *bruce)
  * Address: 0x80043330
  *          Target: jr $ra; nop
  * Mangled: DoLightingSetup__6CBruce
- *
- * @param bruce  Skater receiving the lighting setup.
  */
-void CBruce_DoLightingSetup(CBruce *bruce)
+void CBruce::DoLightingSetup()
 {
-    (void)bruce;
 }
 
 /**
@@ -1376,10 +1357,10 @@ void CBruce_DoLightingSetup(CBruce *bruce)
  * and averages the RGB components. Otherwise averages the face's packed RGB.
  * The resulting brightness is scaled by three before the lighting callback.
  */
-void CBruce_CalculateDynamicLighting(
-    CBruce *bruce, unsigned int *p_face, Item *p_item)
+void CBruce::CalculateDynamicLighting(
+    unsigned int *p_face, Item *p_item)
 {
-    register CBruce *self asm("$10") = bruce;
+    register CBruce *self asm("$10") = this;
     register SFaceLightingMech *pFace asm("$11") =
         (SFaceLightingMech *)p_face;
     asm volatile("" : "+r"(self), "+r"(pFace));
@@ -1439,10 +1420,10 @@ void CBruce_CalculateDynamicLighting(
  *          PERFECT
  * Mangled: ReadAnalogueInput__6CBruce
  *
- * @param bruce  Skater receiving the cached analogue input.
  */
-void CBruce_ReadAnalogueInput(CBruceInputSlice *bruce)
+void CBruce::ReadAnalogueInput()
 {
+    CBruceInputSlice *bruce = reinterpret_cast<CBruceInputSlice *>(this);
     bruce->mAY =
         *(u8 *)&bruce->mPad->AnalogueMoveForwardsBackwards;
     bruce->mAX = *(u8 *)&bruce->mPad->AnalogueMoveLeftRight;
@@ -1457,16 +1438,14 @@ void CBruce_ReadAnalogueInput(CBruceInputSlice *bruce)
  *          Calls M3dUtils_GetHookPosition(vec, this, hookIndex & 0xFF)
  * Mangled: GetHookPosition__6CBruceR7CVectorUc
  *
- * @param bruce  Skater whose model hook is queried.
  * @param pos  Position vector.
  * @param hook  Model hook index.
  */
-void CBruce_GetHookPosition(
-    CBruce *bruce, CVector &pos, u8 hook)
+void CBruce::GetHookPosition(CVector &pos, u8 hook)
 {
     M3dUtils_GetHookPosition(
         reinterpret_cast<VECTOR *>(&pos),
-        reinterpret_cast<CSuper *>(bruce), hook);
+        reinterpret_cast< ::CSuper *>(this), hook);
 }
 
 /**
@@ -1474,15 +1453,13 @@ void CBruce_GetHookPosition(
  *
  * Address: 0x800434E0
  * Mangled: Die__6CBruce
- *
- * @param bruce  Skater being marked dead.
  */
-void CBruce_Die(CBruce *bruce)
+void CBruce::Die()
 {
-    if (!reinterpret_cast<const CBody *>(&bruce->CSuper.CBody)->IsDead())
+    if (!reinterpret_cast<const CBody *>(&this->CSuper.CBody)->IsDead())
     {
-        bruce->CSuper.CBody.mCBodyFlags = bruce->CSuper.CBody.mCBodyFlags | 0x40;
-        bruce->CSuper.CBody.CItem.mFlags = bruce->CSuper.CBody.CItem.mFlags | 0x41;
+        this->CSuper.CBody.mCBodyFlags = this->CSuper.CBody.mCBodyFlags | 0x40;
+        this->CSuper.CBody.CItem.mFlags = this->CSuper.CBody.CItem.mFlags | 0x41;
     }
 }
 
@@ -1493,9 +1470,8 @@ void CBruce_Die(CBruce *bruce)
  *          Target: jr $ra; nop
  * Mangled: DeleteStuff__6CBruce
  */
-void CBruce_DeleteStuff(CBruce *bruce)
+void CBruce::DeleteStuff()
 {
-    (void)bruce;
 }
 
 /**
@@ -1504,17 +1480,13 @@ void CBruce_DeleteStuff(CBruce *bruce)
  * Address: 0x8004352C
  *          Target: jr $ra; addiu $v0, $zero, 1
  * Mangled: Hit__6CBruceiRC7CVectori
- *
- * @param bruce  Skater receiving the hit.
  * @param Damage  Damage applied by the hit.
  * @param knock  Knockback vector supplied by the caller.
  * @param whathit  Hit-kind identifier.
  * @return 1
  */
-int CBruce_Hit(
-    CBruce *bruce, int Damage, const CVector &knock, int whathit)
+int CBruce::Hit(int Damage, const CVector &knock, int whathit)
 {
-    (void)bruce;
     (void)Damage;
     (void)knock;
     (void)whathit;
@@ -1528,12 +1500,10 @@ int CBruce_Hit(
  *          Target: jr $ra; nop
  * Mangled: CollideWithObject__6CBruceP5CBody
  *
- * @param bruce  Skater participating in the collision.
  * @param pOb  Body with which the skater collided.
  */
-void CBruce_CollideWithObject(CBruce *bruce, CBody *pOb)
+void CBruce::CollideWithObject(CBody *pOb)
 {
-    (void)bruce;
     (void)pOb;
 }
 
@@ -1545,10 +1515,10 @@ void CBruce_CollideWithObject(CBruce *bruce, CBody *pOb)
  * Demangled: CBruce::DoShadowCheck(void)
  *            Cast a downward shadow ray and update the skater shadow when it finds valid ground.
  *
- * @param bruce  Skater whose shadow is refreshed.
  */
-void CBruce_DoShadowCheck(CBruce *bruce)
+void CBruce::DoShadowCheck()
 {
+    CBruce *bruce = this;
     SLineInfo line_info;
 
     bruce->FRUVectorsFromRotMatrix();
@@ -1628,12 +1598,13 @@ void CBruce_DoShadowCheck(CBruce *bruce)
  * @param bruce  Skater whose item data is initialized.
  * @param pName  Asset / object name string.
  */
-void CBruce_InitItem(CBruce *bruce, char *pName)
+void CBruce::InitItem(char *pName)
 {
-    CItem_InitItem(&bruce->CSuper.CBody.CItem, pName);
+    CBruce *bruce = this;
+    reinterpret_cast<CItem *>(&bruce->CSuper.CBody.CItem)->InitItem(pName);
     int idx = bruce->mSkaterType;
     M3dUtils_ReadHooksPacket(
-        reinterpret_cast<CSuper *>(bruce), SkaterHooks[idx]);
+        reinterpret_cast< ::CSuper *>(bruce), SkaterHooks[idx]);
 }
 
 /**
@@ -1643,11 +1614,11 @@ void CBruce_InitItem(CBruce *bruce, char *pName)
  * Mangled:   FlipToVelocity__6CBruce
  * Demangled: CBruce::FlipToVelocity(void)
  *
- * @param bruce  Skater whose orientation is flipped.
  * @return 1 when the orientation was flipped, otherwise 0.
  */
-int CBruce_FlipToVelocity(CBruce *bruce)
+int CBruce::FlipToVelocity()
 {
+    CBruce *bruce = this;
     if (bruce->CSuper.mAnim == 0x22)
         return 0;
 
@@ -1656,43 +1627,19 @@ int CBruce_FlipToVelocity(CBruce *bruce)
             reinterpret_cast<CVector *>(
                 &bruce->CSuper.CBody.mVel)) > 0x5000)
     {
-        register int v0 asm("$3");
-        register int v1 asm("$4");
-        v0 = bruce->mFrontHalfwords.vxLow;
-        v1 = bruce->mFrontHalfwords.vyLow;
-        v0 = -v0;
-        bruce->mRotationMatrix.m[0][2] = v0;
-        v0 = (s16)v0;
-        v1 = -v1;
-        bruce->mRotationMatrix.m[1][2] = v1;
-        v1 = (s16)v1;
-        bruce->mFront.vx = v0;
-        bruce->mFront.vy = v1;
-
-        v0 = bruce->mFrontHalfwords.vzLow;
-        v1 = bruce->mRightHalfwords.vxLow;
-        v0 = -v0;
-        bruce->mRotationMatrix.m[2][2] = v0;
-        v0 = (s16)v0;
-        v1 = -v1;
-        bruce->mRotationMatrix.m[0][0] = v1;
-        v1 = (s16)v1;
-        bruce->mFront.vz = v0;
-        bruce->mRight.vx = v1;
-
-        v0 = bruce->mRightHalfwords.vyLow;
-        v1 = bruce->mRightHalfwords.vzLow;
-        v0 = -v0;
-        bruce->mRotationMatrix.m[1][0] = v0;
-        v0 = (s16)v0;
-        v1 = -v1;
-        bruce->mRotationMatrix.m[2][0] = v1;
-        bruce->mRight.vy = v0;
-        v0 = bruce->CSuper.mExtraFlags;
-        v1 = (s16)v1;
-        bruce->mRight.vz = v1;
-        v0 ^= 2;
-        bruce->CSuper.mExtraFlags = v0;
+        bruce->mRotationMatrix.m[0][2] = -bruce->mFront.vx;
+        bruce->mFront.vx = bruce->mRotationMatrix.m[0][2];
+        bruce->mRotationMatrix.m[1][2] = -bruce->mFront.vy;
+        bruce->mFront.vy = bruce->mRotationMatrix.m[1][2];
+        bruce->mRotationMatrix.m[2][2] = -bruce->mFront.vz;
+        bruce->mFront.vz = bruce->mRotationMatrix.m[2][2];
+        bruce->mRotationMatrix.m[0][0] = -bruce->mRight.vx;
+        bruce->mRight.vx = bruce->mRotationMatrix.m[0][0];
+        bruce->mRotationMatrix.m[1][0] = -bruce->mRight.vy;
+        bruce->mRight.vy = bruce->mRotationMatrix.m[1][0];
+        bruce->mRotationMatrix.m[2][0] = -bruce->mRight.vz;
+        bruce->mRight.vz = bruce->mRotationMatrix.m[2][0];
+        bruce->CSuper.mExtraFlags ^= 2;
         return 1;
     }
 
@@ -1706,13 +1653,12 @@ int CBruce_FlipToVelocity(CBruce *bruce)
  * Mangled:   BloodSplat__6CBruceii
  * Demangled: CBruce::BloodSplat(int, int)
  *
- * @param bruce  Skater emitting the blood effect.
  * @param BodyPart  Hook index used as the emission point.
  * @param MaxBloodBits  Maximum number of spark particles to create.
  */
-void CBruce_BloodSplat(
-    CBruce *bruce, int BodyPart, int MaxBloodBits)
+void CBruce::BloodSplat(int BodyPart, int MaxBloodBits)
 {
+    CBruce *bruce = this;
     CSVector v;
     CVector Pos;
     CSVector Cone;
@@ -1748,7 +1694,7 @@ void CBruce_BloodSplat(
     Bit_SetSparkTrajectoryCone(Cone);
     Bit_SetSparkRGB(0x48, 0, 0);
     Bit_SetSparkFadeRGB(0, 0, 0);
-    CBruce_GetHookPosition(bruce, Pos, (u8)BodyPart);
+    bruce->GetHookPosition(Pos, (u8)BodyPart);
 
     SparkSemiTrans = reinterpret_cast<void *>(0);
     UseCacheForBits = 0;
@@ -1784,12 +1730,11 @@ void CBruce_BloodSplat(
             if (Mem_GetFree(1) < 10000)
                 return;
             Bit_SetSparkSize((i & 1) + 1);
-            CSparkMech *pSpark = static_cast<CSparkMech *>(
-                Bit_AllocateStorage(sizeof(CSparkMech)));
+            CSpark *pSpark = static_cast<CSpark *>(
+                CBit::operator new(sizeof(CSpark)));
             if (pSpark != 0)
-                pSpark = CSpark_ctor(
-                    pSpark, Pos, (i >> 2) + 0xE,
-                    gravity, (i & 7) + 0x32);
+                pSpark = ::new (pSpark) CSpark(
+                    Pos, (i >> 2) + 0xE, gravity, (i & 7) + 0x32);
             reinterpret_cast<CVector &>(pSpark->mVel) +=
                 reinterpret_cast<const CVector &>(
                     bruce->CSuper.CBody.mVel);
@@ -1810,11 +1755,10 @@ void CBruce_BloodSplat(
  * Address:   0x80043A74
  * Mangled:   AI__6CBruce
  * Demangled: CBruce::AI(void)
- *
- * @param bruce  Skater receiving its per-frame update.
  */
-void CBruce_AI(CBruceAISlice *bruce)
+void CBruce::AI()
 {
+    CBruceAISlice *bruce = reinterpret_cast<CBruceAISlice *>(this);
     if (GamePaused != 0)
         return;
 
@@ -1853,9 +1797,9 @@ void CBruce_AI(CBruceAISlice *bruce)
 
     bruce->mResponseTimer = 100;
     bruce->Inherited.Base.RGB = 0x404040;
-    CBruce_ReadAnalogueInput((CBruceInputSlice *)bruce);
-    CBruce_DoPhysics((CBruce *)bruce);
-    CBruce_HandleWater((CBruce *)bruce);
+    reinterpret_cast<CBruce *>(bruce)->ReadAnalogueInput();
+    reinterpret_cast<CBruce *>(bruce)->DoPhysics();
+    reinterpret_cast<CBruce *>(bruce)->HandleWater();
 
     if ((((bruce->Inherited.Base.AnimFlags >> 1) ^ 1) & 1) != 0)
         ++bruce->mGroundCounter;
@@ -1873,7 +1817,7 @@ void CBruce_AI(CBruceAISlice *bruce)
             bruce->Inherited.Base.Position),
         nearest, BaddyList, 0, 0x1000);
     if (pOb != 0)
-        CBruce_CollideWithObject((CBruce *)bruce, pOb);
+        reinterpret_cast<CBruce *>(bruce)->CollideWithObject(pOb);
 
     pOb = M3dColij_LineToSphere(
         reinterpret_cast<const CVector &>(
@@ -1888,7 +1832,7 @@ void CBruce_AI(CBruceAISlice *bruce)
         MechAbs(bruce->Inherited.Base.Position.vy - bruce->mShadowY) >= 65)
     {
         bruce->mShadowY = bruce->Inherited.Base.Position.vy;
-        CBruce_DoShadowCheck((CBruce *)bruce);
+        reinterpret_cast<CBruce *>(bruce)->DoShadowCheck();
     }
     else
     {
@@ -1947,10 +1891,10 @@ void CBruce_AI(CBruceAISlice *bruce)
  * Mangled:   HandleWater__6CBruce
  * Demangled: CBruce::HandleWater(void)
  *
- * @param bruce  Skater whose water interaction is updated.
  */
-void CBruce_HandleWater(CBruce *bruce)
+void CBruce::HandleWater()
 {
+    CBruce *bruce = this;
     if (GNumberOfPlayers == 2)
         return;
 
@@ -1997,7 +1941,7 @@ void CBruce_HandleWater(CBruce *bruce)
 
         CFlatRipple *ripple =
             static_cast<CFlatRipple *>(
-                Bit_AllocateStorage(sizeof(CFlatRipple)));
+                CBit::operator new(sizeof(CFlatRipple)));
         if (ripple != 0)
         {
             int radius = Rnd(24) + 40;
@@ -2043,11 +1987,7 @@ do_play1:
 
 after_sfx:;
     int playerIdx = pSkater->mSkaterType;
-    int offset = playerIdx * sizeof(SStats);
-    register SStats *statsBase asm("$4") = Stats;
-    asm volatile("" : "+r"(statsBase));
-    statsBase = (SStats *)((char *)statsBase + offset);
-    int field = statsBase->ComboID;
+    int field = Stats[playerIdx].ComboID;
 
     if (field == 0xA000) goto set_1f;
     if (field != 0xC000) goto rnd_path;

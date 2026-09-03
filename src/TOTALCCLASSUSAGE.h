@@ -13,18 +13,10 @@
 #error "Select the TotalCClassUsage owner or absolute declaration view"
 #endif
 
-#ifdef TOTALCCLASSUSAGE_WITHIN_C_LINKAGE
-#define TOTALCCLASSUSAGE_DECL_LINKAGE extern
-#else
-#define TOTALCCLASSUSAGE_DECL_LINKAGE extern "C"
-#endif
-
 /** Bytes currently consumed by CClass allocations. */
-TOTALCCLASSUSAGE_DECL_LINKAGE int TotalCClassUsage
+extern int TotalCClassUsage
     TOTALCCLASSUSAGE_DECL_ATTR;
 
-#undef TOTALCCLASSUSAGE_DECL_LINKAGE
 #undef TOTALCCLASSUSAGE_DECL_ATTR
 #undef TOTALCCLASSUSAGE_ABSOLUTE_DECLARATION
 #undef TOTALCCLASSUSAGE_OWNER_DECLARATION
-#undef TOTALCCLASSUSAGE_WITHIN_C_LINKAGE

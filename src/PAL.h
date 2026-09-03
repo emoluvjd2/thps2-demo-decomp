@@ -1,6 +1,8 @@
 #if !defined(PAL_SHARED_STATE_DECLARATIONS_EMITTED)
 #define PAL_SHARED_STATE_DECLARATIONS_EMITTED
 
+struct tag_S_Pal;
+
 #ifdef PAL_OWNER_DECLARATIONS
 #define PAL_COORDINATE_DECL_ATTR
 #else
@@ -8,10 +10,10 @@
 #endif
 
 /** X coordinate of the shared 16-colour palette allocation area. */
-extern "C" int Pal16X PAL_COORDINATE_DECL_ATTR; // 0x800DA37C
+extern int Pal16X PAL_COORDINATE_DECL_ATTR; // 0x800DA37C
 
 /** Y coordinate of the shared 16-colour palette allocation area. */
-extern "C" int Pal16Y PAL_COORDINATE_DECL_ATTR; // 0x800DA380
+extern int Pal16Y PAL_COORDINATE_DECL_ATTR; // 0x800DA380
 
 #undef PAL_COORDINATE_DECL_ATTR
 #endif // PAL_SHARED_STATE_DECLARATIONS_EMITTED
@@ -23,8 +25,6 @@ extern "C" int Pal16Y PAL_COORDINATE_DECL_ATTR; // 0x800DA380
 #if !defined(PAL_OWNER_LAYOUT) && !defined(PAL_ENTRY_LAYOUT_ONLY) && \
     !defined(PAL_INC_H)
 #define PAL_INC_H
-
-struct tag_S_Pal;
 
 /** Initialize the palette allocator and its VRAM slot tables. */
 void Pal_Init(void);
@@ -45,6 +45,12 @@ void Free16Slot(unsigned short clut);
 tag_S_Pal *Pal_LoadPalette(
     unsigned int checksum, unsigned int *pData,
     unsigned char flags, int Remap);
+
+/** Copy one palette's VRAM contents into caller-owned memory. */
+void Pal_CopyToMemory(tag_S_Pal *palette, void *buffer);
+
+/** Upload caller-owned palette data into an existing VRAM allocation. */
+void Pal_StoreFromMemory(tag_S_Pal *palette, void *buffer);
 
 #endif // ordinary PAL declarations
 

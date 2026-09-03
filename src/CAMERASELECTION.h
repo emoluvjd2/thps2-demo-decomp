@@ -10,7 +10,7 @@
 #endif
 
 /** Index of the MikeCamera entry used by the active render pass. */
-extern "C" unsigned int Camera_CurrentMikeCamera CAMERASELECTION_DECL_ATTR;
+extern unsigned int Camera_CurrentMikeCamera CAMERASELECTION_DECL_ATTR;
 
 #undef CAMERASELECTION_DECL_ATTR
 #undef CAMERASELECTION_GP_RELATIVE_DECLARATIONS

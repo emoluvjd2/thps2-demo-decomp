@@ -34,7 +34,6 @@ inline void *operator new(unsigned int, void *storage)
 }
 
 struct tag_S_Pal;
-struct CBit;
 
 /** Virtual slots shared by every transient bit-effect subtype. */
 struct CBitVTable {
@@ -143,6 +142,8 @@ struct CQuadBit : CBit {
     struct Texture *mpTexture;
     unsigned char mFlags;
 
+    /** Construct a four-corner world-space particle. */
+    CQuadBit();
     ~CQuadBit();
     /** Select the texture frame used by this world-space quad. */
     void SetTexture(char *animName, int frame);
@@ -320,6 +321,8 @@ struct CGouraudRibbon : CSpecialDisplay {
     struct SRibbonPoint *mpPoints;
 
     ~CGouraudRibbon();
+    /** Render the Gouraud-shaded ribbon into the current primitive buffer. */
+    void Display();
     /** Releases Gouraud-ribbon storage through the CBit allocator. */
     static void operator delete(void *p) { CBit::operator delete(p); }
 };
@@ -401,7 +404,7 @@ int UseCacheForBits __attribute__((section(".sdata"))) = 1;
  * Keep the constructor-facing declaration opaque while the owner-local
  * definition below supplies the same assembler label without an XDEF.
  */
-extern "C" char Bit_RibbonName[] asm("DAT_800d9970");
+extern char DAT_800d9970[];
 
 // Absolute-addressed globals (force lui/addiu, not gp-relative)
 #define RCOSSIN_DECL_TYPE int
@@ -415,9 +418,9 @@ struct SSinCos
     short Cos;
 };
 #define Sine(angle) \
-    ((*(SSinCos *)(&rcossin_tbl + ((angle) & 0xfff))).Sin)
+    (((SSinCos *)&rcossin_tbl)[(angle) & 0xfff].Sin)
 #define Cosine(angle) \
-    ((*(SSinCos *)(&rcossin_tbl + ((angle) & 0xfff))).Cos)
+    (((SSinCos *)&rcossin_tbl)[(angle) & 0xfff].Cos)
 
 /** Return a word-addressed pointer into the PlayStation scratchpad. */
 #ifndef getScratchAddr
@@ -425,26 +428,8 @@ struct SSinCos
 #endif
 
 // === Extern vtable symbols ===
-extern "C" int __vt_4CBit;
-extern "C" int __vt_15CNonRenderedBit;
-extern "C" int __vt_7CFT4Bit;
-extern "C" int __vt_16CLinked2EndedBit;
-extern "C" int __vt_6CPixel;
-extern "C" int __vt_10CRibbonBit;
-extern "C" int __vt_8CQuadBit;
-extern "C" int __vt_8CFlatBit;
-extern "C" int __vt_11CMotionBlur;
-extern "C" int __vt_19CMotionBlurImmortal;
-extern "C" int __vt_5CFrag;
-extern "C" int __vt_6CSpark;
-extern "C" int __vt_11CSimpleAnim;
-extern "C" int __vt_11CSmokeTrail;
-extern "C" int __vt_8CGenPoly;
-extern "C" int __vt_9CChunkBit;
-extern "C" int __vt_9CGlassBit;
-extern "C" int __vt_5CGlow;
-extern "C" int __vt_7CRibbon;
-extern "C" int __vt_11CWobblyGlow;
+#define BIT_DECLARE_VTABLE_ADDRESSES
+#include "BIT.h"
 
 // BIT init tables and their small-data animation-name strings.
 static char *AnimNames[6] = {
@@ -475,9 +460,14 @@ unsigned int SparkSize __attribute__((section(".sdata"))) = 1;
 void *SparkSemiTrans __attribute__((section(".sdata"))) = (void *)1;
 CVECTOR SparkRGB __attribute__((section(".sdata"))) = {0x80, 0x80, 0x80, 0};
 CVECTOR SparkFadeRGB __attribute__((section(".sdata"))) = {4, 4, 4, 8};
-static char Bit_RibbonNameOwner[8]
-    asm("DAT_800d9970")
+namespace BitAddressViewOwners
+{
+extern "C"
+{
+static char DAT_800d9970[8]
     __attribute__((section(".sdata"))) = "Ribbon";
+}
+}
 
 #include "SCAMERA.h"
 
@@ -497,45 +487,37 @@ struct SDoubleBuffer
 #undef M3DMATHS_TYPED_API
 #include "M3DASM.h"
 
-// === Free function declarations ===
-long Transform(const CVector &Pos, int &yx);
-void Bit_Init(void);
-void DeleteBitList(CBit *pBitList);
-static void RemoveDeadBits(CBit *pBit);
-void Bit_RemoveDeadBits(void);
-void MoveList(CBit *pBit);
-void Bit_Move(void);
-void Bit_Display(void);
-static void CalcScreenNormal(SCalcBuffer *pBuf, int &UnitX, int &UnitY, int ClosenessLimit);
-CVector operator+(const CVector &left, const CVector &right);
-CVector operator-(const CVector &left, const CVector &right);
-CVector operator*(const CVector &vector, const int &scale);
-CVector operator/(const CVector &vector, const int &scale);
-CVector operator>>(const CVector &vector, const int &shift);
+#include "CVECTOROPS.h"
 
 // === Extern "C" forward declarations ===
-extern "C" CBit *CBit_ctor(CBit *) asm("__4CBit");
-extern "C" void CSpecialDisplay_dtor(CSpecialDisplay *, int)
-    asm("_._15CSpecialDisplay");
-extern "C" CFT4Bit *CFT4Bit_ctor(CFT4Bit *) asm("__7CFT4Bit");
-extern "C" CQuadBit *CQuadBit_ctor(CQuadBit *) asm("__8CQuadBit");
-extern "C" CLinked2EndedBit *CLinked2EndedBit_ctor(CLinked2EndedBit *)
-    asm("__16CLinked2EndedBit");
-extern "C" CMotionBlur *CMotionBlur_ctor(
-    CMotionBlur *, CVector *, CVector *, char *, int, int, int)
-    asm("__11CMotionBlurRC7CVectorR7CVectorPciii");
-extern "C" CRibbonBit *CRibbonBit_ctor(CRibbonBit *) asm("__10CRibbonBit");
-extern "C" void CGouraudRibbon_dtor(CGouraudRibbon *, int)
-    asm("_._14CGouraudRibbon");
-extern "C" void CGouraudRibbon_Display(CGouraudRibbon *)
-    asm("Display__14CGouraudRibbon");
-extern "C" void CTexturedRibbon_dtor(CTexturedRibbon *, int)
+#define BIT_DECLARE_BASE_CONSTRUCTOR
+#include "BIT.h"
+#define CBit_ctor BitConstructorABI::__4CBit
+#define BIT_DECLARE_FT4_CONSTRUCTOR
+#include "BIT.h"
+#define CFT4Bit_ctor BitConstructorABI::__7CFT4Bit
+#define BIT_DECLARE_LINKED_2_ENDED_CONSTRUCTOR
+#include "BIT.h"
+#define CLinked2EndedBit_ctor BitConstructorABI::__16CLinked2EndedBit
+#define BIT_DECLARE_MOTION_BLUR_CONSTRUCTOR
+#include "BIT.h"
+#define CMotionBlur_ctor \
+    BitMotionBlurConstructorABI::__11CMotionBlurRC7CVectorR7CVectorPciii
+#define BIT_DECLARE_RIBBON_BIT_CONSTRUCTOR
+#include "BIT.h"
+#define CRibbonBit_ctor BitConstructorABI::__10CRibbonBit
+
+// C++ cannot take a destructor's address, so BIT keeps owner-local address
+// views of the natural destructor symbols used by its manual vtables.
+/** Address the CTexturedRibbon deleting destructor from its owner vtable. */
+void CTexturedRibbon_dtor(CTexturedRibbon *ribbon, int inCharge)
     asm("_._15CTexturedRibbon");
-extern "C" void CTexturedRibbon_Display(CTexturedRibbon *)
-    asm("Display__15CTexturedRibbon");
-extern "C" void CSpecialDisplay_Display(CSpecialDisplay *)
-    asm("Display__15CSpecialDisplay");
-extern "C" void CBit_Move(CBit *) asm("Move__4CBit");
+/** Address the CGouraudRibbon deleting destructor from its owner vtable. */
+void CGouraudRibbon_dtor(CGouraudRibbon *ribbon, int inCharge)
+    asm("_._14CGouraudRibbon");
+/** Address the CSpecialDisplay deleting destructor from its owner vtable. */
+void CSpecialDisplay_dtor(CSpecialDisplay *display, int inCharge)
+    asm("_._15CSpecialDisplay");
 
 /**
  * Ribbon and special-display dispatch tables in the BIT owner.
@@ -548,8 +530,8 @@ int __vt_15CTexturedRibbon[5]
         0,
         0,
         (int)&CTexturedRibbon_dtor,
-        (int)&CBit_Move,
-        (int)&CTexturedRibbon_Display,
+        (int)(void (*)(CBit *))&CBit::Move,
+        (int)(void (*)(CTexturedRibbon *))&CTexturedRibbon::Display,
 };
 
 int __vt_14CGouraudRibbon[5]
@@ -557,8 +539,8 @@ int __vt_14CGouraudRibbon[5]
         0,
         0,
         (int)&CGouraudRibbon_dtor,
-        (int)&CBit_Move,
-        (int)&CGouraudRibbon_Display,
+        (int)(void (*)(CBit *))&CBit::Move,
+        (int)(void (*)(CGouraudRibbon *))&CGouraudRibbon::Display,
 };
 
 int __vt_15CSpecialDisplay[5]
@@ -566,8 +548,8 @@ int __vt_15CSpecialDisplay[5]
         0,
         0,
         (int)&CSpecialDisplay_dtor,
-        (int)&CBit_Move,
-        (int)&CSpecialDisplay_Display,
+        (int)(void (*)(CBit *))&CBit::Move,
+        (int)(void (*)(CSpecialDisplay *))&CSpecialDisplay::Display,
 };
 
 // === Function implementations (address order) ===
@@ -822,16 +804,15 @@ void CBit::operator delete(void *p)
  */
 void CBit::AttachTo(void *p)
 {
-    CBit *self = this;
     int *pList = (int *)p;
     int next = *pList;
-    self->mPrevious = 0;          // prev = NULL
-    self->mNext = (CBit *)next;   // next = old head
-    *pList = (int)self;           // head = this
-    CBit *n = self->mNext;
+    mPrevious = 0;          // prev = NULL
+    mNext = (CBit *)next;   // next = old head
+    *pList = (int)this;     // head = this
+    CBit *n = mNext;
     if (n != 0)
     {
-        n->mPrevious = self; // next->prev = this
+        n->mPrevious = this; // next->prev = this
     }
 }
 
@@ -1282,7 +1263,6 @@ int CFT4Bit::Fade(int die)
         int d = *(u8 *)&mTransDecay;
         r = (r - d) & 0xff;
     }
-    asm("" : "+r"(decay_u));
     int decay2 = (int)(s16)decay_u;
     if (g < decay2)
     {
@@ -1317,16 +1297,12 @@ int CFT4Bit::Fade(int die)
  * Demangled: CQuadBit::CQuadBit(void)
  *            Constructor: calls CBit parent, sets vtable, stores 0x2C808080 at +0x90, attaches to QuadBitList
  *
- * @param self  Object being operated on.
- * @return `this` pointer (GCC 2.x ctor convention).
  */
-CQuadBit *CQuadBit_ctor(CQuadBit *self)
+CQuadBit::CQuadBit()
 {
-    CBit_ctor(self);
-    self->_vf = (void **)&__vt_8CQuadBit;
-    self->mCodeBGR = 0x2C808080;
-    self->AttachTo(&QuadBitList);
-    return self;
+    _vf = (void **)&__vt_8CQuadBit;
+    mCodeBGR = 0x2C808080;
+    AttachTo(&QuadBitList);
 }
 
 /**
@@ -1561,33 +1537,31 @@ CChunkBit::~CChunkBit()
  * Mangled:   SetRGB__9CChunkBitUcUcUc
  * Demangled: CChunkBit::SetRGB(unsigned char, unsigned char, unsigned char)
  *
- * @param self  Object being operated on.
  * @param r  Red component (0-255).
  * @param g  Green component (0-255).
  * @param b  Blue component (0-255).
  */
 void CChunkBit::SetRGB(u8 r, u8 g, u8 b)
 {
-    CChunkBit *self = this;
     int rr = r & 0xff;
     int gg = g & 0xff;
     int bb = b & 0xff;
     u32 baseColor = (bb << 16) | (gg << 8) | rr;
-    self->mB0G0R0 = baseColor;
+    mB0G0R0 = baseColor;
     int mul = Rnd(0x1000);
     int c0 = ((bb * mul) >> 12) << 16;
     int c1 = ((gg * mul) >> 12) << 8;
     c0 = c0 | c1;
     int c2 = (rr * mul) >> 12;
     c0 = c0 | c2;
-    self->mB1G1R1 = c0;
+    mB1G1R1 = c0;
     mul = Rnd(0x1000);
     c0 = ((bb * mul) >> 12) << 16;
     c1 = ((gg * mul) >> 12) << 8;
     c0 = c0 | c1;
     c2 = (rr * mul) >> 12;
     c0 = c0 | c2;
-    self->mB2G2R2 = c0;
+    mB2G2R2 = c0;
     mul = Rnd(0x1000);
     int d0 = (bb * mul) >> 12;
     d0 = d0 << 16;
@@ -1596,7 +1570,7 @@ void CChunkBit::SetRGB(u8 r, u8 g, u8 b)
     d0 = d0 | d1;
     int d2 = (rr * mul) >> 12;
     d0 = d0 | d2;
-    self->mB3G3R3 = d0;
+    mB3G3R3 = d0;
 }
 
 /**
@@ -1620,10 +1594,9 @@ void CChunkBit::SetUVs(u16 Clut, u16 TPage,
                       u8 u0, u8 v0, u8 u1, u8 v1,
                       u8 u2, u8 v2)
 {
-    CChunkBit *self = this;
-    self->mClutV0U0 = ((u32)Clut << 16) | ((u32)v0 << 8) | u0;
-    self->mTPageV1U1 = ((u32)TPage << 16) | ((u32)v1 << 8) | u1;
-    self->mV2U2 = (u16)((u32)v2 << 8 | u2);
+    mClutV0U0 = ((u32)Clut << 16) | ((u32)v0 << 8) | u0;
+    mTPageV1U1 = ((u32)TPage << 16) | ((u32)v1 << 8) | u1;
+    mV2U2 = (u16)((u32)v2 << 8 | u2);
 }
 
 /**
@@ -1904,16 +1877,15 @@ CGlow::~CGlow()
  */
 void CGlow::SetRadius(int Radius)
 {
-    CGlow *self = this;
-    u32 count = self->mNumSections;
+    u32 count = mNumSections;
     if (count == 0)
         return;
     u32 i = 0;
     do
     {
-        self->mpSections[i].Radius = Radius;
+        mpSections[i].Radius = Radius;
         i++;
-    } while (i < self->mNumSections);
+    } while (i < mNumSections);
 }
 
 /**
@@ -1929,10 +1901,9 @@ void CGlow::SetRadius(int Radius)
  */
 void CGlow::SetFringeWidth(u32 Fringe, u32 Width)
 {
-    CGlow *self = this;
-    u32 count = self->mNumSections;
+    u32 count = mNumSections;
     u32 i = 0;
-    SFringeQuad *fringe = self->mpFringes + Fringe * count;
+    SFringeQuad *fringe = mpFringes + Fringe * count;
     if (count != 0)
     {
         SFringeQuad *pFringe = fringe;
@@ -1940,7 +1911,7 @@ void CGlow::SetFringeWidth(u32 Fringe, u32 Width)
         {
             pFringe->Width = Width;
             pFringe++;
-        } while (++i < self->mNumSections);
+        } while (++i < mNumSections);
     }
 }
 
@@ -1958,11 +1929,10 @@ void CGlow::SetFringeWidth(u32 Fringe, u32 Width)
  */
 void CGlow::SetCentreRGB(u8 r, u8 g, u8 b)
 {
-    CGlow *self = this;
     u32 bb = (u32)b << 16;
     u32 gg = ((u32)g << 8) | 0x32000000;
     u32 color = bb | gg;
-    self->mCentreCodeBGR = color | r;
+    mCentreCodeBGR = color | r;
 }
 
 /**
@@ -2014,14 +1984,13 @@ void CGlow::SetRGB(u8 r, u8 g, u8 b)
  */
 void CGlow::SetFringeRGB(u32 Fringe, u8 r, u8 g, u8 b)
 {
-    CGlow *self = this;
-    u32 count = self->mNumSections;
+    u32 count = mNumSections;
     u32 i = 0;
     u32 bb = (u32)b << 16;
     u32 gg = ((u32)g << 8) | 0x3A000000;
     u32 color = bb | gg;
     u32 CodeBGR = color | r;
-    SFringeQuad *pFringe = self->mpFringes + Fringe * count;
+    SFringeQuad *pFringe = mpFringes + Fringe * count;
     if (count != 0)
     {
         u32 *pCodeBGR = &pFringe->CodeBGR;
@@ -2029,7 +1998,7 @@ void CGlow::SetFringeRGB(u32 Fringe, u8 r, u8 g, u8 b)
         {
             *pCodeBGR = CodeBGR;
             pCodeBGR += sizeof(SFringeQuad) / sizeof(u32);
-        } while (++i < self->mNumSections);
+        } while (++i < mNumSections);
     }
 }
 
@@ -2048,22 +2017,21 @@ void CGlow::SetFringeRGB(u32 Fringe, u8 r, u8 g, u8 b)
  */
 void CGlow::SetRadialRGB(int Spoke, u8 r, u8 g, u8 b)
 {
-    CGlow *self = this;
     u32 i = 0;
     u32 bb = (u32)b << 16;
     u32 gg = ((u32)g << 8) | 0x3A000000;
     u32 packed = bb | gg;
     u32 CodeBGR = packed | r;
-    self->mpSections[Spoke].PadBGR = CodeBGR;
-    SFringeQuad *pFringe = self->mpFringes + Spoke;
-    if (self->mNumFringes != 0)
+    mpSections[Spoke].PadBGR = CodeBGR;
+    SFringeQuad *pFringe = mpFringes + Spoke;
+    if (mNumFringes != 0)
     {
         do
         {
             i++;
             pFringe->CodeBGR = CodeBGR;
-            pFringe += self->mNumSections;
-        } while (i < self->mNumFringes);
+            pFringe += mNumSections;
+        } while (i < mNumFringes);
     }
 }
 
@@ -2172,12 +2140,11 @@ void CWobblyGlow::Move()
  */
 CFlatBit::CFlatBit()
 {
-    CFlatBit *self = this;
-    self->_vf = (void **)&__vt_8CFlatBit;
-    self->AttachTo(&FlatBitList);
-    self->mSemiTransparencyRate = 0x20;
-    self->mAngFric = 1;
-    self->mPostScale = 0x10001000;
+    _vf = (void **)&__vt_8CFlatBit;
+    AttachTo(&FlatBitList);
+    mSemiTransparencyRate = 0x20;
+    mAngFric = 1;
+    mPostScale = 0x10001000;
 }
 
 /**
@@ -2533,35 +2500,34 @@ CSimpleAnim::~CSimpleAnim()
  */
 void CSimpleAnim::Move()
 {
-    CSimpleAnim *self = this;
-    self->IncFrame();
+    IncFrame();
     {
-        int loopMode = self->mDie;
+        int loopMode = mDie;
         if (loopMode != 0)
         {
-            s8 frame = (signed char)self->mFrame;
-            int limit = self->mDieFrame;
+            s8 frame = (signed char)mFrame;
+            int limit = mDieFrame;
             if (frame >= limit)
             {
-                self->Die();
+                Die();
             }
         }
         else
         {
-            s8 frame = (signed char)self->mFrame;
-            u8 maxFrames = self->mNumFrames;
+            s8 frame = (signed char)mFrame;
+            u8 maxFrames = mNumFrames;
             if (frame < (int)maxFrames)
                 goto done_anim;
             {
                 int negTwo = -2;
-                int mode = self->mDieFrame;
+                int mode = mDieFrame;
                 if (mode == negTwo)
                 {
-                    self->SetFrame(maxFrames - 1);
+                    SetFrame(maxFrames - 1);
                 }
                 else
                 {
-                    self->SetFrame(0);
+                    SetFrame(0);
                 }
             }
         }
@@ -2628,13 +2594,12 @@ CMotionBlur::~CMotionBlur()
  */
 void CMotionBlur::Move()
 {
-    CMotionBlur *self = this;
-    self->mPos += self->mVel;
-    if (self->Shrink(1))
+    mPos += mVel;
+    if (Shrink(1))
         return;
-    if (self->Fade(1))
+    if (Fade(1))
         return;
-    self->IncFrameWithWrap();
+    IncFrameWithWrap();
 }
 
 /**
@@ -2665,13 +2630,12 @@ CMotionBlurImmortal::~CMotionBlurImmortal()
  */
 void CMotionBlurImmortal::Move()
 {
-    CMotionBlurImmortal *self = this;
-    self->mPos += self->mVel;
-    if (self->Shrink(0))
+    mPos += mVel;
+    if (Shrink(0))
         return;
-    if (self->Fade(0))
+    if (Fade(0))
         return;
-    self->IncFrameWithWrap();
+    IncFrameWithWrap();
 }
 
 /**
@@ -2702,58 +2666,57 @@ CFrag::~CFrag()
  */
 void CFrag::Move()
 {
-    CFrag *_this = this;
-    register int v0 asm("$2") = _this->mPos.vx;
-    int a1 = _this->mVel.vx;
-    register int v1 asm("$3") = _this->mPos.vy;
-    int a2 = _this->mVel.vy;
-    register int a3 asm("$7") = _this->mVel.vz;
-    register int a0 asm("$4") = _this->mAcc.vy;
+    register int v0 asm("$2") = mPos.vx;
+    int a1 = mVel.vx;
+    register int v1 asm("$3") = mPos.vy;
+    int a2 = mVel.vy;
+    register int a3 asm("$7") = mVel.vz;
+    register int a0 asm("$4") = mAcc.vy;
     v0 = v0 + a1;
     v1 = v1 + a2;
-    _this->mPos.vx = v0;
-    v0 = _this->mPos.vz;
+    mPos.vx = v0;
+    v0 = mPos.vz;
     a2 = a2 + a0;
-    _this->mPos.vy = v1;
-    v1 = _this->mAcc.vx;
-    a0 = _this->mFric.vz;
+    mPos.vy = v1;
+    v1 = mAcc.vx;
+    a0 = mFric.vz;
     a1 = a1 + v1;
-    v1 = _this->mAcc.vz;
+    v1 = mAcc.vz;
     v0 = v0 + a3;
-    _this->mPos.vz = v0;
-    v0 = _this->mFric.vx;
-    _this->mVel.vy = a2;
-    _this->mVel.vx = a1;
+    mPos.vz = v0;
+    v0 = mFric.vx;
+    mVel.vy = a2;
+    mVel.vx = a1;
     a3 = a3 + v1;
     v0 = a1 >> v0;
     a1 = a1 - v0;
-    v1 = _this->mFric.vy;
-    v0 = *(u8 *)&_this->mFrame;
+    v1 = mFric.vy;
+    v0 = *(u8 *)&mFrame;
     a0 = a3 >> a0;
-    _this->mVel.vz = a3;
+    mVel.vz = a3;
     a3 = a3 - a0;
-    _this->mVel.vx = a1;
-    _this->mVel.vz = a3;
+    mVel.vx = a1;
+    mVel.vz = a3;
     v1 = a2 >> v1;
     a2 = a2 - v1;
     v0 = v0 + 1;
-    _this->mFrame = v0;
+    mFrame = v0;
     v0 = (s8)v0;
-    v1 = _this->mNumFrames;
-    _this->mVel.vy = a2;
+    v1 = mNumFrames;
+    mVel.vy = a2;
     if (v0 >= v1)
     {
         v0 = v1 - 1;
-        _this->mFrame = v0;
+        mFrame = v0;
     }
-    v0 = *(u16 *)&_this->mAge;
-    v1 = _this->mLifetime;
+    v0 = *(u16 *)&mAge;
+    v1 = mLifetime;
     v0 = v0 + 1;
-    _this->mAge = v0;
+    mAge = v0;
     v0 = (s16)v0;
     if (v0 >= v1)
     {
-        _this->Die();
+        Die();
     }
 }
 
@@ -2796,8 +2759,7 @@ CRibbonBit::~CRibbonBit()
  */
 void CRibbonBit::Move()
 {
-    CRibbonBit *self = this;
-    self->IncFrameWithWrap();
+    IncFrameWithWrap();
 }
 
 /**
@@ -2852,7 +2814,7 @@ CRibbon::CRibbon(const CVector &pos, int numbits, int pointsperbit,
         CRibbonBit **slot = (CRibbonBit **)((i * sizeof(CRibbonBit *)) +
                                             (int)mBits);
         CRibbonBit *child = static_cast<CRibbonBit *>(
-            Bit_AllocateStorage(sizeof(CRibbonBit)));
+            CBit::operator new(sizeof(CRibbonBit)));
         if (child != 0)
         {
             child = CRibbonBit_ctor(child);
@@ -2930,15 +2892,14 @@ CRibbon::~CRibbon()
  */
 void CRibbon::SetTint(u8 r, u8 g, u8 b)
 {
-    CRibbon *self = this;
     int i = 0;
-    int count = self->mNumBits;
+    int count = mNumBits;
     if (count > 0)
     {
         do
         {
-            self->mBits[i]->SetTint(r, g, b);
-            count = self->mNumBits;
+            mBits[i]->SetTint(r, g, b);
+            count = mNumBits;
             i++;
         } while (i < count);
     }
@@ -2956,15 +2917,14 @@ void CRibbon::SetTint(u8 r, u8 g, u8 b)
  */
 void CRibbon::SetScale(int Scale)
 {
-    CRibbon *self = this;
     int i = 0;
-    int count = self->mNumBits;
+    int count = mNumBits;
     if (count > 0)
     {
         do
         {
-            self->mBits[i]->SetScale((u16)Scale);
-            count = self->mNumBits;
+            mBits[i]->SetScale((u16)Scale);
+            count = mNumBits;
             i++;
         } while (i < count);
     }
@@ -2982,38 +2942,37 @@ void CRibbon::SetScale(int Scale)
  */
 void CRibbon::SetPos(CVector &pos)
 {
-    CRibbon *self = this;
-    int next = self->mCurrent + 1;
-    self->mCurrent = next;
-    if (next == self->mNumPoints)
+    int next = mCurrent + 1;
+    mCurrent = next;
+    if (next == mNumPoints)
     {
-        self->mCurrent = 0;
+        mCurrent = 0;
     }
 
     {
-        int cur0 = self->mCurrent;
-        CVector *slot = (CVector *)(cur0 * 12 + (int)self->mPoints);
+        int cur0 = mCurrent;
+        CVector *slot = (CVector *)(cur0 * 12 + (int)mPoints);
         *slot = pos;
     }
 
-    int numBits = self->mNumBits;
-    int current = self->mCurrent;
+    int numBits = mNumBits;
+    int current = mCurrent;
     int i = numBits - 1;
     if (i >= 0)
     {
         do
         {
-            CRibbonBit *bitB = self->mBits[i];
-            CVector *srcB = (CVector *)(current * 12 + (int)self->mPoints);
+            CRibbonBit *bitB = mBits[i];
+            CVector *srcB = (CVector *)(current * 12 + (int)mPoints);
             bitB->mEndPosB = *srcB;
 
-            current = current - self->mPointsPerBit;
+            current = current - mPointsPerBit;
             if (current < 0)
             {
-                current = current + self->mNumPoints;
+                current = current + mNumPoints;
             }
-            CRibbonBit *bitA = self->mBits[i];
-            CVector *srcA = (CVector *)(current * 12 + (int)self->mPoints);
+            CRibbonBit *bitA = mBits[i];
+            CVector *srcA = (CVector *)(current * 12 + (int)mPoints);
             bitA->mEndPosA = *srcA;
             i--;
         } while (i >= 0);
@@ -3037,27 +2996,27 @@ void CRibbon::SetPos(CVector &pos)
 CSmokeTrail::CSmokeTrail(
     CVector &pos, int numbits, int r, int g, int b)
     : CRibbon(pos, numbits, 2,
-              Bit_RibbonName, Bit_RibbonName, 0x190, 1)
+              DAT_800d9970,
+              DAT_800d9970, 0x190, 1)
 {
-    CSmokeTrail *self = this;
-    int count = self->mNumBits;
+    int count = mNumBits;
     int decr = r / count;
     int decg = g / count;
     int decb = b / count;
     int i = 0;
-    self->_vf = (void **)&__vt_11CSmokeTrail;
+    _vf = (void **)&__vt_11CSmokeTrail;
     if (count > 0)
     {
         do
         {
             int k = i + 1;
             int rem = count - k;
-            self->mBits[i]->SetTint(
+            mBits[i]->SetTint(
                 (char)(r - rem * decr),
                 (char)(g - rem * decg),
                 (char)(b - rem * decb));
-            self->mBits[i]->SetTransDecay(8);
-            count = self->mNumBits;
+            mBits[i]->SetTransDecay(8);
+            count = mNumBits;
             i = k;
         } while (i < count);
     }
@@ -3089,30 +3048,29 @@ CSmokeTrail::~CSmokeTrail()
  */
 void CSmokeTrail::Move()
 {
-    CSmokeTrail *self = this;
-    int active = self->mFadeAway;
+    int active = mFadeAway;
     int die = 1;
     if (active != 0)
     {
-        int count = self->mNumBits;
+        int count = mNumBits;
         int i = 0;
         if (count > 0)
         {
             do
             {
-                CRibbonBit *child = self->mBits[i];
+                CRibbonBit *child = mBits[i];
                 int result = child->Fade(0);
                 if (result == 0)
                 {
                     die = 0;
                 }
-                count = self->mNumBits;
+                count = mNumBits;
                 i++;
             } while (i < count);
         }
         if (die != 0)
         {
-            self->Die();
+            Die();
         }
     }
 }
@@ -3365,8 +3323,7 @@ void Bit_Display(void)
          pSpecial != 0;
          pSpecial = (CSpecialDisplay *)pSpecial->mNext)
     {
-        CBitVTable *vtable = (CBitVTable *)pSpecial->_vf;
-        vtable->Display(pSpecial);
+        ((CBitVTable *)pSpecial->_vf)->Display(pSpecial);
     }
 
     for (pGlow = GlowList;
@@ -3430,19 +3387,16 @@ void Bit_Display(void)
             CentreY == -1024 || CentreY == 1023)
             continue;
 
-        u32 *OTPos;
-        DVECTOR *pBufA;
-        DVECTOR *pBufB;
+        u32 *OTPos = (u32 *)((RotCoords.vz & 0x3ffc) +
+                             (int)pDoubleBuffer->ViewportOT);
+        DVECTOR *pBufA = (DVECTOR *)getScratchAddr(0);
+        DVECTOR *pBufB = (DVECTOR *)getScratchAddr(1) +
+                         pGlow->mNumFringes;
         int RadA;
         int x;
         int y;
-        int Rad;
 
-        OTPos = (u32 *)((RotCoords.vz & 0x3ffc) +
-                        (int)pDoubleBuffer->ViewportOT);
-        pBufA = (DVECTOR *)getScratchAddr(0);
-        pBufB = (DVECTOR *)getScratchAddr(1) + pGlow->mNumFringes;
-        Rad = pSection[n - 1].Radius;
+        int Rad = pSection[n - 1].Radius;
         int MSin = Sine(Ang) * 400 / 256;
         int MCos = Cosine(Ang);
         RadA = (Rad * 400) / (unsigned int)RotCoords.vz;
@@ -3773,8 +3727,8 @@ void Bit_Display(void)
             continue;
         }
 
-        Scale = (unsigned int)pFlatBit->mScale;
-        Scale = (Scale << 7) / (unsigned int)zed;
+        Scale = pFlatBit->mScale;
+        Scale = (Scale << 7) / zed;
         if (Scale > 0x200 && !(pFlatBit->mBitFlags & 8))
         {
             pPoly = (u32 *)apoly;
@@ -3808,17 +3762,22 @@ void Bit_Display(void)
         Width = pFlatBit->mpPSXFrame->Width;
         Height = pFlatBit->mpPSXFrame->Height;
         Flipped = pFlatBit->mBitFlags & 1;
-        OffX = (signed char)pFlatBit->mpPSXFrame->OffX;
-        OffY = (signed char)pFlatBit->mpPSXFrame->OffY;
+        OffX = pFlatBit->mpPSXFrame->OffX;
+        OffY = pFlatBit->mpPSXFrame->OffY;
         x_post_scale = Scale * (pFlatBit->mPostScale & 0xffff);
         y_post_scale = Scale * (pFlatBit->mPostScale >> 16);
         if (Angle == 0)
         {
-            OffX = ((int)(Scale * OffX) << 9) >> 16;
+            OffX *= Scale;
+            OffX <<= 9;
+            OffX >>= 16;
             int Y1 = (Scale * OffY >> 7) << 16;
             y0x0 += Y1 + OffX;
-            Width = Scale * Width >> 7;
-            Height = (Scale * Height >> 7) << 16;
+            Width *= Scale;
+            Width >>= 7;
+            Height *= Scale;
+            Height >>= 7;
+            Height <<= 16;
             if (Width < 5)
                 Width = 2;
             if (Height < 0x50000)
@@ -4656,9 +4615,8 @@ static void CalcScreenNormal(SCalcBuffer *pBuf, int &UnitX, int &UnitY, int Clos
  * Demangled: CGouraudRibbon::Display(void)
  *            Purpose: Render Gouraud ribbon points into GTE primitive buffer.
  *
- * @param self Ribbon state and the projected point history to render.
  */
-void CGouraudRibbon_Display(CGouraudRibbon *self)
+void CGouraudRibbon::Display()
 {
     SRibbonPoint *pPoint;
     SCalcBuffer *pBuf;
@@ -4676,8 +4634,8 @@ void CGouraudRibbon_Display(CGouraudRibbon *self)
     pBuf = (SCalcBuffer *)0x1f800000;
     {
         int i = 0;
-        pPoint = self->mpPoints;
-        if (0 < self->mNumPoints)
+        pPoint = mpPoints;
+        if (0 < mNumPoints)
         {
             do
             {
@@ -4695,7 +4653,7 @@ void CGouraudRibbon_Display(CGouraudRibbon *self)
                 pBuf++;
                 pPoint++;
                 i++;
-            } while (i < self->mNumPoints);
+            } while (i < mNumPoints);
         }
     }
 
@@ -4707,7 +4665,7 @@ void CGouraudRibbon_Display(CGouraudRibbon *self)
     {
         int i = 1;
         pBuf = (SCalcBuffer *)0x1f80001c;
-        while (i < self->mNumPoints - 1)
+        while (i < mNumPoints - 1)
         {
             int TempX;
             int TempY;
@@ -4732,19 +4690,19 @@ void CGouraudRibbon_Display(CGouraudRibbon *self)
     LastTop = ((y + dy) << 16) | ((x + dx) & 0xffff);
     LastBottom = ((y - dy) << 16) | ((x - dx) & 0xffff);
 
-    pLastPoint = self->mpPoints;
+    pLastPoint = mpPoints;
     pPoint = pLastPoint + 1;
     pBuf++;
     {
         int i = 1;
-        while (i < self->mNumPoints)
+        while (i < mNumPoints)
         {
             u32 *pOTPos;
             if ((pBuf->NormalX | pBuf->NormalY) &&
                 (pLastBuf->NormalX | pLastBuf->NormalY))
             {
                 pOTPos = (u32 *)((int)pDoubleBuffer->ViewportOT +
-                                 ((pBuf->Zed - self->mFrigDeltaZ) &
+                                 ((pBuf->Zed - mFrigDeltaZ) &
                                   0x3ffc));
                 dx = (pBuf->NormalX * pBuf->ScrWidth) >> 6;
                 dy = (pBuf->NormalY * pBuf->ScrWidth) >> 6;
@@ -4768,7 +4726,7 @@ void CGouraudRibbon_Display(CGouraudRibbon *self)
                 ptpage->code[0] = b;
                 pPoly = (u32 *)newppoly;
 
-                if (2 < self->mTrail)
+                if (2 < mTrail)
                 {
                     {
                         unsigned char *newppoly =
@@ -4827,16 +4785,16 @@ void CGouraudRibbon_Display(CGouraudRibbon *self)
     }
 
 SEEYA:
-    if (self->mTrail != 0)
+    if (mTrail != 0)
     {
         pBuf = (SCalcBuffer *)0x1f800000;
-        pPoint = self->mpPoints;
+        pPoint = mpPoints;
         int i = 0;
-        if (0 < self->mNumPoints)
+        if (0 < mNumPoints)
         {
             do
             {
-                if (self->mTrail == 1)
+                if (mTrail == 1)
                 {
                     pPoint->Last2Scr = pPoint->Last1Scr = pBuf->Pos;
                 }
@@ -4848,9 +4806,9 @@ SEEYA:
                 pPoint++;
                 pBuf++;
                 i++;
-            } while (i < self->mNumPoints);
+            } while (i < mNumPoints);
         }
-        self->mTrail++;
+        mTrail++;
     }
 }
 
@@ -5249,7 +5207,7 @@ void CTexturedRibbon::Display()
  * Address: 0x8003E620
  * Mangled: _GLOBAL_.I.TotalBitUsage
  */
-extern "C" void Bit_GlobalInit_TotalBitUsage(void)
+void Bit_GlobalInit_TotalBitUsage(void)
     asm("_GLOBAL_.I.TotalBitUsage");
 void Bit_GlobalInit_TotalBitUsage(void)
 {

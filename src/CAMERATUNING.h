@@ -10,11 +10,11 @@
 #endif
 
 /** Base camera distance selected by the current display layout. */
-extern "C" int camDist CAMERA_TUNING_DECL_ATTR;
+extern int camDist CAMERA_TUNING_DECL_ATTR;
 /** Base camera pitch selected by the current display layout. */
-extern "C" int camPitch CAMERA_TUNING_DECL_ATTR;
+extern int camPitch CAMERA_TUNING_DECL_ATTR;
 /** Base camera vertical offset selected by the current display layout. */
-extern "C" int camYOffset CAMERA_TUNING_DECL_ATTR;
+extern int camYOffset CAMERA_TUNING_DECL_ATTR;
 
 #undef CAMERA_TUNING_DECL_ATTR
 #undef CAMERA_TUNING_ABSOLUTE_DECLARATIONS

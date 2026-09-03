@@ -28,14 +28,18 @@ inline void *operator new(unsigned int, void *storage)
 struct CBruce : DustBruceLayout {};
 
 /** Absolute-address view used by the particle animation call site. */
-extern "C" char Dust_AnimationNameAbsolute[] asm("DAT_800dab10");
+extern char DAT_800dab10[];
 
-extern "C" {
+namespace DustAddressViewOwner
+{
+extern "C"
+{
 
 /** Particle animation selected for dust puffs. */
-char Dust_AnimationName[8] asm("DAT_800dab10")
+char DAT_800dab10[8]
     __attribute__((section(".sdata"))) = "smoke";
 
+}
 }
 
 // GCC 2.x emits a private copy of `CClass::~CClass` beside a private base
@@ -43,26 +47,28 @@ char Dust_AnimationName[8] asm("DAT_800dab10")
 // `_._6CClass` copies, so the copy is file-local here.  It sits immediately
 // after the animation name, which is why that array is eight bytes and not the
 // sixteen its declaration used to claim.
-static void Dust_ClassDestructor(CClass *, int)
-    asm("__DOT__6CClass_8006BF8C");
+extern "C"
+{
+static void __DOT__6CClass_8006BF8C(CClass *, int);
+}
 
 // C++ forbids taking a destructor's address, so the public vtable slot uses
 // an addressable declaration of the symbol this owner already defines.
-extern "C" void Dust_DestructorAbi(Dust *, int) asm("_._4Dust");
+void Dust_DestructorAbi(Dust *dust, int inCharge) asm("_._4Dust");
 
 // Consecutive eight-byte-aligned small-data words per vtable rather than
 // arrays, so -G8 still yields the target's `addiu $vX, $gp, off`.
 // MAIN.SYM names Dust's public vtable, while the private base table is
 // owner-local.
-extern "C" int __vt_4Dust
+int __vt_4Dust
     __attribute__((section(".sdata"), aligned(8))) = 0;
 static int Dust_VTableIndex = 0;
 static int Dust_VTableDtor = (int)&Dust_DestructorAbi;
 
-static int Dust_BaseVTableAnchor asm("__vt_4Dust_base")
+static int __vt_4Dust_base
     __attribute__((section(".sdata"), aligned(8))) = 0;
 static int Dust_BaseVTableIndex = 0;
-static int Dust_BaseVTableDtor = (int)&Dust_ClassDestructor;
+static int Dust_BaseVTableDtor = (int)&__DOT__6CClass_8006BF8C;
 
 
 // === Function implementations (address order) ===
@@ -76,17 +82,14 @@ static int Dust_BaseVTableDtor = (int)&Dust_ClassDestructor;
  *
  */
 Dust::Dust() {
-    Dust *self = this;
-    self->CClass.vtable = &__vt_4Dust;
+    CClass.vtable = &__vt_4Dust;
     int i = 0;
-    CFlatBit **ptr = self->mDustStack;
     do {
-        *ptr = 0;
+        mDustStack[i] = 0;
         i++;
-        ptr++;
     } while (i < 12);
-    self->mDustCount = 0;
-    self->mCloudsLeftToGenerate = 0;
+    mDustCount = 0;
+    mCloudsLeftToGenerate = 0;
 }
 
 
@@ -101,24 +104,19 @@ Dust::Dust() {
  */
 Dust::~Dust() {
     int i = 0;
-    Dust *self = this;
-    CFlatBit **ptr;
-    self->CClass.vtable = &__vt_4Dust;
-    int count = self->mDustCount;
-    if (count > 0) {
-        ptr = self->mDustStack;
+    CClass.vtable = &__vt_4Dust;
+    if (mDustCount > 0) {
         do {
-            CFlatBit *object = *ptr;
-            if (object != 0) {
-                object->CFT4Bit.CBit._vf->destroy(
-                    &object->CFT4Bit.CBit, 3);
+            if (mDustStack[i] != 0) {
+                mDustStack[i]->CFT4Bit.CBit._vf->destroy(
+                    &mDustStack[i]->CFT4Bit.CBit, 3);
             }
-            *ptr++ = 0;
+            mDustStack[i] = 0;
             i++;
-        } while (i < self->mDustCount);
+        } while (i < mDustCount);
     }
-    self->mDustCount = 0;
-    self->CClass.vtable = &Dust_BaseVTableAnchor;
+    mDustCount = 0;
+    CClass.vtable = &__vt_4Dust_base;
 }
 
 
@@ -133,17 +131,16 @@ Dust::~Dust() {
  * @param dustType  Land, bail, or brake dust mode.
  */
 void Dust::Reset(int terrainType, int dustType) {
-    Dust *self = this;
     unsigned char tint = 64;
     short transDecay = 1;
     short scaleDecay = 8;
     int randomOffset = 16;
-    self->mDustType = dustType;
-    self->mCloudsLeftToGenerate = 0;
+    mDustType = dustType;
+    mCloudsLeftToGenerate = 0;
     short scale = 0;
-    self->get_terrain_parameters(
+    get_terrain_parameters(
         terrainType, &scale, &tint, &transDecay, &scaleDecay,
-        &self->mCloudsLeftToGenerate, &randomOffset);
+        &mCloudsLeftToGenerate, &randomOffset);
 }
 
 
@@ -157,11 +154,10 @@ void Dust::Reset(int terrainType, int dustType) {
  * @param pBruce  Active skater (CBruce) being processed.
  */
 void Dust::Update(CBruce *pBruce) {
-    Dust *dust = this;
     int i = 0;
-    if (dust->mDustCount > 0) {
+    if (mDustCount > 0) {
         do {
-            CFlatBit *pDust = dust->mDustStack[i];
+            CFlatBit *pDust = mDustStack[i];
             short scale = pDust->CFT4Bit.mScale;
             unsigned short unsignedScale =
                 *(unsigned short *)&pDust->CFT4Bit.mScale;
@@ -170,19 +166,19 @@ void Dust::Update(CBruce *pBruce) {
                     unsignedScale + *(unsigned short *)&
                         pDust->CFT4Bit.mScaleDecay;
             }
-            dust->mDustStack[i]->CFT4Bit.Fade(0);
-            int shift = (dust->mDustType != 1);
-            dust->mDustStack[i]->CFT4Bit.CBit.mPos.vx =
-                dust->mDustStack[i]->CFT4Bit.CBit.mPos.vx +
+            mDustStack[i]->CFT4Bit.Fade(0);
+            int shift = (mDustType != 1);
+            mDustStack[i]->CFT4Bit.CBit.mPos.vx =
+                mDustStack[i]->CFT4Bit.CBit.mPos.vx +
                 (pBruce->mVelocity.vx >> shift);
-            dust->mDustStack[i]->CFT4Bit.CBit.mPos.vz =
-                dust->mDustStack[i]->CFT4Bit.CBit.mPos.vz +
+            mDustStack[i]->CFT4Bit.CBit.mPos.vz =
+                mDustStack[i]->CFT4Bit.CBit.mPos.vz +
                 (pBruce->mVelocity.vz >> shift);
             int r = Rnd(3);
-            dust->mDustStack[i]->CFT4Bit.CBit.mPos.vy =
-                dust->mDustStack[i]->CFT4Bit.CBit.mPos.vy - (r << 12);
+            mDustStack[i]->CFT4Bit.CBit.mPos.vy =
+                mDustStack[i]->CFT4Bit.CBit.mPos.vy - (r << 12);
             i++;
-        } while (i < dust->mDustCount);
+        } while (i < mDustCount);
     }
     // Set up locals for new particle spawn
     short scale = 0;
@@ -191,22 +187,22 @@ void Dust::Update(CBruce *pBruce) {
     short scaleDecay = 8;
     int randomOffset = 16;
     int dummy;
-    if (dust->mCloudsLeftToGenerate <= 0) {
+    if (mCloudsLeftToGenerate <= 0) {
         // Timer expired: check if all particles are faded
         int done = 1;
         int i = 0;
-        if (dust->mDustCount > 0) {
+        if (mDustCount > 0) {
             do {
-                if (dust->mDustStack[i]->CFT4Bit.mColour.mCodeBGR != 0) {
+                if (mDustStack[i]->CFT4Bit.mColour.mCodeBGR != 0) {
                     done = 0;
                 }
-            } while (++i < dust->mDustCount);
+            } while (++i < mDustCount);
         }
         if (done == 0) return;
         // Destroy all particles
-        if (dust->mDustCount > 0) {
+        if (mDustCount > 0) {
             int i = 0;
-            CFlatBit **slot = dust->mDustStack;
+            CFlatBit **slot = mDustStack;
             do {
                 CFlatBit *object = *slot;
                 if (object != 0) {
@@ -215,33 +211,32 @@ void Dust::Update(CBruce *pBruce) {
                 }
                 *slot = 0;
                 slot++;
-            } while (++i < dust->mDustCount);
+            } while (++i < mDustCount);
         }
-        dust->mDustCount = 0;
+        mDustCount = 0;
     } else {
         // Spawn new particle
-        dust->mCloudsLeftToGenerate--;
-        dust->get_terrain_parameters(
+        mCloudsLeftToGenerate--;
+        get_terrain_parameters(
             pBruce->mTerrain, &scale, &tint, &transDecay,
             &scaleDecay, &dummy, &randomOffset);
         CFlatBit *pDust = static_cast<CFlatBit *>(
-            Bit_AllocateStorage(sizeof(CFlatBit)));
+            CBit::operator new(sizeof(CFlatBit)));
         if (pDust != 0) {
             pDust = ::new (pDust) CFlatBit();
         }
         // Copy bruce position to new bit position (batched CVector assignment)
         pDust->CFT4Bit.CBit.mPos = pBruce->mPosition;
         CVector *pResult = &pDust->CFT4Bit.CBit.mPos;
-        if (dust->mDustType == 1) {
+        if (mDustType == 1) {
             // Bail mode
             CVector tempVector;
             tempVector.vx = 0;
             tempVector.vy = 0;
             tempVector.vz = 0;
-            dust->apply_random_offset(tempVector, 32, 0);
+            apply_random_offset(tempVector, 32, 0);
             // Look up hook from PSXRegion table
-            int playerIdx = pBruce->mRegion;
-            unsigned short numParts = PSXRegion[playerIdx].NumParts;
+            unsigned short numParts = PSXRegion[pBruce->mRegion].NumParts;
             SHook hook;
             hook.Offset.vx = (short)tempVector.vx;
             hook.Offset.vz = (short)tempVector.vz;
@@ -258,9 +253,9 @@ void Dust::Update(CBruce *pBruce) {
             scaleDecay = doubledScaleDecay + doubledScaleDecay;
         } else {
             // Normal mode
-            dust->apply_random_offset(*pResult, randomOffset, 12);
+            apply_random_offset(*pResult, randomOffset, 12);
         }
-        pDust->CFT4Bit.SetAnim(Dust_AnimationNameAbsolute);
+        pDust->CFT4Bit.SetAnim(DAT_800dab10);
         pDust->CFT4Bit.SetSemiTransparent();
         pDust->CFT4Bit.ChooseRandomFrame();
         unsigned short finalScale = (unsigned short)scale;
@@ -272,7 +267,7 @@ void Dust::Update(CBruce *pBruce) {
         unsigned short finalScaleDecay = (unsigned short)scaleDecay;
         pDust->CFT4Bit.mTransDecay = finalTransDecay;
         pDust->CFT4Bit.mScaleDecay = finalScaleDecay;
-        dust->insert_dust(pDust);
+        insert_dust(pDust);
     }
 }
 
@@ -287,22 +282,21 @@ void Dust::Update(CBruce *pBruce) {
  * @param pDust  Dust to operate on.
  */
 void Dust::insert_dust(CFlatBit *pDust) {
-    Dust *dust = this;
     // Clean locals reschedule the full replacement path (40 real and two
     // relocation mismatches), so retain the target's count/index registers.
-    register int count asm("$3") = dust->mDustCount;
+    register int count asm("$3") = mDustCount;
     if (count < 12) {
         register int idx asm("$2");
         idx = count * 4;
-        DUST_STACK_SLOT_AT_BYTE_OFFSET(dust, idx) = pDust;
-        dust->mDustCount = dust->mDustCount + 1;
+        DUST_STACK_SLOT_AT_BYTE_OFFSET(this, idx) = pDust;
+        mDustCount = mDustCount + 1;
         return;
     }
 
     int unusedSlot = -1;
     int dimmestColor = 65535;
     int i = 0;
-    CFlatBit **base = dust->mDustStack;
+    CFlatBit **base = mDustStack;
     if (count > 0) {
         int countLoop = count;
         CFlatBit **slot = base;
@@ -351,8 +345,7 @@ void Dust::get_terrain_parameters(
     int terrainType, short *pScale, unsigned char *pTint,
     short *pTransDecay, short *pScaleDecay, DustCloudCount *pNumClouds,
     int *pRandomOffset) {
-    int mode = mDustType;
-    switch (mode) {
+    switch (mDustType) {
     case 0:
         get_land_terrain_parameters(
             terrainType, pScale, pTint, pTransDecay, pScaleDecay,
@@ -548,21 +541,20 @@ def:
  */
 // Shared Dust member function
 void Dust::apply_random_offset(
-    CVector &position, int randomRange, int shiftAmount) {
-    CVector *pos = &position;
+    CVector &pos, int randomRange, int shiftAmount) {
     int range4 = randomRange << 2;
     int r = Rnd(range4);
     int sh = shiftAmount;
     int neg_half = -(range4 >> 1);
     int offset = neg_half + r;
 
-    int val = pos->vx;
+    int val = pos.vx;
     int off = offset << sh;
-    pos->vx = val + off;
+    pos.vx = val + off;
     r = Rnd(range4);
     offset = neg_half + r;
     sh = offset << sh;
-    pos->vz = pos->vz + sh;
+    pos.vz = pos.vz + sh;
 }
 
 /**
@@ -571,8 +563,8 @@ void Dust::apply_random_offset(
  * GCC emitted this private copy last in the owner's text, so it remains at
  * the end of the translation unit.
  */
-static void Dust_ClassDestructor(CClass *self, int flags) {
-    self->vtable = &Dust_BaseVTableAnchor;
+static void __DOT__6CClass_8006BF8C(CClass *self, int flags) {
+    self->vtable = &__vt_4Dust_base;
     if (flags & 1) {
         CClass::operator delete(self);
     }

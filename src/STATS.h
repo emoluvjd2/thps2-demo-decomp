@@ -169,12 +169,8 @@ extern char *CaballeroBio[UnavailableBioLineCount];
 extern char *KostonBio[UnavailableBioLineCount];
 extern char *CustomBio[UnavailableBioLineCount];
 
-#ifdef STATS_UNSIZED_STATS_DECLARATION
-extern SStats Stats[];
-#else
-extern SStats Stats[SkaterStatsCount];
-#endif
-#undef STATS_UNSIZED_STATS_DECLARATION
+#define STATSTABLE_WITHIN_C_LINKAGE
+#include "STATSTABLE.h"
 #ifdef STATS_LEVELS_READ_ONLY
 #define STATS_LEVELS_DECL_CONST const
 #else

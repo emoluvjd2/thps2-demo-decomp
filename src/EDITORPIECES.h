@@ -4,12 +4,6 @@
 /** Selects the active theme and rebuilds its special-piece mappings. */
 void EditorPieces_SetTheme(int theme);
 
-/** Finds a theme-specific piece in PieceMap, or returns -1. */
-int MapPieceToIndex(int piece, int theme);
-
-/** Maps a theme-zero piece identifier into the requested theme. */
-int MapBasePieceToTheme(int piece, int theme);
-
 /** Reports whether an identifier is one of the configured floor pieces. */
 int IsAFloorPiece(int piece);
 
@@ -57,8 +51,12 @@ typedef char EditorCategory_size_must_be_34[
     (sizeof(EditorCategory) == 34) ? 1 : -1];
 
 extern "C" {
-/** Theme-specific replacement used for pieces unavailable in the demo. */
-extern int NotInDemoPiece;
+#ifdef EDITORPIECES_OWNER_DECLARATIONS
+#define NOTINDEMOPIECE_OWNER_DECLARATION
+#else
+#define NOTINDEMOPIECE_ABSOLUTE_DECLARATION
+#endif
+#include "NOTINDEMOPIECE.h"
 
 /** Editor piece metadata in stable save-table order. */
 extern EditorPiece PieceMap[];
@@ -108,10 +106,7 @@ typedef char PoolLinks_size_must_be_5[
     (sizeof(PoolLinks) == 5) ? 1 : -1];
 
 extern "C" {
-extern int RiserPiece;
 static int Theme;
-extern PoolLinks PoolLinkMap[EditorPoolLinkCount];
-extern unsigned char SaveMap[EditorSaveMapCount];
 }
 
 #endif // EDITORPIECES_OWNER_DECLARATIONS

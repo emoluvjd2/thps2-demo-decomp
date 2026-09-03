@@ -22,3 +22,9 @@ u32 CheckSum_Calculate(u32 Score, u8 Random, int gs);
 void CheckSum_Encode(u32 Score, u8 Random, int gs);
 
 #endif // COMPCHECK_H_INC_H
+
+#ifdef COMPCHECK_DECLARE_CHECKSUM_STRING_VIEW
+/** Eight-character address view of MAIN's nine-byte encoded-check buffer. */
+extern char Main_ChecksumCodeString[8] asm("Code_String");
+#undef COMPCHECK_DECLARE_CHECKSUM_STRING_VIEW
+#endif

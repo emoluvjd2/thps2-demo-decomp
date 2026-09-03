@@ -9,8 +9,8 @@
 #include <LIBPAD.H>
 
 // === Owner-local function declarations ===
-static void ReadControllers(void);
 static void ReadController(ControllerData *p_controller_data, unsigned char *p_buf);
+void Pad_Clear(SControl *p_pad);
 
 // MAIN-owned game-state selector used to suppress vibration in demo play.
 /** Persistent gameplay input state for the two supported controllers. */
@@ -362,9 +362,7 @@ static void ReadController(ControllerData *p_controller_data, unsigned char *p_b
     status = p_buf[0];
     u8 old_type = p_controller_data->type;
     p_controller_data->status = status;
-    int new_type = p_buf[1];
-    asm volatile("" : "+r"(new_type));
-    p_controller_data->type = new_type;
+    p_controller_data->type = p_buf[1];
     p_controller_data->button1 = p_buf[2];
     p_controller_data->button2 = p_buf[3];
     p_controller_data->analog0 = p_buf[4];
@@ -375,7 +373,7 @@ static void ReadController(ControllerData *p_controller_data, unsigned char *p_b
     {
         p_controller_data->type = 0;
     }
-    else if (old_type != (u8)new_type)
+    else if (old_type != p_controller_data->type)
     {
         PadStopCom();
         PadStartCom();

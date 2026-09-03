@@ -14,7 +14,6 @@
 #include "UTILS.h"
 
 /** Replay-local types and cross-owner state used by VIDEO.CPP. */
-extern "C" {
 typedef unsigned long ulong;
 
 #include <STDDEF.H>
@@ -94,30 +93,21 @@ struct SVideoInfo {
 #include "VIDEO.h"
 #undef VIDEO_LAYOUT_ONLY
 #undef VIDEO_HEAD_LAYOUT
-}
 
 /** Cross-owner globals addressed by VIDEO.CPP. */
-extern "C" {
 #define BITSTATE_DECLARE_BIT_COUNT
 #include "BITSTATE.h"
 #define DEMOTIMER_ABSOLUTE_DECLARATION
-#define DEMOTIMER_WITHIN_C_LINKAGE
 #include "DEMOTIMER.h"
 #define BODYLISTS_DECLARE_ENVIRONMENTAL_OBJECT_LIST
-#define BODYLISTS_WITHIN_C_LINKAGE
 #include "BODYLISTS.h"
-#define GLEVEL_WITHIN_C_LINKAGE
 #include "GLEVEL.h"
 #include "MECHLIST.h"
-#define MUSICSTOPPED_WITHIN_C_LINKAGE
 #include "MUSICSTOPPED.h"
-#define FRONTSTATUS_WITHIN_C_LINKAGE
 #include "FRONTSTATUS.h"
-#define TRICKPLAYER_WITHIN_C_LINKAGE
 #include "TRICKPLAYER.h"
 #define BITSTATE_DECLARE_USE_CACHE_FOR_BITS
 #include "BITSTATE.h"
-}
 #include "MIPS.h"
 #include "M3D.h"
 /**
@@ -127,6 +117,14 @@ extern "C" {
  * come from MAIN_STRUCTS.h and are kept local until shared owners agree.
  */
 #include "BIT.h"
+
+/** Narrow natural interface to the transient-bit allocator owned by BIT. */
+struct CBit
+{
+    /** Allocate zero-initialized storage from the transient-bit heap. */
+    static void *operator new(unsigned int size);
+};
+
 #include "SPOOL.h"
 #include "MEM.h"
 #include <LIBETC.H>
@@ -172,6 +170,8 @@ typedef char Video_CBody_size_must_be_264[
 
 /** Invoke the power-up body's collect slot through its recovered vtable. */
 static inline void Video_CollectBody(CBody *pBody) {
+    if (pBody == 0)
+        return;
     typedef void (*CollectMethod)(CBody *);
     reinterpret_cast<CollectMethod>(pBody->CItem._vf[3])(pBody);
 }
@@ -304,15 +304,11 @@ void RestartCompFrig(void);
 #include "POWERUP.h"
 
 /** Replay collaborators whose owners expose C-linkage storage. */
-extern "C" {
 #define TRICKOBLIST_ABSOLUTE_DECLARATION
-#define TRICKOBLIST_WITHIN_C_LINKAGE
 #include "TRICKOBLIST.h"
-}
 
 /** Fixed-point vector operators provided by VECTOR.cpp. */
-CVector operator-(const CVector &left, const CVector &right);
-CVector operator>>(const CVector &vector, const int &shift);
+#include "CVECTOROPS.h"
 
 typedef char Video_CBruce_size_must_be_5228[
     (sizeof(CBruce) == 5228) ? 1 : -1];
@@ -340,12 +336,10 @@ enum {
     VideoAngleWrapBias = 0x4000,
 };
 
-extern "C" {
 #define VIDEOINFO_DECLARE_GVINFO1
 #define VIDEOINFO_DECLARE_GVINFO2
 #include "VIDEOINFO.h"
 
-#define REPLAYSOUNDLOCKOUT_WITHIN_C_LINKAGE
 #define REPLAYSOUNDLOCKOUT_OWNER_DECLARATION
 #include "REPLAYSOUNDLOCKOUT.h"
 int ReplaySoundLockout __attribute__((section(".sdata"))) = 0;
@@ -389,7 +383,6 @@ int HighlightStartFrame __attribute__((section(".sdata"))) = 0;
 int HighlightEndFrame __attribute__((section(".sdata"))) = 0;
 int HighlightStartY __attribute__((section(".sdata"))) = 0;
 int HighlightEndY __attribute__((section(".sdata"))) = 0;
-}
 
 // === Free function declarations ===
 static long BitsRequired(long n);
@@ -462,16 +455,16 @@ static void PutNBits(SVideoInfo *VInfo, long v, int n) {
 
     int bitsLeft = VInfo->BitsLeft;
     if (bitsLeft < n) {
-        // These legacy register choices are load-bearing under GCC 2.91;
-        // ordinary locals change the emitted bitstream writer substantially.
-        register int WordBits asm("$7") = VideoWordBits;
+        // The stream cursor's target allocation is load-bearing under GCC 2.91.
+        int WordBits = VideoWordBits;
         n -= bitsLeft;
-        register int shift asm("$5") = WordBits - bitsLeft;
-        register ulong shifted asm("$6") = static_cast<ulong>(v) << shift;
+        int shift = WordBits - bitsLeft;
+        ulong shifted = static_cast<ulong>(v) << shift;
         v >>= bitsLeft;
-        register int bits asm("$3") = VInfo->Bits;
+        int bits = VInfo->Bits;
         register ulong *pWord asm("$4") = VInfo->pStream;
-        bits = (bits & ((1 << shift) - 1)) | shifted;
+        bits &= (1 << shift) - 1;
+        bits |= shifted;
         VInfo->Bits = bits;
         *pWord = bits;
         pWord++;
@@ -488,10 +481,11 @@ static void PutNBits(SVideoInfo *VInfo, long v, int n) {
     // Preserve the two scheduling dependencies used by the target compiler.
     // Removing either barrier reorders the remaining-bit calculation.
     asm volatile("" : "+r"(mask2));
-    register int bits2 asm("$3") = VInfo->Bits;
+    int bits2 = VInfo->Bits;
     register int shifted2 asm("$4") = static_cast<ulong>(v) << shift2;
     VInfo->BitsLeft = remaining;
-    bits2 = (bits2 & mask2) | shifted2;
+    bits2 &= mask2;
+    bits2 |= shifted2;
     VInfo->Bits = bits2;
     if (remaining == 0) {
         ulong *pWord = VInfo->pStream;
@@ -1524,15 +1518,15 @@ static void GetDataChunk(CBruce *pSkater, int NChunks) {
             break;
     }
 
-    DeltaX = GetNBitsSigned(VInfo, PosBits[i]);
     pSkater->CSuper.CBody.CItem.mPos.vx =
-        (VInfo->OldPos.vx << 1) - VInfo->OldPos2.vx + DeltaX;
-    DeltaY = GetNBitsSigned(VInfo, PosBits[i]);
+        (VInfo->OldPos.vx << 1) - VInfo->OldPos2.vx +
+        GetNBitsSigned(VInfo, PosBits[i]);
     pSkater->CSuper.CBody.CItem.mPos.vy =
-        (VInfo->OldPos.vy << 1) - VInfo->OldPos2.vy + DeltaY;
-    DeltaZ = GetNBitsSigned(VInfo, PosBits[i]);
+        (VInfo->OldPos.vy << 1) - VInfo->OldPos2.vy +
+        GetNBitsSigned(VInfo, PosBits[i]);
     pSkater->CSuper.CBody.CItem.mPos.vz =
-        (VInfo->OldPos.vz << 1) - VInfo->OldPos2.vz + DeltaZ;
+        (VInfo->OldPos.vz << 1) - VInfo->OldPos2.vz +
+        GetNBitsSigned(VInfo, PosBits[i]);
 
     VInfo->OldPos2 = VInfo->OldPos;
     VInfo->OldPos = pSkater->CSuper.CBody.CItem.mPos;
@@ -1577,7 +1571,7 @@ static void GetDataChunk(CBruce *pSkater, int NChunks) {
             GetNBitsUnsigned(VInfo, 8);
     VInfo->OldAnim = pSkater->CSuper.mAnim;
 
-    if (GetBit(VInfo) == 0)
+    if (!GetBit(VInfo))
         pSkater->CSuper.mFrame =
             VInfo->OldFrame +
             GetNBitsUnsigned(VInfo, 2);
@@ -1586,13 +1580,13 @@ static void GetDataChunk(CBruce *pSkater, int NChunks) {
             GetNBitsUnsigned(VInfo, 8);
     VInfo->OldFrame = pSkater->CSuper.mFrame;
 
-    if (GetBit(VInfo) == 1)
+    if (GetBit(VInfo))
         pSkater->CSuper.mExtraFlags |= 2;
     else
         pSkater->CSuper.mExtraFlags &= ~2;
 
     // Decode the compressed flip state.
-    if (GetBit(VInfo) == 0) {
+    if (!GetBit(VInfo)) {
         VInfo->OldFlipAngle = 0;
         VInfo->FlipAngleDelta = 0;
         pSkater->mFlipAngle = 0;
@@ -1696,11 +1690,9 @@ static void GetDataChunk(CBruce *pSkater, int NChunks) {
         End.vy = VInfo->OldPos.vy << 12;
         End.vz = VInfo->OldPos.vz << 12;
 
-        CBody *pBody =
+        Video_CollectBody(
             M3dColij_LineToSphere(
-                Start, End, nearest, PowerUpList, 0, 4096);
-        if (pBody)
-            Video_CollectBody(pBody);
+                Start, End, nearest, PowerUpList, 0, 4096));
     }
 
     switch (pSkater->CSuper.mAnim) {
@@ -1805,7 +1797,7 @@ has_frames:
             do {
                 CGrindSpark *pSpark =
                     static_cast<CGrindSpark *>(
-                        Bit_AllocateStorage(BIT2_GRIND_SPARK_STORAGE_SIZE));
+                        CBit::operator new(BIT2_GRIND_SPARK_STORAGE_SIZE));
                 if (pSpark != 0) {
                     Bit2_ConstructGrindSpark(
                         pSpark, &pSkater->CSuper.CBody,

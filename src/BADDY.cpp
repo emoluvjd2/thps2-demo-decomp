@@ -16,6 +16,7 @@
 #include "MECH.h"
 #include "BIT.h"
 #include "OB.h"
+#include "CITEM.h"
 #include "CBODY.h"
 #include "CSUPER.h"
 #include "CPOWERUP.h"
@@ -23,8 +24,13 @@
 #include "TRIG.h"
 #include "PANEL.h"
 
+/** Return caller-owned storage for an ordinary placement construction. */
+inline void *operator new(unsigned int, void *storage)
+{
+    return storage;
+}
+
 struct CGPolyLine;
-struct CSpark;
 
 /** Camera-shake magnitudes recovered from MAIN_STRUCTS.h. */
 enum EShakeType
@@ -47,39 +53,12 @@ typedef char Baddy_CCamera_size_check[
     (sizeof(CCamera) == 1668) ? 1 : -1];
 
 // Typed aliases for methods whose owner-local layouts remain composition-only.
-extern "C" CSuperOwner *Baddy_CSuperDefaultCtor(CSuperOwner *super)
-    asm("__6CSuper");
-extern "C" void Baddy_CSuperDestructorAbi(CSuperOwner *super, int inCharge)
-    asm("_._6CSuper");
-extern "C" void Baddy_InitItem(CItemOwner *item, char *name)
-    asm("InitItem__5CItemPc");
-extern "C" void Baddy_CBodyAI(CBodyOwner *body) asm("AI__5CBody");
-extern "C" void Baddy_CBodyDoLightingSetup(CBodyOwner *body)
-    asm("DoLightingSetup__5CBody");
-extern "C" int Baddy_CBodyHit(
-    CBodyOwner *body, int damage, const CVector &knock, int whatHit)
-    asm("Hit__5CBodyiRC7CVectori");
-extern "C" void Baddy_CBodyDeleteStuff(CBodyOwner *body)
-    asm("DeleteStuff__5CBody");
+#define CSUPER_DECLARE_DESTRUCTOR
+#define CSUPER_DESTRUCTOR_NAME Baddy_CSuperDestructorAbi
+#include "CSUPER.h"
+#include "CVECTOROPS.h"
 
-/** Lowered aggregate-return ABI for CVector addition. */
-extern "C" void Baddy_VectorAddAbi(
-    CVectorOwner *result, const CVectorOwner *left,
-    const CVectorOwner *right) asm("__pl__FRC7CVectorT0");
-/** Lowered aggregate-return ABI for CVector subtraction. */
-extern "C" void Baddy_VectorSubtractAbi(
-    CVectorOwner *result, const CVectorOwner *left,
-    const CVectorOwner *right) asm("__mi__FRC7CVectorT0");
-/** Lowered aggregate-return ABI for CVector's arithmetic right shift. */
-extern "C" void Baddy_VectorShiftRightAbi(
-    CVectorOwner *result, const CVectorOwner *vector,
-    const int *shift) asm("__rs__FRC7CVectorRCi");
-
-extern "C" CGPolyLine *Baddy_ConstructWeatherLine(
-    CGPolyLine *line, int segments) asm("__10CGPolyLinei");
-extern "C" CSpark *Baddy_ConstructSpark(
-    CSpark *spark, CVector &position, int velocity, int gravity, int life)
-    asm("__6CSparkR7CVectoriii");
+#include "BIT.h"
 
 #include "SFX.h"
 #include "MEM.h"
@@ -99,11 +78,11 @@ struct SVideoInfo {
 };
 
 /** Clear the three components of the original inline CVector value. */
-static inline void Baddy_ClearVector(CVectorOwner *vector)
+static inline void Baddy_ClearVector(CVector &vector)
 {
-    vector->vz = 0;
-    vector->vy = 0;
-    vector->vx = 0;
+    vector.vz = 0;
+    vector.vy = 0;
+    vector.vx = 0;
 }
 
 /** Method-bearing owner-local view of the original inline CSVector type. */
@@ -198,28 +177,28 @@ typedef char BaddyScriptOnlyVTableDefinition_size_check[
 // DAT_800EA278 has no target identity or BADDY references.
 
 // === External globals ===
-extern "C" BaddyScriptOnlyVTableDefinition const __vt_16CScriptOnlyBaddy;
-extern "C" BaddyBaseVTableDefinition const __vt_6CBaddy;
-extern "C" {
+extern BaddyScriptOnlyVTableDefinition const __vt_16CScriptOnlyBaddy;
+extern BaddyBaseVTableDefinition const __vt_6CBaddy;
 int NumBaddies = 0;
 int NumGenericBaddies = 0;
 int NumHoverSWATS = 0;
 int NumZombies = 0;
-}
 // Scalar storage view of the first word; the helper below restores the full
 // CVector type carried by the linker-visible ZeroVector object.
-extern "C" int BaddyZeroVectorFirstComponent asm("ZeroVector")
-    __attribute__((section(".data")));
+#define ZEROVECTOR_SCALAR_DECLARATION
+#include "ZEROVECTOR.h"
+#undef ZEROVECTOR_SCALAR_DECLARATION
 
 /** Return the full vector stored at the linker-visible `ZeroVector` base. */
 static inline CVector &Baddy_ZeroVector()
 {
-    return *(CVector *)&BaddyZeroVectorFirstComponent;
+    return *(CVector *)&ZeroVector;
 }
 #include "MECHLIST.h"
 #define BODYLISTS_DECLARE_ENVIRONMENTAL_OBJECT_LIST
 #include "BODYLISTS.h"
-extern "C" int SFX_v __attribute__((section(".data")));
+#define SFXV_ABSOLUTE_DECLARATION
+#include "SFXV.h"
 
 /** Target-complete transient-bit base used by the weather-line consumer. */
 struct CBit {
@@ -238,8 +217,18 @@ struct CBit {
     unsigned char mType;
     BaddyEffectVTable *_vf;
 
+    /** Allocate zero-initialized storage from the transient-bit heap. */
+    static void *operator new(unsigned int size);
     /** Release transient-bit storage through its owning allocator. */
     static void operator delete(void *p);
+};
+
+/** Exact-size spark storage used only for construction in this owner. */
+struct CSpark {
+    unsigned char opaque[BIT_SPARK_STORAGE_SIZE];
+
+    /** Construct one transient spark. */
+    CSpark(CVector &position, int velocity, int gravity, int life);
 };
 
 #include "CSPECIALDISPLAY.h"
@@ -267,26 +256,17 @@ typedef char Baddy_SRainEntry_size_must_be_16[
     (sizeof(SRainEntry) == 16) ? 1 : -1];
 
 // === Extern "C" forward declarations ===
-extern "C" CBaddy *CBaddy_construct(CBaddy *) asm("__6CBaddy");
-extern "C" void Baddy_CBaddyDestructorAbi(CBaddy *, int)
-    asm("_._6CBaddy");
-extern "C" void CBaddy_Die(CBaddy *) asm("Die__6CBaddy");
-extern "C" int CBaddy_ExecuteCommand(CBaddy *, unsigned short)
-    asm("ExecuteCommand__6CBaddyUs");
-extern "C" void CBaddy_SetVariable(CBaddy *, unsigned short)
-    asm("SetVariable__6CBaddyUs");
-extern "C" short CBaddy_GetVariable(CBaddy *, unsigned short)
-    asm("GetVariable__6CBaddyUs");
-extern "C" void Baddy_ScriptOnlyDestructorAbi(CScriptOnlyBaddy *, int)
-    asm("_._16CScriptOnlyBaddy");
-extern "C" void CScriptOnlyBaddy_AI(CScriptOnlyBaddy *)
-    asm("AI__16CScriptOnlyBaddy");
-extern "C" void CScriptOnlyBaddy_SetVariable(
-    CScriptOnlyBaddy *, unsigned short)
-    asm("SetVariable__16CScriptOnlyBaddyUs");
-extern "C" int CScriptOnlyBaddy_ExecuteCommand(
-    CScriptOnlyBaddy *, unsigned short)
-    asm("ExecuteCommand__16CScriptOnlyBaddyUs");
+#define CBADDY_DECLARE_CONSTRUCTOR
+#define CBADDY_CONSTRUCTOR_NAMESPACE BaddyConstructorABI
+#define CBADDY_CONSTRUCTOR_RECEIVER CBaddy
+#define CBADDY_DECLARE_DESTRUCTOR
+#define CBADDY_DESTRUCTOR_NAME Baddy_CBaddyDestructorAbi
+#define CBADDY_DESTRUCTOR_RECEIVER CBaddy
+#define CBADDY_DECLARE_SCRIPT_ONLY_DESTRUCTOR
+#define CBADDY_SCRIPT_ONLY_DESTRUCTOR_NAME Baddy_ScriptOnlyDestructorAbi
+#define CBADDY_SCRIPT_ONLY_DESTRUCTOR_RECEIVER CScriptOnlyBaddy
+#include "CBADDYABI.h"
+#define CBaddy_construct BaddyConstructorABI::__6CBaddy
 
 // === Function implementations (address order) ===
 
@@ -303,7 +283,7 @@ extern "C" int CScriptOnlyBaddy_ExecuteCommand(
  */
 CBaddy *CBaddy_construct(CBaddy *baddy)
 {
-    Baddy_CSuperDefaultCtor(&baddy->CSuper);
+    ::new (reinterpret_cast<CSuper *>(&baddy->CSuper)) CSuper();
     CBaddy *retVal = baddy;
     asm volatile("" : "+r"(retVal));
     int tmpV1 = (int)&__vt_6CBaddy;
@@ -356,19 +336,18 @@ CBaddy::~CBaddy()
  * Mangled:   Die__6CBaddy
  * Demangled: CBaddy::Die(void)
  *
- * @param baddy  Baddy instance entering its dead state.
  */
-void CBaddy_Die(CBaddy *baddy)
+void CBaddy::Die()
 {
-    if (reinterpret_cast<const CBody *>(&baddy->CSuper.CBody)->IsDead() == 0)
+    if (reinterpret_cast<const CBody *>(&CSuper.CBody)->IsDead() == 0)
     {
-        baddy->SendDeathPulse();
-        u16 flags52 = baddy->CSuper.CBody.mCBodyFlags;
-        u16 flags00 = baddy->CSuper.CBody.CItem.mFlags;
+        SendDeathPulse();
+        u16 flags52 = CSuper.CBody.mCBodyFlags;
+        u16 flags00 = CSuper.CBody.CItem.mFlags;
         flags52 |= 0x40;
         flags00 |= 0x41;
-        baddy->CSuper.CBody.mCBodyFlags = flags52;
-        baddy->CSuper.CBody.CItem.mFlags = flags00;
+        CSuper.CBody.mCBodyFlags = flags52;
+        CSuper.CBody.CItem.mFlags = flags00;
     }
 }
 
@@ -382,13 +361,12 @@ void CBaddy_Die(CBaddy *baddy)
  */
 void CBaddy::SendDeathPulse()
 {
-    CBaddy *baddy = this;
     ushort node;
 
-    if ((baddy->mDeathPulseSent == '\0') &&
-        (baddy->CSuper.CBody.mNode != (u16)0xffff)) {
-        node = baddy->CSuper.CBody.mNode;
-        baddy->mDeathPulseSent = '\x01';
+    if ((mDeathPulseSent == '\0') &&
+        (CSuper.CBody.mNode != (u16)0xffff)) {
+        node = CSuper.CBody.mNode;
+        mDeathPulseSent = '\x01';
         Trig_SendPulse((ushort *)(OffsetList[node] + 3));
     }
 }
@@ -403,16 +381,15 @@ void CBaddy::SendDeathPulse()
  */
 void CBaddy::SkipToEndif()
 {
-    CBaddy *baddy = this;
     int conditionals = 0;
     int endif_cmd = 0x4120;
     int if_cmd = 0x4100;
     u16 token;
     do
     {
-        u16 *scriptPtr = baddy->mpScript;
+        u16 *scriptPtr = mpScript;
         token = *scriptPtr;
-        baddy->mpScript = scriptPtr + 1;
+        mpScript = scriptPtr + 1;
         if (token == endif_cmd)
         {
             if (conditionals == 0)
@@ -440,23 +417,22 @@ void CBaddy::SkipToEndif()
  */
 void CBaddy::ParseScript(u16 *p_script)
 {
-    CBaddy *baddy = this;
-    baddy->mpScript = p_script;
+    mpScript = p_script;
     u16 cmd = *p_script;
     if (cmd == 0x4100)
         goto end_mark;
     do
     {
-        u16 *scriptPtr = baddy->mpScript;
+        u16 *scriptPtr = mpScript;
         u16 command = *scriptPtr;
         scriptPtr++;
-        baddy->mpScript = scriptPtr;
+        mpScript = scriptPtr;
         if (command & 0x4000)
         {
-            BaddyVTable *vtable = Baddy_Dispatch(baddy);
+            BaddyVTable *vtable = Baddy_Dispatch(this);
             int (*execute)(CBaddy *, unsigned short) =
                 vtable->ExecuteCommand;
-            int result = execute(baddy, command);
+            int result = execute(this, command);
             if (result == 0)
                 goto ret0;
             goto loop_cont;
@@ -465,19 +441,19 @@ void CBaddy::ParseScript(u16 *p_script)
             int masked = command & 0x2000;
             if (masked)
             {
-                BaddyVTable *vtable = Baddy_Dispatch(baddy);
+                BaddyVTable *vtable = Baddy_Dispatch(this);
                 void (*setVariable)(CBaddy *, unsigned short) =
                     vtable->SetVariable;
-                setVariable(baddy, command);
+                setVariable(this, command);
             }
         }
     loop_cont:
         ;
-        u16 *scriptPtr2 = baddy->mpScript;
+        u16 *scriptPtr2 = mpScript;
         cmd = *scriptPtr2;
     } while (cmd != 0x4100);
 end_mark:
-    baddy->mDoScript = 0;
+    mDoScript = 0;
 ret0:
     ;
 }
@@ -489,12 +465,10 @@ ret0:
  * Mangled:   ExecuteCommand__6CBaddyUs
  * Demangled: CBaddy::ExecuteCommand(unsigned short)
  *
- * @param self     Baddy receiving the command.
  * @param command  Script opcode to execute.
  * @return 0 when script execution must pause; otherwise 1.
  */
-int CBaddy_ExecuteCommand(
-    CBaddy *self, unsigned short command)
+int CBaddy::ExecuteCommand(unsigned short command)
 {
     int dispatchCommand = command;
 
@@ -750,18 +724,18 @@ int CBaddy_ExecuteCommand(
     {
     command_42A0:
     {
-        unsigned short type = *self->mpScript++;
+        unsigned short type = *mpScript++;
         if (type & 0x2000)
         {
-            BaddyVTable *vtable = Baddy_Dispatch(self);
-            type = vtable->Variable.GetVariable(self, type);
+            BaddyVTable *vtable = Baddy_Dispatch(this);
+            type = vtable->Variable.GetVariable(this, type);
         }
 
-        unsigned int flags = *self->mpScript++;
-        int lifetime = *self->mpScript++;
-        int gravity = *self->mpScript++;
+        unsigned int flags = *mpScript++;
+        int lifetime = *mpScript++;
+        int gravity = *mpScript++;
         CPowerUp *p_powerup = PowerUp_Create(
-            type, *(const CVector *)&self->CSuper.CBody.CItem.mPos,
+            type, *(const CVector *)&CSuper.CBody.CItem.mPos,
             flags, lifetime, Baddy_ZeroVector());
         if (p_powerup)
         {
@@ -771,23 +745,23 @@ int CBaddy_ExecuteCommand(
     }
 
     command_429E:
-        if (self->mpCreatedByPlayer != 0)
+        if (mpCreatedByPlayer != 0)
         {
-            if ((CBodyOwner *)self->mpCreatedByPlayer ==
+            if ((CBodyOwner *)mpCreatedByPlayer ==
                 reinterpret_cast<CBodyOwner *>(MechList))
             {
-                CurrentWaterLevel = self->CSuper.CBody.CItem.mPos.vy;
+                CurrentWaterLevel = CSuper.CBody.CItem.mPos.vy;
                 goto command_default;
             }
-            CurrentWaterLevel2 = self->CSuper.CBody.CItem.mPos.vy;
+            CurrentWaterLevel2 = CSuper.CBody.CItem.mPos.vy;
             goto command_default;
         }
-        CurrentWaterLevel = self->CSuper.CBody.CItem.mPos.vy;
+        CurrentWaterLevel = CSuper.CBody.CItem.mPos.vy;
         CurrentWaterLevel2 = CurrentWaterLevel;
         goto command_default;
 
     command_42A2:
-        CurrentWaterDamage = *self->mpScript++;
+        CurrentWaterDamage = *mpScript++;
         goto command_default;
 
     {
@@ -795,28 +769,28 @@ int CBaddy_ExecuteCommand(
 
     command_429A:
     {
-        unsigned short node = *self->mpScript++;
+        unsigned short node = *mpScript++;
         if (node & 0x2000)
         {
-            BaddyVTable *vtable = Baddy_Dispatch(self);
-            node = vtable->Variable.GetVariable(self, node);
+            BaddyVTable *vtable = Baddy_Dispatch(this);
+            node = vtable->Variable.GetVariable(this, node);
         }
         Trig_GetPosition(pos, node);
         goto process_position;
     }
 
     command_42A6:
-        pos = *(const CVector *)&self->CSuper.CBody.CItem.mPos;
+        pos = *(const CVector *)&CSuper.CBody.CItem.mPos;
 
     process_position:
-        switch (*self->mpScript++)
+        switch (*mpScript++)
         {
         case 0:
         case 1:
             break;
         case 2:
-            self->GetScriptValue();
-            self->mpScript += 2;
+            GetScriptValue();
+            mpScript += 2;
             goto command_default;
         }
         return 1;
@@ -824,25 +798,25 @@ int CBaddy_ExecuteCommand(
 
     command_4227:
     {
-        unsigned short interval = *self->mpScript++;
+        unsigned short interval = *mpScript++;
         if (interval)
         {
-            self->mComplexSurfaceInterval = (unsigned char)interval;
-            self->mComplexSurfaceTimer = 0;
-            self->mSpecificFlags |= 2;
+            mComplexSurfaceInterval = (unsigned char)interval;
+            mComplexSurfaceTimer = 0;
+            mSpecificFlags |= 2;
             goto command_default;
         }
-        self->mSpecificFlags &= ~2U;
+        mSpecificFlags &= ~2U;
         goto command_default;
     }
 
     command_4298:
     {
-        unsigned short shake = *self->mpScript++;
+        unsigned short shake = *mpScript++;
         if (shake & 0x2000)
         {
-            BaddyVTable *vtable = Baddy_Dispatch(self);
-            shake = vtable->Variable.GetVariable(self, shake);
+            BaddyVTable *vtable = Baddy_Dispatch(this);
+            shake = vtable->Variable.GetVariable(this, shake);
         }
 
         if (CameraList == 0)
@@ -852,41 +826,41 @@ int CBaddy_ExecuteCommand(
         if (shake == 0)
         {
             ((CCamera *)CameraList)->Shake(
-                *(const CVector *)&self->CSuper.CBody.CItem.mPos,
+                *(const CVector *)&CSuper.CBody.CItem.mPos,
                 CAMERASHAKE_SMALL);
             return 1;
         }
         if (shake == 1)
         {
             ((CCamera *)CameraList)->Shake(
-                *(const CVector *)&self->CSuper.CBody.CItem.mPos,
+                *(const CVector *)&CSuper.CBody.CItem.mPos,
                 CAMERASHAKE_MEDIUM);
             return 1;
         }
         ((CCamera *)CameraList)->Shake(
-            *(const CVector *)&self->CSuper.CBody.CItem.mPos,
+            *(const CVector *)&CSuper.CBody.CItem.mPos,
             CAMERASHAKE_BIG);
         return 1;
     }
 
     command_4296:
-        SFX_MIDIFadeIn(*self->mpScript++);
+        SFX_MIDIFadeIn(*mpScript++);
         return 1;
 
     command_4297:
-        SFX_MIDIFadeOut(*self->mpScript++);
+        SFX_MIDIFadeOut(*mpScript++);
         return 1;
 
     command_4299:
-        printf("ignoring script cmd: setting fmv track %d\n", *self->mpScript++);
+        printf("ignoring script cmd: setting fmv track %d\n", *mpScript++);
         return 1;
 
     command_4293:
     {
         unsigned int *p_checksum = (unsigned int *)
-            (((unsigned int)self->mpScript + 3) & ~3U);
+            (((unsigned int)mpScript + 3) & ~3U);
         printf("ignoring script cmd: setting fmv checksum %x\n", p_checksum);
-        self->mpScript = (unsigned short *)(p_checksum + 1);
+        mpScript = (unsigned short *)(p_checksum + 1);
         goto command_default;
     }
 
@@ -900,11 +874,11 @@ int CBaddy_ExecuteCommand(
 
     command_42B1_42B2:
     {
-        unsigned short node = *self->mpScript++;
+        unsigned short node = *mpScript++;
         if (node & 0x2000)
         {
-            BaddyVTable *vtable = Baddy_Dispatch(self);
-            node = vtable->Variable.GetVariable(self, node);
+            BaddyVTable *vtable = Baddy_Dispatch(this);
+            node = vtable->Variable.GetVariable(this, node);
         }
         unsigned short *p_links = Trig_GetLinksPointer(node);
         if (command == 0x42B1)
@@ -920,11 +894,11 @@ int CBaddy_ExecuteCommand(
 
     command_42B3_42B4:
     {
-        unsigned short node = *self->mpScript++;
+        unsigned short node = *mpScript++;
         if (node & 0x2000)
         {
-            BaddyVTable *vtable = Baddy_Dispatch(self);
-            node = vtable->Variable.GetVariable(self, node);
+            BaddyVTable *vtable = Baddy_Dispatch(this);
+            node = vtable->Variable.GetVariable(this, node);
         }
         if (command == 0x42B3)
         {
@@ -940,7 +914,7 @@ int CBaddy_ExecuteCommand(
 
     command_42C0:
     {
-        unsigned short goal = *self->mpScript++;
+        unsigned short goal = *mpScript++;
         if ((GGame == 1) && !Career_Got(1) &&
             ((GVInfo1.VideoMode ^ VIDEO_PLAYBACK) != 0))
         {
@@ -951,42 +925,43 @@ int CBaddy_ExecuteCommand(
 
     command_42B0:
     {
-        char *p_string = (char *)self->mpScript;
+        char *p_string = (char *)mpScript;
         while (*p_string)
         {
             ++p_string;
         }
         if ((unsigned int)p_string & 1)
         {
-            self->mpScript = (unsigned short *)(p_string + 1);
+            mpScript = (unsigned short *)(p_string + 1);
         }
         else
         {
-            self->mpScript = (unsigned short *)(p_string + 2);
+            mpScript = (unsigned short *)(p_string + 2);
         }
         return 1;
     }
 
     command_4226:
-        Baddy_ClearVector(&self->CSuper.CBody.mVel);
+        Baddy_ClearVector(
+            reinterpret_cast<CVector &>(CSuper.CBody.mVel));
         goto command_default;
 
     command_4200:
     {
-        Baddy_InitItem(&self->CSuper.CBody.CItem,
-                       (char *)self->mpScript);
-        char *p_string = (char *)self->mpScript;
+        reinterpret_cast<CItem *>(&CSuper.CBody.CItem)->InitItem(
+            (char *)mpScript);
+        char *p_string = (char *)mpScript;
         while (*p_string)
         {
             ++p_string;
         }
         if ((unsigned int)p_string & 1)
         {
-            self->mpScript = (unsigned short *)(p_string + 1);
+            mpScript = (unsigned short *)(p_string + 1);
         }
         else
         {
-            self->mpScript = (unsigned short *)(p_string + 2);
+            mpScript = (unsigned short *)(p_string + 2);
         }
         return 1;
     }
@@ -994,58 +969,58 @@ int CBaddy_ExecuteCommand(
     command_4106:
     {
         CVector dummy;
-        unsigned short node = *self->mpScript++;
+        unsigned short node = *mpScript++;
         if (node & 0x2000)
         {
-            BaddyVTable *vtable = Baddy_Dispatch(self);
-            node = vtable->Variable.GetVariable(self, node);
+            BaddyVTable *vtable = Baddy_Dispatch(this);
+            node = vtable->Variable.GetVariable(this, node);
         }
         unsigned short *pNode = Trig_GetPosition(dummy, node);
-        self->mpScript = pNode + 3;
+        mpScript = pNode + 3;
         return 1;
     }
 
     command_4104:
     {
-        unsigned short label = *self->mpScript++;
-        self->mpScriptLabel[label] = self->mpScript;
+        unsigned short label = *mpScript++;
+        mpScriptLabel[label] = mpScript;
         goto command_default;
     }
 
     command_4105:
     {
-        unsigned short *p_return = self->mpScript;
-        while (*self->mpScript != 0x4100)
+        unsigned short *p_return = mpScript;
+        while (*mpScript != 0x4100)
         {
-            unsigned short script_command = *self->mpScript++;
+            unsigned short script_command = *mpScript++;
             if (script_command == 0x4104)
             {
-                unsigned short label = *self->mpScript++;
-                self->mpScriptLabel[label] = self->mpScript;
+                unsigned short label = *mpScript++;
+                mpScriptLabel[label] = mpScript;
             }
         }
-        self->mpScript = p_return;
+        mpScript = p_return;
         goto command_default;
     }
 
     command_4101:
     {
-        unsigned short label = *self->mpScript++;
-        self->mpScript = self->mpScriptLabel[label];
+        unsigned short label = *mpScript++;
+        mpScript = mpScriptLabel[label];
         goto command_default;
     }
 
     command_4102:
     {
-        unsigned short label = *self->mpScript++;
-        self->mpScript = self->mpScriptLabel[label];
+        unsigned short label = *mpScript++;
+        mpScript = mpScriptLabel[label];
         return 0;
     }
 
     command_4116:
     {
-        unsigned int flags = *self->mpScript++;
-        if ((self->mSpecificFlags & flags) == 0)
+        unsigned int flags = *mpScript++;
+        if ((mSpecificFlags & flags) == 0)
         {
             goto command_default;
         }
@@ -1054,8 +1029,8 @@ int CBaddy_ExecuteCommand(
 
     command_4115:
     {
-        unsigned int flags = *self->mpScript++;
-        if ((self->mSpecificFlags & flags) == flags)
+        unsigned int flags = *mpScript++;
+        if ((mSpecificFlags & flags) == flags)
         {
             goto command_default;
         }
@@ -1066,49 +1041,49 @@ int CBaddy_ExecuteCommand(
     {
         unsigned short dummy_script[8];
         int dummy_script_index = 0;
-        int var_id = *self->mpScript++;
-        unsigned short *p_start = self->mpScript;
-        int v0 = Baddy_Dispatch(self)->Variable.GetVariable(self, var_id);
-        if (p_start != self->mpScript)
+        int var_id = *mpScript++;
+        unsigned short *p_start = mpScript;
+        int v0 = Baddy_Dispatch(this)->Variable.GetVariable(this, var_id);
+        if (p_start != mpScript)
         {
             do
             {
                 dummy_script[dummy_script_index] = *p_start++;
                 ++dummy_script_index;
             }
-            while (p_start != self->mpScript);
+            while (p_start != mpScript);
         }
 
-        int v1 = *self->mpScript++;
+        int v1 = *mpScript++;
         if (v1 & 0x2000)
         {
-            v1 = Baddy_Dispatch(self)->Variable.GetVariable(self, v1);
+            v1 = Baddy_Dispatch(this)->Variable.GetVariable(this, v1);
         }
         dummy_script[dummy_script_index] =
             (command == 0x4110) ? v0 + v1 : v0 - v1;
 
-        p_start = self->mpScript;
-        self->mpScript = dummy_script;
-        BaddyVTable *vtable = Baddy_Dispatch(self);
-        vtable->SetVariable(self, var_id);
-        self->mpScript = p_start;
+        p_start = mpScript;
+        mpScript = dummy_script;
+        BaddyVTable *vtable = Baddy_Dispatch(this);
+        vtable->SetVariable(this, var_id);
+        mpScript = p_start;
         goto command_default;
     }
 
     command_4112:
     {
-        int v0 = *self->mpScript++;
+        int v0 = *mpScript++;
         if (v0 & 0x2000)
         {
-            BaddyVTable *vtable = Baddy_Dispatch(self);
-            v0 = vtable->Variable.GetVariable(self, v0);
+            BaddyVTable *vtable = Baddy_Dispatch(this);
+            v0 = vtable->Variable.GetVariable(this, v0);
         }
 
-        int v1 = *self->mpScript++;
+        int v1 = *mpScript++;
         if (v1 & 0x2000)
         {
-            BaddyVTable *vtable = Baddy_Dispatch(self);
-            v1 = vtable->Variable.GetVariable(self, v1);
+            BaddyVTable *vtable = Baddy_Dispatch(this);
+            v1 = vtable->Variable.GetVariable(this, v1);
         }
 
         if (v1 < v0)
@@ -1120,18 +1095,18 @@ int CBaddy_ExecuteCommand(
 
     command_4113:
     {
-        int v0 = *self->mpScript++;
+        int v0 = *mpScript++;
         if (v0 & 0x2000)
         {
-            BaddyVTable *vtable = Baddy_Dispatch(self);
-            v0 = vtable->Variable.GetVariable(self, v0);
+            BaddyVTable *vtable = Baddy_Dispatch(this);
+            v0 = vtable->Variable.GetVariable(this, v0);
         }
 
-        int v1 = *self->mpScript++;
+        int v1 = *mpScript++;
         if (v1 & 0x2000)
         {
-            BaddyVTable *vtable = Baddy_Dispatch(self);
-            v1 = vtable->Variable.GetVariable(self, v1);
+            BaddyVTable *vtable = Baddy_Dispatch(this);
+            v1 = vtable->Variable.GetVariable(this, v1);
         }
 
         if (v0 < v1)
@@ -1143,18 +1118,18 @@ int CBaddy_ExecuteCommand(
 
     command_4114:
     {
-        int v0 = *self->mpScript++;
+        int v0 = *mpScript++;
         if (v0 & 0x2000)
         {
-            BaddyVTable *vtable = Baddy_Dispatch(self);
-            v0 = vtable->Variable.GetVariable(self, v0);
+            BaddyVTable *vtable = Baddy_Dispatch(this);
+            v0 = vtable->Variable.GetVariable(this, v0);
         }
 
-        int v1 = *self->mpScript++;
+        int v1 = *mpScript++;
         if (v1 & 0x2000)
         {
-            BaddyVTable *vtable = Baddy_Dispatch(self);
-            v1 = vtable->Variable.GetVariable(self, v1);
+            BaddyVTable *vtable = Baddy_Dispatch(this);
+            v1 = vtable->Variable.GetVariable(this, v1);
         }
 
         if (v0 == v1)
@@ -1164,31 +1139,31 @@ int CBaddy_ExecuteCommand(
     }
 
     skip_to_endif:
-        self->SkipToEndif();
+        SkipToEndif();
         return 1;
 
     command_4280:
     {
-        self->mWaitTimer = *self->mpScript++;
-        if (self->mWaitTimer & 0x2000)
+        mWaitTimer = *mpScript++;
+        if (mWaitTimer & 0x2000)
         {
-            BaddyVTable *vtable = Baddy_Dispatch(self);
-            self->mWaitTimer =
-                vtable->Variable.GetVariable(self, self->mWaitTimer);
+            BaddyVTable *vtable = Baddy_Dispatch(this);
+            mWaitTimer =
+                vtable->Variable.GetVariable(this, mWaitTimer);
         }
         return 0;
     }
 
     command_4281:
-        if (self->mInputFlagsCopy & 1)
+        if (mInputFlagsCopy & 1)
         {
             return 1;
         }
-        --self->mpScript;
+        --mpScript;
         return 0;
 
     command_4240:
-        self->mDoScript = 0;
+        mDoScript = 0;
         return 0;
 
     command_4107:
@@ -1196,53 +1171,53 @@ int CBaddy_ExecuteCommand(
 
     command_4201:
     {
-        int anim = *self->mpScript++;
-        int direction = *self->mpScript++;
-        reinterpret_cast<CSuper *>(&self->CSuper)->CycleAnim(
+        int anim = *mpScript++;
+        int direction = *mpScript++;
+        reinterpret_cast< ::CSuper *>(&CSuper)->CycleAnim(
             anim, direction);
         return 1;
     }
 
     command_4202:
-        reinterpret_cast<CSuper *>(&self->CSuper)->RunAnim(
-            *self->mpScript++, 0, -1, -1);
+        reinterpret_cast< ::CSuper *>(&CSuper)->RunAnim(
+            *mpScript++, 0, -1, -1);
         return 1;
 
     command_4203:
-        self->CSuper.CBody.CItem.mFlags &= ~1;
+        CSuper.CBody.CItem.mFlags &= ~1;
         goto command_default;
 
     command_4204:
-        self->CSuper.CBody.CItem.mFlags |= 0x41;
+        CSuper.CBody.CItem.mFlags |= 0x41;
         goto command_default;
 
     command_4205:
     {
-        BaddyVTable *vtable = Baddy_Dispatch(self);
-        vtable->Die(self);
+        BaddyVTable *vtable = Baddy_Dispatch(this);
+        vtable->Die(this);
         return 1;
     }
 
     command_4290:
-        SFX_PlayX((short)*self->mpScript++, 0x2000, 0);
+        SFX_PlayX((short)*mpScript++, 0x2000, 0);
         return 1;
 
     command_4291:
         SFX_PlayPos(
-            (short)*self->mpScript++,
-            *(const CVector *)&self->CSuper.CBody.CItem.mPos, 0);
+            (short)*mpScript++,
+            *(const CVector *)&CSuper.CBody.CItem.mPos, 0);
         return 1;
 
     command_4292:
     {
-        unsigned short sparks = *self->mpScript++;
+        unsigned short sparks = *mpScript++;
         if (BitCount >= 200)
         {
             return 1;
         }
 
         Bit_SetSparkTrajectory(
-            *(const CSVector *)&self->CSuper.CBody.CItem.mAngles);
+            *(const CSVector *)&CSuper.CBody.CItem.mAngles);
         BaddyCSVector cone;
         cone.Set(0x200, 0x1000, 0);
         Bit_SetSparkTrajectoryCone(*(const CSVector *)&cone);
@@ -1256,12 +1231,11 @@ int CBaddy_ExecuteCommand(
             if (Mem_GetFree(1) > 10000)
             {
                 CSpark *spark = static_cast<CSpark *>(
-                    Bit_AllocateStorage(BIT_SPARK_STORAGE_SIZE));
+                    CBit::operator new(BIT_SPARK_STORAGE_SIZE));
                 if (spark)
                 {
-                    Baddy_ConstructSpark(
-                        spark,
-                        *(CVector *)&self->CSuper.CBody.CItem.mPos,
+                    ::new (spark) CSpark(
+                        *(CVector *)&CSuper.CBody.CItem.mPos,
                         0x20, 0x2000, 0x20);
                 }
             }
@@ -1272,11 +1246,11 @@ int CBaddy_ExecuteCommand(
 
     command_429C:
         Flash_Screen(
-            (unsigned char)self->mpScript[0],
-            (unsigned char)self->mpScript[1],
-            (unsigned char)self->mpScript[2],
-            self->mpScript[3], 0, self->mpScript[4]);
-        self->mpScript += 5;
+            (unsigned char)mpScript[0],
+            (unsigned char)mpScript[1],
+            (unsigned char)mpScript[2],
+            mpScript[3], 0, mpScript[4]);
+        mpScript += 5;
         goto command_default;
 
     command_default:
@@ -1291,16 +1265,15 @@ int CBaddy_ExecuteCommand(
  */
 unsigned short CBaddy::GetScriptValue()
 {
-    CBaddy *self = this;
-    u16 *scriptPtr = self->mpScript;
+    u16 *scriptPtr = mpScript;
     u16 value = *scriptPtr;
-    self->mpScript = scriptPtr + 1;
+    mpScript = scriptPtr + 1;
     if ((value & 0x8000) == 0)
     {
         if (value & 0x2000)
         {
-            BaddyVTable *vtable = Baddy_Dispatch(self);
-            value = vtable->Variable.GetVariable(self, value);
+            BaddyVTable *vtable = Baddy_Dispatch(this);
+            value = vtable->Variable.GetVariable(this, value);
         }
     }
     return value;
@@ -1312,37 +1285,39 @@ unsigned short CBaddy::GetScriptValue()
  * The original GCC 2.x translation unit places both baddy vtables between
  * ExecuteCommand's diagnostic strings and the SetVariable switch table.
  */
-extern "C" BaddyScriptOnlyVTableDefinition const __vt_16CScriptOnlyBaddy = {
+BaddyScriptOnlyVTableDefinition const __vt_16CScriptOnlyBaddy = {
     0,
     0,
     Baddy_ScriptOnlyDestructorAbi,
-    CBaddy_Die,
-    CScriptOnlyBaddy_AI,
-    (void (*)(CBodyOwner *))CBody_EveryFrame,
-    Baddy_CBodyDoLightingSetup,
-    Baddy_CBodyHit,
-    Baddy_CBodyDeleteStuff,
-    CScriptOnlyBaddy_ExecuteCommand,
-    CScriptOnlyBaddy_SetVariable,
-    CBaddy_GetVariable,
+    (void (*)(CBaddy *))&CBaddy::Die,
+    (void (*)(CScriptOnlyBaddy *))&CScriptOnlyBaddy::AI,
+    (void (*)(CBodyOwner *))&CBody::EveryFrame,
+    (void (*)(CBodyOwner *))&CBody::DoLightingSetup,
+    (int (*)(CBodyOwner *, int, const CVector &, int))&CBody::Hit,
+    (void (*)(CBodyOwner *))&CBody::DeleteStuff,
+    (int (*)(CScriptOnlyBaddy *, unsigned short))
+        &CScriptOnlyBaddy::ExecuteCommand,
+    (void (*)(CScriptOnlyBaddy *, unsigned short))
+        &CScriptOnlyBaddy::SetVariable,
+    (short (*)(CBaddy *, unsigned short))&CBaddy::GetVariable,
 };
 
 /**
  * Virtual dispatch table emitted by the base baddy owner.
  */
-extern "C" BaddyBaseVTableDefinition const __vt_6CBaddy = {
+BaddyBaseVTableDefinition const __vt_6CBaddy = {
     0,
     0,
     Baddy_CBaddyDestructorAbi,
-    CBaddy_Die,
-    Baddy_CBodyAI,
-    (void (*)(CBodyOwner *))CBody_EveryFrame,
-    Baddy_CBodyDoLightingSetup,
-    Baddy_CBodyHit,
-    Baddy_CBodyDeleteStuff,
-    CBaddy_ExecuteCommand,
-    CBaddy_SetVariable,
-    CBaddy_GetVariable,
+    (void (*)(CBaddy *))&CBaddy::Die,
+    (void (*)(CBodyOwner *))&CBody::AI,
+    (void (*)(CBodyOwner *))&CBody::EveryFrame,
+    (void (*)(CBodyOwner *))&CBody::DoLightingSetup,
+    (int (*)(CBodyOwner *, int, const CVector &, int))&CBody::Hit,
+    (void (*)(CBodyOwner *))&CBody::DeleteStuff,
+    (int (*)(CBaddy *, unsigned short))&CBaddy::ExecuteCommand,
+    (void (*)(CBaddy *, unsigned short))&CBaddy::SetVariable,
+    (short (*)(CBaddy *, unsigned short))&CBaddy::GetVariable,
 };
 
 /**
@@ -1352,158 +1327,157 @@ extern "C" BaddyBaseVTableDefinition const __vt_6CBaddy = {
  * Mangled:   SetVariable__6CBaddyUs
  * Demangled: CBaddy::SetVariable(unsigned short)
  *
- * @param self  Baddy receiving the script-visible value.
  * @param variable  Script variable selector.
  */
-void CBaddy_SetVariable(CBaddy *self, unsigned short variable)
+void CBaddy::SetVariable(unsigned short variable)
 {
     switch (variable)
     {
     case 0x2135:
     {
         unsigned int *p_checksum =
-            (unsigned int *)(((int)self->mpScript + 3) & ~3);
+            (unsigned int *)(((int)mpScript + 3) & ~3);
         unsigned int val = *p_checksum;
-        self->mpScript = (u16 *)(p_checksum + 1);
-        self->mDeadChecksum = val;
+        mpScript = (u16 *)(p_checksum + 1);
+        mDeadChecksum = val;
         break;
     }
     case 0x212f:
     {
         unsigned int *p_checksum =
-            (unsigned int *)(((int)self->mpScript + 3) & ~3);
+            (unsigned int *)(((int)mpScript + 3) & ~3);
         u16 model = Spool_GetModel(
-            *p_checksum, self->CSuper.CBody.CItem.mRegion);
-        self->CSuper.CBody.CItem.mModel = model;
-        self->mpScript = (u16 *)(p_checksum + 1);
+            *p_checksum, CSuper.CBody.CItem.mRegion);
+        CSuper.CBody.CItem.mModel = model;
+        mpScript = (u16 *)(p_checksum + 1);
         break;
     }
     case 0x2140:
     {
-        int val = self->GetScriptValue();
-        self->CSuper.CBody.CItem.mPos.vx = (val << 16) >> 4;
+        int val = GetScriptValue();
+        CSuper.CBody.CItem.mPos.vx = (val << 16) >> 4;
         break;
     }
     case 0x2141:
     {
-        int val = self->GetScriptValue();
-        self->CSuper.CBody.CItem.mPos.vy = (val << 16) >> 4;
+        int val = GetScriptValue();
+        CSuper.CBody.CItem.mPos.vy = (val << 16) >> 4;
         break;
     }
     case 0x2142:
     {
-        int val = self->GetScriptValue();
-        self->CSuper.CBody.CItem.mPos.vz = (val << 16) >> 4;
+        int val = GetScriptValue();
+        CSuper.CBody.CItem.mPos.vz = (val << 16) >> 4;
         break;
     }
     case 0x2131:
     {
-        u16 *scriptPtr = self->mpScript;
+        u16 *scriptPtr = mpScript;
         u16 val = *scriptPtr;
-        self->mpScript = scriptPtr + 1;
+        mpScript = scriptPtr + 1;
         if (val != 0)
         {
-            self->CSuper.CBody.CItem.mFlags =
-                self->CSuper.CBody.CItem.mFlags | 8;
+            CSuper.CBody.CItem.mFlags =
+                CSuper.CBody.CItem.mFlags | 8;
         }
         else
         {
-            self->CSuper.CBody.CItem.mFlags =
-                self->CSuper.CBody.CItem.mFlags & 0xFFF7;
+            CSuper.CBody.CItem.mFlags =
+                CSuper.CBody.CItem.mFlags & 0xFFF7;
         }
         break;
     }
     case 0x212e:
     {
-        u16 *scriptPtr = self->mpScript;
+        u16 *scriptPtr = mpScript;
         u16 val = *scriptPtr;
-        self->mpScript = scriptPtr + 1;
-        self->mVerticalCompliance = val;
+        mpScript = scriptPtr + 1;
+        mVerticalCompliance = val;
         break;
     }
     case 0x212c:
     {
-        u16 *scriptPtr = self->mpScript;
+        u16 *scriptPtr = mpScript;
         u8 val = *(u8 *)scriptPtr;
-        self->mpScript = scriptPtr + 1;
-        self->mInputSignal = val;
+        mpScript = scriptPtr + 1;
+        mInputSignal = val;
         break;
     }
     case 0x212d:
     {
-        u16 *scriptPtr = self->mpScript;
+        u16 *scriptPtr = mpScript;
         u8 val = *(u8 *)scriptPtr;
-        self->mpScript = scriptPtr + 1;
-        self->mHit = val;
+        mpScript = scriptPtr + 1;
+        mHit = val;
         break;
     }
     case 0x2100:
     {
-        u16 *scriptPtr = self->mpScript;
+        u16 *scriptPtr = mpScript;
         u16 val = *scriptPtr;
-        self->mpScript = scriptPtr + 1;
-        self->CSuper.CBody.mHealth = val;
+        mpScript = scriptPtr + 1;
+        CSuper.CBody.mHealth = val;
         break;
     }
     case 0x2101:
     {
-        u16 *scriptPtr = self->mpScript;
+        u16 *scriptPtr = mpScript;
         u16 val = *scriptPtr;
-        self->mpScript = scriptPtr + 1;
-        self->CSuper.CBody.mRMinor = val;
+        mpScript = scriptPtr + 1;
+        CSuper.CBody.mRMinor = val;
         break;
     }
     case 0x2125:
     {
-        u16 *p = self->mpScript;
+        u16 *p = mpScript;
         u16 idx = *p;
         p++;
-        self->mpScript = p;
+        mpScript = p;
         u16 val2 = *p;
         p++;
-        self->mBaddyAttributes[idx] = val2;
-        self->mpScript = p;
+        mBaddyAttributes[idx] = val2;
+        mpScript = p;
         break;
     }
     case 0x2114:
     {
-        u16 *scriptPtr = self->mpScript;
+        u16 *scriptPtr = mpScript;
         u16 val = *scriptPtr;
-        self->mpScript = scriptPtr + 1;
-        self->mPattern = val;
+        mpScript = scriptPtr + 1;
+        mPattern = val;
         break;
     }
     case 0x2115:
     {
-        u16 *scriptPtr = self->mpScript;
+        u16 *scriptPtr = mpScript;
         u16 val = *scriptPtr;
-        self->mpScript = scriptPtr + 1;
-        self->mSubPattern = val;
+        mpScript = scriptPtr + 1;
+        mSubPattern = val;
         break;
     }
     case 0x2120:
     {
-        u16 *scriptPtr = self->mpScript;
+        u16 *scriptPtr = mpScript;
         u16 idx = *scriptPtr;
-        self->mpScript = scriptPtr + 1;
-        u16 val = self->GetScriptValue();
-        self->mRegister[idx & 0xFF] = val;
+        mpScript = scriptPtr + 1;
+        u16 val = GetScriptValue();
+        mRegister[idx & 0xFF] = val;
         break;
     }
     case 0x2121:
     {
-        u16 *scriptPtr = self->mpScript;
+        u16 *scriptPtr = mpScript;
         short val = *(short *)scriptPtr;
-        self->mpScript = scriptPtr + 1;
-        self->CSuper.mAnimSpeed = (int)val;
+        mpScript = scriptPtr + 1;
+        CSuper.mAnimSpeed = (int)val;
         break;
     }
     case 0x2122:
     {
-        u16 *scriptPtr = self->mpScript;
+        u16 *scriptPtr = mpScript;
         u16 val = *scriptPtr;
-        self->mpScript = scriptPtr + 1;
-        self->mGroundToOrigin = (s16)val;
+        mpScript = scriptPtr + 1;
+        mGroundToOrigin = (s16)val;
         break;
     }
     }
@@ -1516,11 +1490,10 @@ void CBaddy_SetVariable(CBaddy *self, unsigned short variable)
  * Mangled:   GetVariable__6CBaddyUs
  * Demangled: CBaddy::GetVariable(unsigned short)
  *
- * @param self Implicit `this` pointer.
  * @param variable Script variable selector.
  * @return The selected signed 16-bit value, or zero when unavailable.
  */
-short CBaddy_GetVariable(CBaddy *self, unsigned short variable)
+short CBaddy::GetVariable(unsigned short variable)
 {
     short value;
 
@@ -1535,7 +1508,7 @@ short CBaddy_GetVariable(CBaddy *self, unsigned short variable)
         {
             unsigned int dist = Utils_XZDist(
                 *reinterpret_cast<const CVector *>(
-                    &self->CSuper.CBody.CItem.mPos),
+                    &this->CSuper.CBody.CItem.mPos),
                 *reinterpret_cast<const CVector *>(
                     &reinterpret_cast<CBodyOwner *>(MechList)->CItem.mPos));
             if (dist >= 0x2000)
@@ -1550,37 +1523,38 @@ short CBaddy_GetVariable(CBaddy *self, unsigned short variable)
     case 0x2133:
         if (reinterpret_cast<CBodyOwner *>(MechList) != 0)
         {
-            CVectorOwner eye_pos = self->CSuper.CBody.CItem.mPos;
-            eye_pos.vy -= self->mOriginToEye << 12;
+            CVector eye_pos = reinterpret_cast<const CVector &>(
+                this->CSuper.CBody.CItem.mPos);
+            eye_pos.vy -= this->mOriginToEye << 12;
             return (short)Utils_LineOfSight(
-                *reinterpret_cast<const CVector *>(&eye_pos),
+                eye_pos,
                 *reinterpret_cast<const CVector *>(
                     &reinterpret_cast<CBodyOwner *>(MechList)->CItem.mPos));
         }
         return 0;
 
     case 0x212E:
-        value = self->mVerticalCompliance;
+        value = this->mVerticalCompliance;
         break;
 
     case 0x212C:
-        value = self->mInputSignal;
+        value = this->mInputSignal;
         break;
 
     case 0x212D:
-        value = self->mHit;
+        value = this->mHit;
         break;
 
     case 0x2140:
-        value = (short)(self->CSuper.CBody.CItem.mPos.vx >> 12);
+        value = (short)(this->CSuper.CBody.CItem.mPos.vx >> 12);
         break;
 
     case 0x2141:
-        value = (short)(self->CSuper.CBody.CItem.mPos.vy >> 12);
+        value = (short)(this->CSuper.CBody.CItem.mPos.vy >> 12);
         break;
 
     case 0x2142:
-        value = (short)(self->CSuper.CBody.CItem.mPos.vz >> 12);
+        value = (short)(this->CSuper.CBody.CItem.mPos.vz >> 12);
         break;
 
     case 0x2150:
@@ -1605,42 +1579,42 @@ short CBaddy_GetVariable(CBaddy *self, unsigned short variable)
         return 0;
 
     case 0x2100:
-        value = self->CSuper.CBody.mHealth;
+        value = this->CSuper.CBody.mHealth;
         break;
 
     case 0x2129:
     {
-        unsigned short *script = self->mpScript;
+        unsigned short *script = this->mpScript;
         unsigned short limit = *script;
-        self->mpScript = script + 1;
+        this->mpScript = script + 1;
         value = (short)Rnd(limit);
         break;
     }
 
     case 0x2120:
     {
-        unsigned short *script = self->mpScript;
+        unsigned short *script = this->mpScript;
         unsigned char index = *(unsigned char *)script;
-        self->mpScript = script + 1;
-        value = self->mRegister[index];
+        this->mpScript = script + 1;
+        value = this->mRegister[index];
         break;
     }
 
     case 0x212A:
-        value = self->CSuper.CBody.mNode;
+        value = this->CSuper.CBody.mNode;
         break;
 
     case 0x212B:
     {
-        unsigned short *script = self->mpScript;
+        unsigned short *script = this->mpScript;
         unsigned short node = *script;
-        self->mpScript = script + 1;
+        this->mpScript = script + 1;
         if (node & 0x2000)
         {
-            BaddyVTable *vtable = Baddy_Dispatch(self);
+            BaddyVTable *vtable = Baddy_Dispatch(this);
             int (*method)(CBaddy *, unsigned short) =
                 vtable->Variable.GetVariableInt;
-            node = method(self, node) & 0xFFFF;
+            node = method(this, node) & 0xFFFF;
         }
 
         unsigned short *p_links = Trig_GetLinksPointer(node);
@@ -1671,27 +1645,26 @@ short CBaddy_GetVariable(CBaddy *self, unsigned short variable)
  */
 CScriptOnlyBaddy::CScriptOnlyBaddy(short *p_info, int node_index)
 {
-    CScriptOnlyBaddy *self = this;
     void *vtable = (void *)&__vt_16CScriptOnlyBaddy;
     CBruce *createdByPlayer = pCurrentPlayer;
-    self->CSuper.CBody.CItem.vtable = vtable;
-    self->mpCreatedByPlayer = createdByPlayer;
-    CBody *body = reinterpret_cast<CBody *>(&self->CSuper.CBody);
+    CSuper.CBody.CItem.vtable = vtable;
+    mpCreatedByPlayer = createdByPlayer;
+    CBody *body = reinterpret_cast<CBody *>(&CSuper.CBody);
     short *pos = body->SquirtPos(p_info);
     short *angles = body->SquirtAngles(pos);
-    self->mpScript = (u16 *)angles;
-    unsigned short flags = self->CSuper.CBody.CItem.mFlags;
-    self->mLoopingSoundUpdate = -1;
-    unsigned short field52 = self->CSuper.CBody.mCBodyFlags;
-    self->mDoScript = 1;
-    self->CSuper.CBody.mNode = (unsigned short)node_index;
+    mpScript = (u16 *)angles;
+    unsigned short flags = CSuper.CBody.CItem.mFlags;
+    mLoopingSoundUpdate = -1;
+    unsigned short field52 = CSuper.CBody.mCBodyFlags;
+    mDoScript = 1;
+    CSuper.CBody.mNode = (unsigned short)node_index;
     flags |= 0x41;
     field52 &= 0xFFEF;
-    self->CSuper.CBody.CItem.mFlags = flags;
-    self->CSuper.CBody.mCBodyFlags = field52;
+    CSuper.CBody.CItem.mFlags = flags;
+    CSuper.CBody.mCBodyFlags = field52;
     body->AttachTo(reinterpret_cast<CBody **>(&BaddyList));
-    self->CSuper.CBody.mRMinor = 0;
-    self->CSuper.CBody.CItem.mType = 0xCB;
+    CSuper.CBody.mRMinor = 0;
+    CSuper.CBody.CItem.mType = 0xCB;
 }
 
 /**
@@ -1729,25 +1702,18 @@ CScriptOnlyBaddy::~CScriptOnlyBaddy()
         SRainEntry *arr = mpWeather;
         if (arr != 0)
         {
-            register int count asm("$5") = (int)mWeatherData;
-            if (count != 0)
+            for (int i = 0; i < (int)mWeatherData; i++)
             {
-                int i = 0;
-                do
+                int idx = i;
+                SRainEntry *base = mpWeather;
+                SRainEntry *p_entry = &base[idx];
+                CGPolyLine *obj = p_entry->p_line;
+                if (obj != 0)
                 {
-                    int idx = i;
-                    SRainEntry *base = mpWeather;
-                    SRainEntry *p_entry = &base[idx];
-                    CGPolyLine *obj = p_entry->p_line;
-                    if (obj != 0)
-                    {
-                        BaddyEffectVTable *vtbl = obj->_vf;
-                        void (*dtor)(void *, int) = vtbl->Destroy;
-                        dtor(obj, 3);
-                    }
-                    count = (int)mWeatherData;
-                    i++;
-                } while (i < count);
+                    BaddyEffectVTable *vtbl = obj->_vf;
+                    void (*dtor)(void *, int) = vtbl->Destroy;
+                    dtor(obj, 3);
+                }
             }
             Mem_Delete(mpWeather);
         }
@@ -1762,107 +1728,95 @@ CScriptOnlyBaddy::~CScriptOnlyBaddy()
  * Mangled:   AI__16CScriptOnlyBaddy
  * Demangled: CScriptOnlyBaddy::AI(void)
  *
- * @param self Implicit `this` pointer.
  */
-void CScriptOnlyBaddy_AI(CScriptOnlyBaddy *self)
+void CScriptOnlyBaddy::AI()
 {
-    unsigned short inputFlags = self->CSuper.CBody.mInputFlags;
-    self->CSuper.CBody.CItem.mFlags |= 0x41;
-    self->mInputFlagsCopy = inputFlags;
+    unsigned short inputFlags = CSuper.CBody.mInputFlags;
+    CSuper.CBody.CItem.mFlags |= 0x41;
+    mInputFlagsCopy = inputFlags;
 
     if (inputFlags & 1)
     {
-        self->CSuper.CBody.mInputFlags = inputFlags & 0xFFFE;
-        self->mInputSignal++;
+        CSuper.CBody.mInputFlags = inputFlags & 0xFFFE;
+        mInputSignal++;
     }
 
-    if (self->mDoScript != 0)
+    if (mDoScript != 0)
     {
-        if (self->mWaitTimer != 0)
+        if (mWaitTimer != 0)
         {
-            self->mWaitTimer--;
+            mWaitTimer--;
         }
         else
         {
-            self->ParseScript(self->mpScript);
+            ParseScript(mpScript);
         }
     }
     else
     {
-        BaddyVTable *vtable = Baddy_Dispatch(self);
+        BaddyVTable *vtable = Baddy_Dispatch(this);
         void (*quickAI)(CBaddy *) = vtable->Die;
-        quickAI(self);
+        quickAI(this);
     }
 
-    if (self->mLoopingSoundUpdate != -1 &&
-        TTime % self->mLoopingSoundUpdate == 0)
+    if (mLoopingSoundUpdate != -1 &&
+        TTime % mLoopingSoundUpdate == 0)
     {
         int t = SFXLEVEL;
-        unsigned int sound = self->mLoopingSound;
-        SFXLEVEL = t * self->mLoopingSoundVol / 100;
+        unsigned int sound = mLoopingSound;
+        SFXLEVEL = t * mLoopingSoundVol / 100;
         SFX_ModifyPos(
             sound,
-            *(const CVector *)&self->CSuper.CBody.CItem.mPos,
+            *(const CVector *)&CSuper.CBody.CItem.mPos,
             0);
         SFXLEVEL = t;
     }
 
-    if (self->mpWeather != 0)
+    if (mpWeather != 0)
     {
         int ground = reinterpret_cast<CBodyOwner *>(MechList)->mShadowPos.vy;
         int i = 0;
 
-        if (self->mWeatherData != 0)
+        if (mWeatherData != 0)
         {
-            CVectorOwner pos;
-            CVectorOwner offset;
-            CVectorOwner sum;
-            CVectorOwner tail;
-            CVectorOwner cameraVelocity;
-            CVectorOwner *posVector = &pos;
-            CVectorOwner *offsetVector = &offset;
-            int shift;
+            CVector pos;
 
             do
             {
-                SRainEntry *p_entry = &self->mpWeather[i];
+                SRainEntry *p_entry = &mpWeather[i];
 
                 {
                     CGPolyLine *line = p_entry->p_line;
-                    pos = *(CVectorOwner *)&line->mStart;
+                    pos = line->mStart;
                 }
-                reinterpret_cast<CVector &>(*posVector) += p_entry->vel;
+                pos += p_entry->vel;
 
                 if (ground < pos.vy)
                 {
+                    CVector offset;
                     int randomX = (Rnd(0x960) - 0x4B0) << 12;
                     int randomY = (Rnd(0x190) - 0x4B0) << 12;
                     int randomZ = (Rnd(0x960) - 0x4B0) << 12;
                     offset.vx = randomX;
                     offset.vy = randomY;
                     offset.vz = randomZ;
-                    Baddy_VectorAddAbi(
-                        &sum,
-                        &reinterpret_cast<CBodyOwner *>(MechList)->CItem.mPos,
-                        &offset);
-                    pos = sum;
+                    pos = reinterpret_cast<const CVector &>(
+                              reinterpret_cast<CBodyOwner *>(MechList)
+                                  ->CItem.mPos) +
+                          offset;
                 }
 
-                *(CVectorOwner *)&p_entry->p_line->mStart = pos;
+                p_entry->p_line->mStart = pos;
                 SLineSeg *segment = p_entry->p_line->mSegs;
-                Baddy_VectorSubtractAbi(
-                    &tail, posVector,
-                    (const CVectorOwner *)&p_entry->vel);
-                shift = 1;
-                Baddy_VectorShiftRightAbi(
-                    &cameraVelocity,
-                    &reinterpret_cast<CBodyOwner *>(CameraList)->mVel,
-                    &shift);
-                Baddy_VectorAddAbi(offsetVector, &tail, &cameraVelocity);
-                *(CVectorOwner *)&segment->End = offset;
+                CVector offset =
+                    (pos - p_entry->vel) +
+                    (reinterpret_cast<const CVector &>(
+                         reinterpret_cast<CBodyOwner *>(CameraList)->mVel) >>
+                     1);
+                segment->End = offset;
 
                 i++;
-            } while (i < self->mWeatherData);
+            } while (i < mWeatherData);
         }
     }
 }
@@ -1874,13 +1828,11 @@ void CScriptOnlyBaddy_AI(CScriptOnlyBaddy *self)
  * Mangled:   SetVariable__16CScriptOnlyBaddyUs
  * Demangled: CScriptOnlyBaddy::SetVariable(unsigned short)
  *
- * @param self  Script-only baddy receiving the variable.
  * @param variable  Script variable selector.
  */
-void CScriptOnlyBaddy_SetVariable(
-    CScriptOnlyBaddy *self, unsigned short variable)
+void CScriptOnlyBaddy::SetVariable(unsigned short variable)
 {
-    CBaddy_SetVariable(self, variable);
+    CBaddy::SetVariable(variable);
 }
 
 /**
@@ -1890,106 +1842,103 @@ void CScriptOnlyBaddy_SetVariable(
  * Mangled:   ExecuteCommand__16CScriptOnlyBaddyUs
  * Demangled: CScriptOnlyBaddy::ExecuteCommand(unsigned short)
  *
- * @param self     Script-only actor receiving the command.
  * @param command  Script opcode to execute.
  * @return One when the command was handled, otherwise the base handler's result.
  */
-int CScriptOnlyBaddy_ExecuteCommand(
-    CScriptOnlyBaddy *self, unsigned short command)
+int CScriptOnlyBaddy::ExecuteCommand(unsigned short command)
 {
-    CVectorOwner origin;
+    CVector origin;
     int i;
     SRainEntry *p_entry;
-    CVectorOwner offset;
+    CVector offset;
     CGPolyLine *p_droplet;
 
     switch (command)
     {
     case 0x4507:
     {
-        if (self->mLoopingSound != 0)
+        if (mLoopingSound != 0)
         {
-            SFX_Stop(self->mLoopingSound);
+            SFX_Stop(mLoopingSound);
         }
 
-        unsigned short *script = self->mpScript;
+        unsigned short *script = mpScript;
         unsigned short sound = *script;
-        self->mpScript = script + 1;
+        mpScript = script + 1;
         unsigned int handle = SFX_PlayX(sound, 0x2000, 0);
         int volume = SFX_v;
-        self->mLoopingSound = handle;
-        self->mLoopingSoundUpdate = -1;
-        self->mLoopingSoundVol = volume;
+        mLoopingSound = handle;
+        mLoopingSoundUpdate = -1;
+        mLoopingSoundVol = volume;
         break;
     }
 
     case 0x4508:
     {
-        if (self->mLoopingSound != 0)
+        if (mLoopingSound != 0)
         {
-            SFX_Stop(self->mLoopingSound);
+            SFX_Stop(mLoopingSound);
         }
 
-        unsigned short sound = *self->mpScript++;
-        self->mLoopingSoundUpdate = *self->mpScript++;
+        unsigned short sound = *mpScript++;
+        mLoopingSoundUpdate = *mpScript++;
         unsigned int handle = SFX_PlayPos(
             sound,
-            *(const CVector *)&self->CSuper.CBody.CItem.mPos,
+            *(const CVector *)&CSuper.CBody.CItem.mPos,
             0);
         int volume = SFX_v;
-        self->mLoopingSound = handle;
-        self->mLoopingSoundVol = volume;
+        mLoopingSound = handle;
+        mLoopingSoundVol = volume;
         break;
     }
 
     case 0x4509:
-        if (self->mLoopingSound != 0)
+        if (mLoopingSound != 0)
         {
-            SFX_Stop(self->mLoopingSound);
+            SFX_Stop(mLoopingSound);
         }
-        self->mLoopingSound = 0;
+        mLoopingSound = 0;
         break;
 
     case 0x4506:
         if (reinterpret_cast<CBodyOwner *>(MechList) != 0)
         {
-            self->CSuper.CBody.CItem.mPos =
+            CSuper.CBody.CItem.mPos =
                 reinterpret_cast<CBodyOwner *>(MechList)->CItem.mPos;
         }
         break;
 
     case 0x4700:
     {
-        unsigned short *script = self->mpScript;
+        unsigned short *script = mpScript;
         unsigned short enabled = *script;
-        self->mpScript = script + 1;
+        mpScript = script + 1;
         if (enabled != 0)
         {
-            self->mSpecificFlags |= 0x100;
+            mSpecificFlags |= 0x100;
         }
         else
         {
-            self->mSpecificFlags &= ~0x100;
+            mSpecificFlags &= ~0x100;
         }
         break;
     }
 
     case 0x4504:
-        self->mpScript += 4;
+        mpScript += 4;
         // Fall through: this variant skips four leading script parameters.
     case 0x429B:
     {
         CSmokeJet *smoke = static_cast<CSmokeJet *>(
-            Bit_AllocateStorage(sizeof(CSmokeJet)));
+            CBit::operator new(sizeof(CSmokeJet)));
         if (smoke != 0)
         {
-            unsigned short *script = self->mpScript;
-            smoke = Smoke_Construct(
-                smoke,
+            unsigned short *script = mpScript;
+            smoke = ::new (smoke) CSmokeJet(
                 reinterpret_cast<const CVector &>(
-                    self->CSuper.CBody.CItem.mPos),
+                    CSuper.CBody.CItem.mPos),
                 reinterpret_cast<const CSVector &>(
-                    self->CSuper.CBody.CItem.mAngles),
+                    CSuper.CBody.CItem.mAngles),
                 script[0],
                 0xFFFF,
                 script[1],
@@ -2000,25 +1949,24 @@ int CScriptOnlyBaddy_ExecuteCommand(
                 0xCCE0187C);
         }
 
-        self->mpSmokeJet = smoke;
+        mpSmokeJet = smoke;
         smoke->mProtected = 1;
-        self->mpScript += 6;
+        mpScript += 6;
         break;
     }
 
     case 0x42A1:
     {
         CSmokeJet *smoke = static_cast<CSmokeJet *>(
-            Bit_AllocateStorage(sizeof(CSmokeJet)));
+            CBit::operator new(sizeof(CSmokeJet)));
         if (smoke != 0)
         {
-            unsigned short *script = self->mpScript;
-            smoke = Smoke_Construct(
-                smoke,
+            unsigned short *script = mpScript;
+            smoke = ::new (smoke) CSmokeJet(
                 reinterpret_cast<const CVector &>(
-                    self->CSuper.CBody.CItem.mPos),
+                    CSuper.CBody.CItem.mPos),
                 reinterpret_cast<const CSVector &>(
-                    self->CSuper.CBody.CItem.mAngles),
+                    CSuper.CBody.CItem.mAngles),
                 script[0],
                 0xFFFF,
                 script[1],
@@ -2029,47 +1977,40 @@ int CScriptOnlyBaddy_ExecuteCommand(
                 0x68B7B136);
         }
 
-        self->mpSmokeJet = smoke;
-        self->mpScript += 6;
+        mpSmokeJet = smoke;
+        mpScript += 6;
         break;
     }
 
     case 0x429F:
     {
-        CSmokeJet *smoke = self->mpSmokeJet;
+        CSmokeJet *smoke = mpSmokeJet;
         if (smoke != 0)
         {
             void (*destroy)(void *, int) = smoke->_vf->Destroy;
             destroy(smoke, 3);
         }
-        self->mpSmokeJet = 0;
+        mpSmokeJet = 0;
         break;
     }
 
     case 0x4503:
     {
-        self->mWeatherData = self->GetScriptValue();
+        mWeatherData = GetScriptValue();
         SRainEntry *weather = (SRainEntry *)Mem_New(
-            (unsigned int)self->mWeatherData << 4, 0, 1);
+            (unsigned int)mWeatherData << 4, 0, 1);
         CBodyOwner *mech = reinterpret_cast<CBodyOwner *>(MechList);
-        unsigned int weatherCount = self->mWeatherData;
-        self->mpWeather = weather;
+        unsigned int weatherCount = mWeatherData;
+        mpWeather = weather;
         UseCacheForBits = 0;
 
-        origin = mech->CItem.mPos;
+        origin = reinterpret_cast<const CVector &>(mech->CItem.mPos);
         i = 0;
         if (weatherCount != 0)
         {
-            CVectorOwner end;
-            CVectorOwner tail;
-            CVectorOwner cameraVelocity;
-            int shift;
-            CVectorOwner *offsetVector = &offset;
-            CVectorOwner *endVector = &end;
-
             do
             {
-                p_entry = &self->mpWeather[i];
+                p_entry = &mpWeather[i];
 
                 int offsetX = (Rnd(0x960) - 0x4B0) << 12;
                 int offsetY = (Rnd(0x190) - 0x4B0) << 12;
@@ -2077,8 +2018,7 @@ int CScriptOnlyBaddy_ExecuteCommand(
                 offset.vx = offsetX;
                 offset.vy = offsetY;
                 offset.vz = offsetZ;
-                reinterpret_cast<CVector &>(*offsetVector) +=
-                    reinterpret_cast<const CVector &>(origin);
+                offset += origin;
 
                 int velocityX = (Rnd(0x10) - 8) << 12;
                 int velocityY = (Rnd(0x30) + 0x30) << 12;
@@ -2088,27 +2028,22 @@ int CScriptOnlyBaddy_ExecuteCommand(
                 p_entry->vel.vz = velocityZ;
 
                 p_droplet = static_cast<CGPolyLine *>(
-                    Bit_AllocateStorage(sizeof(CGPolyLine)));
+                    CBit::operator new(sizeof(CGPolyLine)));
                 if (p_droplet != 0)
                 {
-                    p_droplet = Baddy_ConstructWeatherLine(p_droplet, 1);
+                    p_droplet = ::new (p_droplet) CGPolyLine(1);
                 }
 
                 p_entry->p_line = p_droplet;
                 p_droplet->mProtected = 1;
-                *(CVectorOwner *)&p_droplet->mStart = offset;
+                p_droplet->mStart = offset;
 
                 SLineSeg *segment = p_droplet->mSegs;
-                Baddy_VectorSubtractAbi(
-                    &tail, offsetVector,
-                    (const CVectorOwner *)&p_entry->vel);
-                shift = 1;
-                Baddy_VectorShiftRightAbi(
-                    &cameraVelocity,
-                    &reinterpret_cast<CBodyOwner *>(CameraList)->mVel,
-                    &shift);
-                Baddy_VectorAddAbi(endVector, &tail, &cameraVelocity);
-                *(CVectorOwner *)&segment->End = end;
+                segment->End =
+                    (offset - p_entry->vel) +
+                    (reinterpret_cast<const CVector &>(
+                         reinterpret_cast<CBodyOwner *>(CameraList)->mVel) >>
+                     1);
 
                 p_droplet->mStartR = 0x40;
                 p_droplet->mStartG = 0x40;
@@ -2119,7 +2054,7 @@ int CScriptOnlyBaddy_ExecuteCommand(
                 p_droplet->SetSemiTransparent();
 
                 i++;
-            } while (i < self->mWeatherData);
+            } while (i < mWeatherData);
         }
 
         UseCacheForBits = 1;
@@ -2127,7 +2062,7 @@ int CScriptOnlyBaddy_ExecuteCommand(
     }
 
     default:
-        return CBaddy_ExecuteCommand(self, command);
+        return CBaddy::ExecuteCommand(command);
     }
 
     return 1;

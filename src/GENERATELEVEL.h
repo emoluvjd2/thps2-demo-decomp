@@ -13,7 +13,7 @@
 #define GENERATELEVEL_DECL_ATTR __attribute__((section(".data")))
 #endif
 
-extern "C" void *GenerateLevel GENERATELEVEL_DECL_ATTR;
+extern void *GenerateLevel GENERATELEVEL_DECL_ATTR;
 
 #undef GENERATELEVEL_DECL_ATTR
 

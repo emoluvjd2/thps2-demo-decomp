@@ -12,7 +12,6 @@ unsigned int Utils_Dist(const CVector &a, const CVector &b);
 unsigned int Utils_XZDist(const CVector &a, const CVector &b);
 /** Returns the fast octahedral approximation of a three-dimensional distance. */
 unsigned int Utils_CrapDist(const CVector &a, const CVector &b);
-void Utils_VblankProcessing(void);
 void MyVSync(void);
 void Pause(int Time);
 void Utils_InitialRand(int a);
@@ -33,8 +32,6 @@ void Utils_CopyString(const char *source, char *destination);
 int Utils_ArcCos(int cosine);
 int Utils_LineOfSight(const CVector &start, const CVector &end);
 int Utils_GetGroundHeight(const CVector &position, int above, int below);
-int Utils_KillObjectsInBox(const CVector &min, const CVector &max,
-                           CBody *list, bool useDie);
 int Utils_KillEverythingInBox(const CVector &min, const CVector &max);
 void Utils_SetVisibilityInBox(const CVector &min, const CVector &max,
                               bool visible, bool inside);
@@ -80,8 +77,8 @@ extern "C" int DoVblankProcessing;
 extern "C" int ExplosionStackIndex;
 
 // External game state read or updated by the utility owner.
-extern "C" int SFX_ReverbDepthSetTimer
-    __attribute__((section(".data")));
+#define SFXREVERBTIMER_ABSOLUTE_DECLARATION
+#include "SFXREVERBTIMER.h"
 
 #endif // UTILS_OWNER_DECLARATIONS
 

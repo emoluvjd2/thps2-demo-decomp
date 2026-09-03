@@ -43,8 +43,7 @@ struct ImageBmpPaletteEntry {
 #include "IMAGEBASE.h"
 
 /** Image split into independently allocated pixel and VRAM slices. */
-struct SlicedImage2 {
-    Image Image;
+struct SlicedImage2 : Image {
     Slice *SliceTab;
     short W;
     short H;
@@ -92,9 +91,7 @@ struct SlicedImage2 {
 };
 
 /** BMP-backed sliced image with no additional target storage. */
-struct Sprite2 {
-    SlicedImage2 SlicedImage2;
-
+struct Sprite2 : SlicedImage2 {
     /** Build a sprite from a bitmap file. */
     Sprite2(char *filename, int pack, int sliceWidth, int sliceHeight);
     /** Build a sprite from an in-memory bitmap. */
@@ -103,20 +100,20 @@ struct Sprite2 {
     void setData(void *data);
 
 #ifndef FONTTOOLS_SLICED_IMAGE_CONSTRUCTION
-    // RotateSprite embeds this base and invokes the recovered ABI constructor
-    // explicitly, so the implicit construction step must remain empty.
     Sprite2() {}
 #endif
 };
 
 /** Rotatable sprite extension with the target-proven 64-byte layout. */
-struct RotateSprite {
-    Sprite2 Sprite2;
+struct RotateSprite : Sprite2 {
     unsigned char AspectType;
 
     RotateSprite(char *filename, int pack, int slice_w, int slice_h);
     void draw(int x, int y, int rot);
 };
+
+/** Virtual dispatch table owned by IMAGE.cpp. */
+extern int __vt_12RotateSprite[6];
 
 typedef char image_Image_size_must_be_28[(sizeof(Image) == 28) ? 1 : -1];
 typedef char image_SlicedImage2_size_must_be_60[(sizeof(SlicedImage2) == 60) ? 1 : -1];
@@ -131,3 +128,50 @@ typedef char image_SinCos_size_must_be_4[
     (sizeof(ImageSinCos) == 4) ? 1 : -1];
 
 #endif // IMAGE_OWNER_LAYOUT && !IMAGE_OWNER_LAYOUT_EMITTED
+
+#if defined(IMAGE_DECLARE_OWNER_VTABLE_ADDRESSES)
+/** Scalar address of IMAGE's construction-phase Image vtable. */
+extern int DAT_800da744;
+/** Scalar address of IMAGE's destruction-phase Image vtable. */
+extern int DAT_800da754;
+/** Sprite2 dispatch table owned by IMAGE. */
+extern int __vt_7Sprite2[6];
+/** SlicedImage2 dispatch table owned by IMAGE. */
+extern int __vt_12SlicedImage2[6];
+#undef IMAGE_DECLARE_OWNER_VTABLE_ADDRESSES
+#endif
+
+#if defined(IMAGE_DECLARE_SPRITE2_DESTRUCTOR)
+struct Sprite2;
+void Sprite2_DestroyAbi(Sprite2 *sprite, int inCharge)
+    asm("_._7Sprite2");
+#undef IMAGE_DECLARE_SPRITE2_DESTRUCTOR
+#endif
+
+#if defined(IMAGE_DECLARE_ROTATE_SPRITE_DESTRUCTOR)
+struct RotateSprite;
+void RotateSprite_DestroyAbi(RotateSprite *sprite, int inCharge)
+    asm("_._12RotateSprite");
+#undef IMAGE_DECLARE_ROTATE_SPRITE_DESTRUCTOR
+#endif
+
+#if defined(IMAGE_DECLARE_DEFAULT_CONSTRUCTOR_ABI)
+struct Image;
+struct SlicedImage2;
+namespace ImageDefaultConstructorAbi
+{
+/** Construct an Image through its target default-constructor entry. */
+extern "C" Image *__5Image(Image *image);
+/** Construct a SlicedImage2 through its target default-constructor entry. */
+extern "C" SlicedImage2 *__12SlicedImage2(SlicedImage2 *image);
+}
+#undef IMAGE_DECLARE_DEFAULT_CONSTRUCTOR_ABI
+#endif
+
+#if defined(IMAGE_DECLARE_SLICED_IMAGE2_DESTRUCTOR)
+struct SlicedImage2;
+/** Addressable destructor entry used by SlicedImage2 and Sprite2 owners. */
+void SlicedImage2_Destroy(SlicedImage2 *image, int inCharge)
+    asm("_._12SlicedImage2");
+#undef IMAGE_DECLARE_SLICED_IMAGE2_DESTRUCTOR
+#endif

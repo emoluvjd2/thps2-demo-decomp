@@ -5,33 +5,26 @@
 //
 // Compiled with cc1plus (GCC 2.91.66-psx). Compiler auto-mangles symbol names.
 
-
-// === Forward type declarations ===
-// Empty struct bodies allow by-value/by-reference parameters in C++
-
-#define __SKIP_BLOOD_EXTERNS__
-
 #define BIT_BLOOD_MANAGER_LAYOUT
 #include "BIT.h"
 #undef BIT_BLOOD_MANAGER_LAYOUT
 
-
-struct CBruce;
-
 // GCC 2.x emits a private copy of `CClass::~CClass` beside a private base
 // vtable in every owner that derives from CClass.  `MAIN.SYM` records 25 such
 // `_._6CClass` copies and names no base vtable, so both are file-local here.
-// The filesystem-safe spelling keeps the per-address target assembly reachable.
-static void Blood_ClassDestructor(CClass *self, int flags)
-    asm("__DOT__6CClass_8006B690");
+// The legal per-address identifier keeps the private target copy distinct.
+extern "C"
+{
+static void __DOT__6CClass_8006B690(CClass *self, int flags);
+}
 
 // C++ forbids taking a destructor's address, so the public vtable slot uses an
 // addressable declaration of the symbol this owner already defines.
-extern "C" void Blood_DestructorAbi(Blood *self, int flags) asm("_._5Blood");
+void Blood_DestructorAbi(Blood *blood, int inCharge) asm("_._5Blood");
 
 // Consecutive eight-byte-aligned small-data words per vtable rather than
 // arrays, so -G8 still yields the target's `addiu $vX, $gp, off` form.
-extern "C" int __vt_5Blood
+int __vt_5Blood
     __attribute__((section(".sdata"), aligned(8))) = 0;
 static int Blood_VTableIndex = 0;
 static int Blood_VTableDtor = (int)&Blood_DestructorAbi;
@@ -39,7 +32,7 @@ static int Blood_VTableDtor = (int)&Blood_DestructorAbi;
 static int Blood_BaseVTable
     __attribute__((section(".sdata"), aligned(8))) = 0;
 static int Blood_BaseVTableIndex = 0;
-static int Blood_BaseVTableDtor = (int)&Blood_ClassDestructor;
+static int Blood_BaseVTableDtor = (int)&__DOT__6CClass_8006B690;
 
 // === Function implementations (address order) ===
 
@@ -52,17 +45,16 @@ static int Blood_BaseVTableDtor = (int)&Blood_ClassDestructor;
  *
  */
 Blood::Blood() {
-    Blood *self = this;
-    self->CClass.vtable = &__vt_5Blood;
+    CClass.vtable = &__vt_5Blood;
     int i = 0;
-    BloodBit **ptr = self->mBloodStack;
+    BloodBit **ptr = mBloodStack;
     do {
         *ptr = 0;
         i++;
         ptr++;
     } while (i < Blood::Capacity);
-    self->mBloodCount = 0;
-    self->mAge = Blood::InitialAge;
+    mBloodCount = 0;
+    mAge = Blood::InitialAge;
 }
 
 
@@ -142,7 +134,7 @@ void Blood::Update(CBruce *pBruce) {
  * GCC emitted this private copy last in the owner's text, so it remains at
  * the end of the translation unit.
  */
-static void Blood_ClassDestructor(CClass *self, int flags)
+static void __DOT__6CClass_8006B690(CClass *self, int flags)
 {
     self->vtable = &Blood_BaseVTable;
     if (flags & 1)

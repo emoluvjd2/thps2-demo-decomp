@@ -56,3 +56,24 @@ typedef char FrontPreLoaderStorage_size_must_be_52[
     (sizeof(FrontPreLoaderStorage) == sizeof(FrontPreLoader)) ? 1 : -1];
 
 #endif // FRONTPRE_H
+
+#ifdef FRONTPRE_DECLARE_PRE_INFO_OWNER_VIEW
+/**
+ * Four-byte owner declaration used to form the table's GP-relative address.
+ * Typed access remains in FRONTPRE.cpp because the recovered table has two
+ * eight-byte records while this compiler view controls the common's extent.
+ */
+extern int preInfo;
+
+#undef FRONTPRE_DECLARE_PRE_INFO_OWNER_VIEW
+#endif
+
+#ifdef FRONTPRE_DECLARE_FILENAME_FORMAT_ABSOLUTE_VIEW
+/**
+ * Absolute-address view of the owner's four-byte PRE filename format string.
+ * Its incomplete extent keeps BeginLoad from selecting a GP-relative access.
+ */
+extern char FrontPre_preManagerAddr[];
+
+#undef FRONTPRE_DECLARE_FILENAME_FORMAT_ABSOLUTE_VIEW
+#endif

@@ -31,10 +31,29 @@ enum MedalCreationConstant {
     MedalWobbleSpeed = 80
 };
 
+/** Pointer-only surface for the inherited body operations in CMedal's table. */
+struct CBody {
+    /** Mark this body dead. */
+    void Die();
+    /** Run this body's per-frame behavior. */
+    void EveryFrame();
+    /** Configure lighting before this body is drawn. */
+    void DoLightingSetup();
+    /** Apply one hit and report whether it was accepted. */
+    int Hit(int damage, const CVector &knock, int whatHit);
+    /** Release resources owned by the body. */
+    void DeleteStuff();
+};
+
 #include "SCAMERA.h"
 
 /** Readable ABI boundaries owned by other translation units. */
-extern "C" void Medal_DestroyBody(CMedal *, int) asm("_._5CBody");
+#define CBODY_ABI_ONLY
+#define CBODY_DECLARE_DESTRUCTOR
+#define CBODY_DESTRUCTOR_NAME Medal_DestroyBody
+#define CBODY_DESTRUCTOR_RECEIVER CMedal
+#include "CBODY.h"
+#undef CBODY_ABI_ONLY
 
 /** CItem storage embedded at the start of each medal body. */
 struct CMedalItemOwner {
@@ -141,14 +160,7 @@ struct CMedalVTable {
     void (*deleteStuff)(CMedal *);
 };
 
-extern "C" void Medal_DestroyEntry(CMedal *, int) asm("_._6CMedal");
-extern "C" void Medal_DeleteStuffEntry(CMedal *) asm("DeleteStuff__6CMedal");
-extern "C" void Medal_AIEntry(CMedal *) asm("AI__6CMedal");
-extern "C" void Medal_DieEntry(CMedal *) asm("Die__5CBody");
-extern "C" void Medal_DoLightingSetupEntry(CMedal *)
-    asm("DoLightingSetup__5CBody");
-extern "C" int Medal_HitEntry(CMedal *, int, const CVector &, int)
-    asm("Hit__5CBodyiRC7CVectori");
+void Medal_DestroyEntry(CMedal *, int) asm("_._6CMedal");
 
 typedef char CMedalItemOwner_size_must_be_76[
     (sizeof(CMedalItemOwner) == 76) ? 1 : -1];
@@ -167,15 +179,12 @@ CPowerUp *Medal_Create(EMedalType t, int x, int y, int z, int Size, int yvel);
 
 // === External globals ===
 #include "RCOSSIN.h"
-extern "C" CMedalVTable __vt_6CMedal;
 #include "CURRENTCAMERA.h"
 #include "ZEROVECTOR.h"
 
 /** Read one packed word for the scalar GTE transfer macros. */
 #define MEDAL_PACKED_WORD(value, index) \
     (reinterpret_cast<int *>(&(value))[index])
-
-extern "C" {
 
 /**
  * Cool white light used by the medal pickup model.
@@ -196,22 +205,20 @@ SLight Medal_DefaultLight __attribute__((section(".data"))) = {
     {64, 64, 64},
 };
 
-}
-
 /**
  * Medal virtual dispatch table in its original read-only owner section.
  */
-extern "C" CMedalVTable __vt_6CMedal
+CMedalVTable __vt_6CMedal
     __attribute__((section(".rdata"), aligned(8))) = {
         0,
         0,
         Medal_DestroyEntry,
-        Medal_DieEntry,
-        Medal_AIEntry,
-        (void (*)(CMedal *))CBody_EveryFrame,
-        Medal_DoLightingSetupEntry,
-        Medal_HitEntry,
-        Medal_DeleteStuffEntry,
+        (void (*)(CMedal *))&CBody::Die,
+        (void (*)(CMedal *))&CMedal::AI,
+        (void (*)(CMedal *))&CBody::EveryFrame,
+        (void (*)(CMedal *))&CBody::DoLightingSetup,
+        (int (*)(CMedal *, int, const CVector &, int))&CBody::Hit,
+        (void (*)(CMedal *))&CMedal::DeleteStuff,
 };
 
 /**

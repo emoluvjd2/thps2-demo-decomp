@@ -19,6 +19,12 @@
 #include "PSXREGION.h"
 #include <INLINE_C.H>
 
+/** Return caller-owned storage for an ordinary placement construction. */
+inline void *operator new(unsigned int, void *storage)
+{
+    return storage;
+}
+
 // === Forward type declarations ===
 
 // Owner-local layout slices recovered from MAIN_STRUCTS.h. SHATTER only needs
@@ -64,6 +70,8 @@ struct CBit {
     void SetPos(const CVector &pos);
     /** Mark this bit for removal. */
     void Die();
+    /** Allocate zero-initialized storage from the transient-bit heap. */
+    static void *operator new(unsigned int size);
     static void operator delete(void *p);
 };
 
@@ -110,16 +118,11 @@ struct CShatterBit : public CChunkBit {
 #include "M3DMATHS.h"
 #undef M3DMATHS_TYPED_API
 #include "M3DASM.h"
-extern "C" CShatterBit *CShatterBit_ctor(
-    CShatterBit *, const CSVector *, const CSVector *, const CSVector *,
-    const CVector *, int) asm("__11CShatterBitRC8CSVectorN21RC7CVectori");
 
 // === Owner-local globals ===
 // MAIN.SYM records these as SHATTER-local definitions rather than XDEFs.
-extern "C" {
 static CSVector *pNormal = 0;
 static int ShatterSound = 0;
-}
 
 /**
  * Zero-initialized SHATTER state in its target-proven local `.sbss` order.
@@ -127,7 +130,6 @@ static int ShatterSound = 0;
  * The explicit section preserves the original owner and lets the generic
  * ASPSX preparation step expose these local definitions before their uses.
  */
-extern "C" {
 static CVector ShatterSoundPos __attribute__((section(".sbss")));
 static CVector ShatterCentre
     __attribute__((section(".sbss"), aligned(16)));
@@ -136,25 +138,13 @@ static int VRAMTPage __attribute__((section(".sbss")));
 static u8 AverageR __attribute__((section(".sbss")));
 static u8 AverageG __attribute__((section(".sbss")));
 static u8 AverageB __attribute__((section(".sbss")));
-}
 
 // === $gp-relative globals ===
 // The target contributes one local vtable anchor word in this owner's `.sbss`.
-extern "C" int __vt_11CShatterBit;
+#define SHATTER_DECLARE_CSHATTERBIT_VTABLE_ADDRESS
+#include "SHATTER.h"
 
-// === External function declarations (base class) ===
-extern "C" CSmokeTrail *CSmokeTrail_ctor(
-    CSmokeTrail *, CVector *, int, int, int, int)
-    asm("__11CSmokeTrailR7CVectoriiii");
-CVector operator+(const CVector &a, const CVector &b);
-CVector operator-(const CVector &a, const CVector &b);
-CVector operator*(const CVector &vector, const int &scalar);
-CVector operator*(const int &scalar, const CVector &vector);
-CVector operator/(const CVector &vector, const int &scalar);
-CVector operator>>(const CVector &vector, const int &shift);
-CVector operator<<(const CVector &vector, const int &shift);
-CSVector operator*(const int &scalar, const CSVector &vector);
-CSVector operator>>(const CSVector &vector, const int &shift);
+#include "CVECTOROPS.h"
 
 // === Absolute-addressed globals ===
 #include "GLEVEL.h"
@@ -214,9 +204,9 @@ CShatterBit::CShatterBit(const CSVector &a, const CSVector &b,
     CalculateWorldCoords();
     if (Rnd(2) != 0) {
         CSmokeTrail *Smoke = static_cast<CSmokeTrail *>(
-            Bit_AllocateStorage(sizeof(CSmokeTrail)));
+            CBit::operator new(sizeof(CSmokeTrail)));
         if (Smoke != 0) {
-            Smoke = CSmokeTrail_ctor(Smoke, &mPos, 4, 128, 128, 128);
+            Smoke = ::new (Smoke) CSmokeTrail(mPos, 4, 128, 128, 128);
         }
         mpSmokeTrail = Smoke;
         Smoke->mProtected = 1;
@@ -423,9 +413,9 @@ static void Split(const CVector &a, const CVector &b, const CVector &c,
 
     UseCacheForBits = 0;
     CShatterBit *pBit = static_cast<CShatterBit *>(
-        Bit_AllocateStorage(sizeof(CShatterBit)));
+        CBit::operator new(sizeof(CShatterBit)));
     if (pBit != 0) {
-        pBit = CShatterBit_ctor(pBit, &OffA, &OffB, &OffC, &Centre, 0);
+        pBit = ::new (pBit) CShatterBit(OffA, OffB, OffC, Centre, 0);
     }
     UseCacheForBits = 1;
     pBit->SetRGB(AverageR, AverageG, AverageB);
@@ -766,7 +756,7 @@ void Shatter_Glass(int n, const CVector &p0, const CVector &p1, const CVector &p
 
         if (ReplaySoundLockout == 0) {
             CGlassBit *glass = static_cast<CGlassBit *>(
-                Bit_AllocateStorage(BIT_GLASS_STORAGE_SIZE));
+                CBit::operator new(BIT_GLASS_STORAGE_SIZE));
             if (glass != 0) {
                 CGlassBit_Construct(glass, p, a, GroundY,
                                     r, g, b, 100, 100, 100);
@@ -820,7 +810,7 @@ void Shatter_MaybeMakeGlassShatterSound(void) {
  * Mangled: _GLOBAL_.I.__11CShatterBitRC8CSVectorN21RC7CVectori
  *
  */
-extern "C" void Shatter_GlobalInit_CShatterBit(void) asm("_GLOBAL_.I.__11CShatterBitRC8CSVectorN21RC7CVectori");
+void Shatter_GlobalInit_CShatterBit(void) asm("_GLOBAL_.I.__11CShatterBitRC8CSVectorN21RC7CVectori");
 void Shatter_GlobalInit_CShatterBit(void)
 {
 }

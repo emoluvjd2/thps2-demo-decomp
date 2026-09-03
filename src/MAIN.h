@@ -291,7 +291,6 @@ struct SDemo {
 #endif
 
 // === Variables (absolute in this TU) ===
-extern "C" SViewport ApocalypseViewport;     // 0x800B7780
 extern "C" SViewport BottomRightBigViewport;     // 0x800B7820
 extern "C" SViewport BottomRightViewport;     // 0x800B77F8
 extern "C" SViewport BottomViewport;     // 0x800B77D0
@@ -305,7 +304,8 @@ extern "C" SViewport BottomViewport;     // 0x800B77D0
 #include "VIDEOINFO.h"
 extern "C" char HexDigits[17];     // 0x800B774C
 extern "C" SViewport LeftViewport;     // 0x800B7794
-extern "C" int POLYBUFFERSIZE[];     // 0x800DA328
+#define POLYBUFFERSIZE_ABSOLUTE_DECLARATION
+#include "POLYBUFFERSIZE.h"
 #include "PAL256.h"
 extern "C" SViewport RightViewport;     // 0x800B77A8
 extern "C" SControl TempPad;     // 0x800B81A8
@@ -313,7 +313,6 @@ extern "C" SViewport TopLeftBigViewport;     // 0x800B780C
 extern "C" SViewport TopLeftViewport;     // 0x800B77E4
 extern "C" SViewport TopViewport;     // 0x800B77BC
 extern "C" int Used[];     // 0x800DA4BC
-extern "C" int VblankUpdateBar[];     // 0x800DA2EC
 extern "C" SDemo pLittleDemo[4];     // 0x800B7760
 #include "PDOUBLEBUFFER.h"
 

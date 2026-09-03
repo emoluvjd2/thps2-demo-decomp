@@ -1,0 +1,28 @@
+#ifndef RESTARTNAMETABLES_INC_H
+#define RESTARTNAMETABLES_INC_H
+
+#ifdef RESTARTNAMETABLES_WITHIN_C_LINKAGE
+#define RESTARTNAMETABLES_DECL_LINKAGE extern
+#else
+#define RESTARTNAMETABLES_DECL_LINKAGE extern "C"
+#endif
+
+/** Restart names exposed by the trigger parser to the pause menu. */
+#ifdef RESTARTNAMETABLES_OWNER_DECLARATION
+RESTARTNAMETABLES_DECL_LINKAGE char *CheatRestarts[20];
+#else
+RESTARTNAMETABLES_DECL_LINKAGE char *CheatRestarts[];
+#endif
+
+/** Restart names exposed by the trigger parser to horse-mode flow. */
+#ifdef RESTARTNAMETABLES_OWNER_DECLARATION
+RESTARTNAMETABLES_DECL_LINKAGE char *HorseRestarts[20];
+#else
+RESTARTNAMETABLES_DECL_LINKAGE char *HorseRestarts[];
+#endif
+
+#undef RESTARTNAMETABLES_DECL_LINKAGE
+#undef RESTARTNAMETABLES_OWNER_DECLARATION
+#undef RESTARTNAMETABLES_WITHIN_C_LINKAGE
+
+#endif // RESTARTNAMETABLES_INC_H

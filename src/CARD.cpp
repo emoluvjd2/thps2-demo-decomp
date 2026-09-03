@@ -99,41 +99,17 @@ static inline unsigned short Card_ChecksumBits(short Checksum)
 
 #include "MAIN.h"
 
-extern "C"
-{
-    extern int GHasCareerLoaded __attribute__((section(".data")));
+#define CAREERLOADSTATE_ABSOLUTE_DECLARATION
+#define CAREERLOADSTATE_DECLARE_HAS_CAREER_LOADED
+#include "CAREERLOADSTATE.h"
 #define SAVEACTION_ABSOLUTE_DECLARATION
-#define SAVEACTION_WITHIN_C_LINKAGE
 #include "SAVEACTION.h"
 #define VIDEOINFO_DECLARE_GVINFO1
 #define VIDEOINFO_DECLARE_GVINFO2
 #include "VIDEOINFO.h"
 
-    int TestEvent(int event);
-    int format(char *device);
-    long open(char *filename, unsigned long mode);
-    long close(long file);
-    long read(long file, void *buffer, long size);
-    void PCinit(void);
-    int PCcreat(char *filename, int mode);
-    int PClseek(int file, int offset, int mode);
-    int PCwrite(int file, unsigned long *buffer, int size);
-    int PCclose(int file);
-    void InitCARD(void);
-    void StartCARD(void);
-    void _bu_init(void);
-    void EnterCriticalSection(void);
-    void ExitCriticalSection(void);
-    int OpenEvent(unsigned long descriptor, int spec, int mode, int function);
-    int EnableEvent(int event);
-    int _card_info(int channel);
-    int _card_load(int channel);
-    int _card_clear(int channel);
-    DIRENTRY *firstfile(char *pattern, DIRENTRY *entry);
-    DIRENTRY *nextfile(DIRENTRY *entry);
-    int write(int file, void *buffer, int size);
-    int erase(char *filename);
-}
+#include <LIBAPI.H>
+#include <LIBSN.H>
 
 #include "FILEIO.h"
 
@@ -145,15 +121,19 @@ extern "C"
 #include <STRINGS.H>
 
 // === CARD-owned small data ===
-extern "C" {
 int Card_Init_Called = 0;
 int CardStatus = 0;
 int CardLoadFlag = 0;
-}
 
 /** Memory-card path used when reading one named save header. */
-static char CardReadFmtStorage[8] asm("DAT_800d8ba4")
+namespace CardAddressViewOwners
+{
+extern "C"
+{
+static char DAT_800d8ba4[8]
     __attribute__((section(".sdata"))) = "bu00:%s";
+}
+}
 
 /**
  * Non-small-data view used by Card_ReadFileHeader.
@@ -161,17 +141,17 @@ static char CardReadFmtStorage[8] asm("DAT_800d8ba4")
  * Accessing the defining identifier makes GCC use `$gp`; the target instead
  * materializes this CARD-owned address independently.
  */
-extern "C" char CardReadFmtStr[] asm("DAT_800d8ba4");
+#define CARD_DECLARE_READ_PATH_ADDRESS_VIEW
+#include "CARD.h"
 
 /** Memory-card wildcard used to enumerate one connector and slot. */
-static char CardDirFmtStr[12] asm("DAT_800d8bac")
+static char DAT_800d8bac[12]
     __attribute__((section(".sdata"))) = "bu%1d%1d:*";
 
 /** Memory-card device name used by the format operation. */
-static char CardFormatStr[12] asm("DAT_800d8bb8")
+static char DAT_800d8bb8[12]
     __attribute__((section(".sdata"))) = "bu%1d%1d:";
 
-extern "C" {
 int CardStatusTemp = 0;
 int CardStatusMode = 0;
 int TimeStamp = 0;
@@ -185,38 +165,35 @@ int ev12 = 0;
 int ev13 = 0;
 int EVENT_TIME_OUT = 0;
 long FILE_DSCRPTR = 0;
-}
 
 // === CARD-owned read-only data ===
 /** Development-host diagnostic printed before writing the first header. */
-static char CardWriteHeaderFmt[36] asm("DAT_800b03b0")
+static char DAT_800b03b0[36]
     __attribute__((section(".rdata"))) =
         "\nWriting the header buffer, size %d";
 
 /** Development-host diagnostic printed before writing the first payload. */
-static char CardWriteDataFmt[36] asm("DAT_800b03d4")
+static char DAT_800b03d4[36]
     __attribute__((section(".rdata"))) =
         "\nWriting the data buffer, size %d";
 
 /** Development-host diagnostic printed before writing the second header. */
-static char CardWrite2PHeaderFmt[48] asm("DAT_800b03f8")
+static char DAT_800b03f8[48]
     __attribute__((section(".rdata"))) =
         "\nWriting the 2 player header buffer, size %d";
 
 /** Development-host diagnostic printed before writing the second payload. */
-static char CardWrite2PDataFmt[44] asm("DAT_800b0428")
+static char DAT_800b0428[44]
     __attribute__((section(".rdata"))) =
         "\nWriting the 2 player data buffer, size %d";
 
 /** Replay checksum diagnostic for the first player payload. */
-static char CardReplayChecksum1PMessage[52]
-    asm("s_Checksum_error_for_1P_in_Card_Lo_800b0454")
+static char s_Checksum_error_for_1P_in_Card_Lo_800b0454[52]
     __attribute__((section(".rdata"))) =
         "\nChecksum error for 1P in Card_LoadReplayFromCD()";
 
 /** Replay checksum diagnostic for the second player payload. */
-static char CardReplayChecksum2PMessage[52]
-    asm("s_Checksum_error_for_2P_in_Card_Lo_800b0488")
+static char s_Checksum_error_for_2P_in_Card_Lo_800b0488[52]
     __attribute__((section(".rdata"))) =
         "\nChecksum error for 2P in Card_LoadReplayFromCD()";
 
@@ -293,18 +270,14 @@ static char Tony01IconTexture[128]
 };
 
 // === Absolute-addressed globals ===
-extern "C" {
 /** Memory-card filename templates for career and replay saves. */
 char CARD_FNAME[25] __attribute__((section(".data"))) =
     "bu00:BASLUS-00860THPSGxx";
 char CARD_VNAME[25] __attribute__((section(".data"))) =
     "bu00:BASLUS-00860THPSVxx";
-}
-extern "C" {
 /** Per-directory-entry file classification and raw card directory records. */
 EFileType FileType[15] __attribute__((section(".data"))) = {THPS_SAVE_FILE};
 DIRENTRY SLOT_DIR[15] __attribute__((section(".data"))) = {{{0}}};
-}
 
 /**
  * Independent view of the CARD-owned file-type table.
@@ -312,9 +285,14 @@ DIRENTRY SLOT_DIR[15] __attribute__((section(".data"))) = {{{0}}};
  * Reusing `FileType` makes GCC retain its first address in a saved register;
  * this view preserves the target's second address materialization.
  */
-extern "C" EFileType CardDirectoryFileType[] asm("FileType");
+#define CARD_DECLARE_DIRECTORY_FILE_TYPE_VIEW
+#include "CARD.h"
 
 // === Function implementations (address order) ===
+
+// Owner-local routines defined after their first call.
+void _clear_event(void);
+void Card_GetNextTimeStamp(void);
 
 /**
  * Copy a directory entry's two-character suffix into both save-file names.
@@ -723,16 +701,16 @@ int Card_WriteReplayToDisk(EFileType FileType, char *save_name)
     PCinit();
     fileid = PCcreat(save_name, 0) & 0xFFFF;
     PClseek(fileid, 0, 0);
-    printf(CardWriteHeaderFmt, HeaderSize);
-    PCwrite(fileid, pHeaderBuf, HeaderSize);
-    printf(CardWriteDataFmt, DataSize);
-    PCwrite(fileid, pDataBuf, DataSize);
+    printf(DAT_800b03b0, HeaderSize);
+    PCwrite(fileid, reinterpret_cast<char *>(pHeaderBuf), HeaderSize);
+    printf(DAT_800b03d4, DataSize);
+    PCwrite(fileid, reinterpret_cast<char *>(pDataBuf), DataSize);
     if (pHeaderBuf2 != 0)
     {
-        printf(CardWrite2PHeaderFmt, CARD_HEADER_SIZE);
-        PCwrite(fileid, pHeaderBuf2, CARD_HEADER_SIZE);
-        printf(CardWrite2PDataFmt, DataSize2);
-        PCwrite(fileid, pDataBuf2, DataSize2);
+        printf(DAT_800b03f8, CARD_HEADER_SIZE);
+        PCwrite(fileid, reinterpret_cast<char *>(pHeaderBuf2), CARD_HEADER_SIZE);
+        printf(DAT_800b0428, DataSize2);
+        PCwrite(fileid, reinterpret_cast<char *>(pDataBuf2), DataSize2);
     }
     PCclose(fileid);
     return 0;
@@ -888,7 +866,7 @@ int Card_LoadReplayFromCD(unsigned long *pBuf, unsigned long *pBuf2, char *file_
     Chk1 = Card_FilePrefix(pBuf)->Video.Checksum;
     if (Chk1 != CalcChecksum(Card_FilePayload(pBuf), CARD_REPLAY_DATA_SIZE))
     {
-        printf(CardReplayChecksum1PMessage);
+        printf(s_Checksum_error_for_1P_in_Card_Lo_800b0454);
     }
     if (pBuf2 != 0)
     {
@@ -896,7 +874,7 @@ int Card_LoadReplayFromCD(unsigned long *pBuf, unsigned long *pBuf2, char *file_
         if (Chk1 != CalcChecksum(
                 Card_FilePayload(pBuf2), CARD_REPLAY_DATA_SIZE))
         {
-            printf(CardReplayChecksum2PMessage);
+            printf(s_Checksum_error_for_2P_in_Card_Lo_800b0488);
         }
     }
     return 0;
@@ -910,7 +888,7 @@ int Card_LoadReplayFromCD(unsigned long *pBuf, unsigned long *pBuf2, char *file_
 void Card_Init(long val)
 {
     Card_Init_Called = 1;
-    InitCARD();
+    InitCARD(val);
     StartCARD();
     _bu_init();
     EnterCriticalSection();
@@ -1006,7 +984,7 @@ int Card_ReadFileHeader(char *FName, SCardHead *pHeader)
     int fd;
     int len;
 
-    sprintf(FileName, CardReadFmtStr, FName);
+    sprintf(FileName, DAT_800d8ba4, FName);
     i = 0;
     do
     {
@@ -1060,7 +1038,7 @@ int Card_GetDirAndFreeBlocks(int cnct, int slot)
         } while (i < CARD_DIRECTORY_ENTRIES);
     }
 
-    sprintf(key, CardDirFmtStr, cnct, slot);
+    sprintf(key, DAT_800d8bac, cnct, slot);
     d = SLOT_DIR;
     if (firstfile(key, d) == d)
     {
@@ -1209,7 +1187,7 @@ done:
 int Card_FormatCard(int cnct, int slot)
 {
     char fs[6];
-    sprintf(fs, CardFormatStr, cnct, slot);
+    sprintf(fs, DAT_800d8bb8, cnct, slot);
     _clear_event_x();
     int fret = format(fs);
     int ret = _card_event_x();

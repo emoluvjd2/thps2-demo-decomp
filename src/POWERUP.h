@@ -14,7 +14,7 @@ struct CVector;
 #endif
 
 /** Head of the intrusive list containing every active power-up body. */
-extern "C" CBody *PowerUpList POWERUP_LIST_DECL_ATTR; // 0x800D94DC
+extern CBody *PowerUpList POWERUP_LIST_DECL_ATTR; // 0x800D94DC
 
 #undef POWERUP_LIST_DECL_ATTR
 
@@ -24,10 +24,6 @@ CPowerUp *PowerUp_Create(
     int LifeTime, CVector &Vel);
 
 #ifdef POWERUP_OWNER_DECLARATIONS
-
-#ifdef __cplusplus
-extern "C" {
-#endif
 
 // Primitive types
 typedef unsigned char u8;
@@ -49,10 +45,6 @@ typedef unsigned char undefined3[3];
 
 #include "globals.h"
 
-#ifdef __cplusplus
-}
-#endif
-
 // === Variables (absolute in this TU) ===
 #define BITSTATE_DECLARE_USE_CACHE_FOR_BITS
 #include "BITSTATE.h"
@@ -60,3 +52,11 @@ typedef unsigned char undefined3[3];
 #endif // POWERUP_OWNER_DECLARATIONS
 
 #endif // POWERUP_INC_H
+
+#ifdef POWERUP_DECLARE_OWNER_VTABLE
+
+/** POWERUP-owned item virtual table. */
+extern PowerUpItemVtable const __vt_8CPowerUp;
+
+#undef POWERUP_DECLARE_OWNER_VTABLE
+#endif

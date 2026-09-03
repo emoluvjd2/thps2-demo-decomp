@@ -185,13 +185,10 @@ static inline int GenObjsPolyBufferSize(void)
 }
 
 /** Typed imports used by the generated-model owner. */
-extern "C"
-{
-GenObjsEditorInModel *ConstructEditorInModel(GenObjsEditorInModel *model)
-    asm("__13EditorInModel");
-GenObjsRailInfo *ConstructRailInfo(GenObjsRailInfo *rails)
-    asm("__8RailInfo");
-}
+#define GENOBJS_DECLARE_EDITOR_IN_MODEL_CONSTRUCTOR_ABI
+#define GENOBJS_EDITOR_IN_MODEL_CONSTRUCTOR_TYPE GenObjsEditorInModel
+#include "GENOBJS.h"
+#define ConstructEditorInModel __13EditorInModel
 
 #include "MEM.h"
 #include <STDIO.H>
@@ -317,8 +314,6 @@ Vector EditorOutModel::LightVect[4]
 Vector EditorOutModel::LightLoc[4]
     __attribute__((section(".data"))) = {};
 
-extern "C" {
-
 /** Rail-merge diagnostics recovered from the original small-data block. */
 static char s_From_empty_800da584[12]
     __attribute__((section(".sdata"))) = "From empty\n";
@@ -358,21 +353,24 @@ ModelFace *EditorInModel::pPolyBufEntry
 static char s_Heigh_ho_Did_Merge_800b28f0[28]
     __attribute__((section(".rdata"))) = "\nHeigh ho -- Did Merge: ";
 
-}
-
 // === Owner vtables and their narrow destructor-address views ===
-extern "C" void RailInfoDestructor(GenObjsRailInfo *, int)
-    asm("_._8RailInfo");
-extern "C" void GenObjs_DestroyRailString(RailString *, int)
-    asm("_._10RailString");
+#define RAILINFO_DECLARE_DESTRUCTOR
+#define RAILINFO_DESTRUCTOR_NAME RailInfoDestructor
+#define RAILINFO_DESTRUCTOR_RECEIVER GenObjsRailInfo
+#include "RAILINFO.h"
+
+/** Addressable destructor entries used by this owner's manual vtables. */
+void GenObjs_DestroyRailString(RailString *, int) asm("_._10RailString");
 static void GenObjs_DestroyRailPoint(RailPoint *, int)
     asm("_._9RailPoint");
-extern "C" void GenObjs_DestroyEditorOutModel(EditorOutModel *, int)
+void GenObjs_DestroyEditorOutModel(EditorOutModel *, int)
     asm("_._14EditorOutModel");
-extern "C" void GenObjs_DestroyEditorInModel(EditorInModel *, int)
+void GenObjs_DestroyEditorInModel(EditorInModel *, int)
     asm("_._13EditorInModel");
-static void GenObjs_DestroyClass(CClass *, int)
-    asm("__DOT__6CClass_80055FF0");
+
+extern "C" {
+static void __DOT__6CClass_80055FF0(CClass *, int);
+}
 
 /** RailInfo's public three-word table and its target alignment word. */
 int __vt_8RailInfo __attribute__((section(".sdata"), aligned(4))) = 0;
@@ -428,7 +426,7 @@ static int GenObjs_BaseVTable
 static int GenObjs_BaseVTableIndex
     __attribute__((section(".sdata"))) = 0;
 static void (*GenObjs_BaseVTableDtor)(CClass *, int)
-    __attribute__((section(".sdata"))) = &GenObjs_DestroyClass;
+    __attribute__((section(".sdata"))) = &__DOT__6CClass_80055FF0;
 
 // === Function implementations (address order) ===
 
@@ -766,7 +764,8 @@ void EditorInModel::SetData(SModel *pModel, int model_index)
         (GenObjsRailInfo *)CClass::operator new(sizeof(GenObjsRailInfo));
     if (railInfo != 0)
     {
-        railInfo = ConstructRailInfo(railInfo);
+        railInfo = reinterpret_cast<GenObjsRailInfo *>(
+            RailInfo_ctor(reinterpret_cast<RailInfo *>(railInfo)));
     }
     modelInfo->railInfo = railInfo;
 }
@@ -2847,11 +2846,12 @@ int RailString::CountPoints(void)
  * @param self  Constructor receiver represented by the owner-local layout.
  * @return `this` pointer (GCC 2.x ctor convention).
  */
-GenObjsRailInfo *ConstructRailInfo(GenObjsRailInfo *self)
+RailInfo *RailInfoConstructorABI::__8RailInfo(RailInfo *rails)
 {
+    GenObjsRailInfo *self = reinterpret_cast<GenObjsRailInfo *>(rails);
     self->CClass.vtable = (int *)&__vt_8RailInfo;
     self->StringList = 0;
-    return self;
+    return rails;
 }
 
 /**
@@ -3122,11 +3122,13 @@ static void GenObjs_DestroyRailPoint(RailPoint *self, int in_charge)
  * @param self Base object being destroyed.
  * @param in_charge GCC 2.x in-charge flag; bit 0 releases the object.
  */
-static void GenObjs_DestroyClass(CClass *self, int in_charge)
+extern "C" {
+static void __DOT__6CClass_80055FF0(CClass *self, int in_charge)
 {
     self->vtable = &GenObjs_BaseVTable;
     if (in_charge & 1)
     {
         CClass::operator delete(self);
     }
+}
 }

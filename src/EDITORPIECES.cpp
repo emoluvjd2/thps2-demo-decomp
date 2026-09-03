@@ -10,6 +10,9 @@
 #undef EDITORPIECES_OWNER_DECLARATIONS
 #include <STDIO.H>
 
+/** Maps a theme-zero piece identifier into the requested theme. */
+int MapBasePieceToTheme(int piece, int theme);
+
 #define EDITOR_PIECE(piece, icon, display_name, piece_flags) \
     {{piece, piece, piece, piece}, icon, display_name, piece_flags}
 

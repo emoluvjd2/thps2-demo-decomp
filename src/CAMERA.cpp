@@ -84,6 +84,16 @@ struct CBody : CameraCItemOwner {
     u8 opaque_after_mRMinor[264 - 0xb6];
 
     CBody();
+    /** Mark this body for deletion. */
+    void Die();
+    /** Run this body's per-frame behavior. */
+    void EveryFrame();
+    /** Configure this body's lighting state. */
+    void DoLightingSetup();
+    /** Apply a hit and report whether it was accepted. */
+    int Hit(int damage, const CVector &knock, int whatHit);
+    /** Release body-owned resources. */
+    void DeleteStuff();
     /** Insert this body at the head of a linked body list. */
     void AttachTo(CBody **list);
     /** Remove this body from a linked body list. */
@@ -386,56 +396,44 @@ inline void Camera_SetClassVtable(CClass &object, int vtable) {
 
 // === Free function declarations ===
 #include "CAMERAAPI.h"
-static void SendShake(
-    const CVector &pos, CBody *pOb, EShakeType ShakeMagnitude);
 
 // === External function declarations ===
 void Competition_ResetMarquee(void);
-extern "C" void Camera_DestroyBody(CBody *, int) asm("_._5CBody");
-CVector operator+(const CVector &left, const CVector &right);
-CVector operator-(const CVector &left, const CVector &right);
-CVector Camera_VectorNegate(const CVector &vector) asm("__mi__C7CVector");
-CVector operator*(const CVector &vector, const int &scale);
-CVector operator*(const int &scale, const CVector &vector);
-CVector operator/(const CVector &vector, const int &scale);
-CVector operator>>(const CVector &vector, const int &shift);
-CVector operator<<(const CVector &vector, const int &shift);
+#define CBODY_ABI_ONLY
+#define CBODY_DECLARE_DESTRUCTOR
+#define CBODY_DESTRUCTOR_NAME Camera_DestroyBody
+#define CBODY_DESTRUCTOR_RECEIVER CBody
+#include "CBODY.h"
+#undef CBODY_ABI_ONLY
+#include "CVECTOROPS.h"
 #define CAMERALIST_OWNER_DECLARATIONS
 #include "CAMERALIST.h"
 #undef CAMERALIST_OWNER_DECLARATIONS
-extern "C" void Camera_BodyDie(CBody *) asm("Die__5CBody");
-extern "C" void Camera_BodyLightingSetup(CBody *)
-    asm("DoLightingSetup__5CBody");
-extern "C" int Camera_BodyHit(CBody *, int, const CVector &, int)
-    asm("Hit__5CBodyiRC7CVectori");
-extern "C" void Camera_BodyDeleteStuff(CBody *)
-    asm("DeleteStuff__5CBody");
 #include <STDIO.H>
 /**
  * Owner-local debug text declared before its users and defined later in the
  * original small-data order. Address-derived labels are bound once here.
  */
-static char CameraFollowTextOwner[] asm("DAT_800DBB28");
-static char CameraFixedTextOwner[] asm("DAT_800DBB30");
-static char CameraQuaternionTextOwner[] asm("DAT_800DBB38");
-static char CameraTripodTextOwner[] asm("DAT_800DBB44");
-static char CameraXTextOwner[] asm("DAT_800DBB4C");
-static char CameraYTextOwner[] asm("DAT_800DBB50");
-static char CameraZTextOwner[] asm("DAT_800DBB54");
-static char CameraStickOrientationTextOwner[] asm("DAT_800DBB58");
-static char CameraStickLengthTextOwner[] asm("DAT_800DBB60");
-static char CameraStickOffsetTextOwner[] asm("DAT_800DBB70");
-static char CameraPositionATextOwner[] asm("DAT_800DBB00");
-static char CameraPositionBTextOwner[] asm("DAT_800DBB08");
-struct CBruce;
+static char DAT_800DBB28[];
+static char DAT_800DBB30[];
+static char DAT_800DBB38[];
+static char DAT_800DBB44[];
+static char DAT_800DBB4C[];
+static char DAT_800DBB50[];
+static char DAT_800DBB54[];
+static char DAT_800DBB58[];
+static char DAT_800DBB60[];
+static char DAT_800DBB70[];
+static char DAT_800DBB00[];
+static char DAT_800DBB08[];
 void Competition_MarqueeDisplay(void);
 #include "M3DMATHS.h"
 #include "GSKATER_STATE.h"
 #include "GENERATELEVEL.h"
-extern "C" int __vt_7CCamera[];  // absolute: 0x800B39D0
-extern "C" int __vt_t9AnimParam1Z5CQuat;  // gp+0x3ee0
-extern "C" int __vt_6CamPos;  // gp+0x3ef0
-extern "C" int SubObjBaseVtable asm("DAT_800dbbb0");  // gp+0x3f10
+extern int __vt_7CCamera[];  // absolute: 0x800B39D0
+#include "CAMERAVTABLES.h"
+#define CAMERA_DECLARE_CAMPOS_VTABLE_ABI
+#include "CAMERA.h"
 /** Packed fixed-point sine/cosine table used by camera shake. */
 struct CameraSinCos {
     s16 Sin;
@@ -560,15 +558,12 @@ MATRIX tm __attribute__((section(".data"))) = {};
 
 
 // === Extern "C" forward declarations ===
-extern "C" void Camera_Destroy(CCamera *, int) asm("_._7CCamera");
 /* GCC 2.x receives both `unsigned short` arguments promoted in registers;
  * this ABI shim keeps that promoted view so the target's truncation order is
  * preserved. A true-u16 definition hoists the zoom mask and misses twice. */
-extern "C" void Camera_SetZoom(CCamera *, int, int)
-    asm("SetZoom__7CCameraUsUs");
-/** Raw address view retained solely for the manual CCamera vtable slot. */
-extern "C" void Camera_AIVtableSlot(CCamera *) asm("AI__7CCamera");
-
+#define CAMERA_DECLARE_OWNER_ABI
+#include "CAMERA.h"
+#define Camera_SetZoom CameraRawABI::SetZoom__7CCameraUsUs
 // === Function implementations (address order) ===
 
 /**
@@ -679,10 +674,12 @@ CCamera::CCamera(struct CBody *tripod, u16 mike_index)
  * Debug label retained by the original CAMERA object between its constructor
  * diagnostic and virtual dispatch table.
  */
-static char CameraJumpCompensationLabel[]
-    asm("s_jump_compensation_800b39bc")
+static char s_jump_compensation_800b39bc[]
     __attribute__((section(".rdata"), aligned(4))) =
         "jump compensation";
+
+/** Addressable destructor entry used by CAMERA's owner-local virtual table. */
+void Camera_Destroy(CCamera *camera, int inCharge) asm("_._7CCamera");
 
 /**
  * Virtual dispatch table for the gameplay camera specialization.
@@ -694,12 +691,12 @@ int __vt_7CCamera[9] __attribute__((section(".rdata"), aligned(4))) = {
     0,
     0,
     (int)&Camera_Destroy,
-    (int)&Camera_BodyDie,
-    (int)&Camera_AIVtableSlot,
-    (int)&CBody_EveryFrame,
-    (int)&Camera_BodyLightingSetup,
-    (int)&Camera_BodyHit,
-    (int)&Camera_BodyDeleteStuff,
+    (int)(void (*)(CBody *))&CBody::Die,
+    (int)(void (*)(CCamera *))&CCamera::AI,
+    (int)(void (*)(CBody *))&CBody::EveryFrame,
+    (int)(void (*)(CBody *))&CBody::DoLightingSetup,
+    (int)(int (*)(CBody *, int, const CVector &, int))&CBody::Hit,
+    (int)(void (*)(CBody *))&CBody::DeleteStuff,
 };
 
 
@@ -716,7 +713,7 @@ int __vt_7CCamera[9] __attribute__((section(".rdata"), aligned(4))) = {
 void Camera_Destroy(CCamera *camera, int __in_chrg) {
     camera->_vf = (void **)__vt_7CCamera;
     camera->DeleteFrom(&CameraList);
-    int vt = (int)&SubObjBaseVtable;
+    int vt = (int)&DAT_800dbbb0;
     int nc = NumCameras;
     int vt2 = (int)&__vt_t9AnimParam1Z5CQuat;
     Camera_SetClassVtable(camera->old_orientation, vt);
@@ -832,26 +829,25 @@ static void SendShake(
  */
 void CCamera::Shake(
     const CVector &pos, EShakeType ShakeMagnitude) {
-    CCamera *camera = this;
     switch (ShakeMagnitude) {
     case 0: {
-        camera->mShakeAmplitude = BigShakeAmp;
+        mShakeAmplitude = BigShakeAmp;
         break;
     }
     case 1: {
-        camera->mShakeAmplitude = MediumShakeAmp;
+        mShakeAmplitude = MediumShakeAmp;
         break;
     }
     case 2: {
-        camera->mShakeAmplitude = SmallShakeAmp;
+        mShakeAmplitude = SmallShakeAmp;
         break;
     }
     default:
         goto send_shakes;
     }
 
-    camera->mShakeDecay = LandShakeDecay;
-    camera->mShakeSpeed = LandShakeSpeed;
+    mShakeDecay = LandShakeDecay;
+    mShakeSpeed = LandShakeSpeed;
 
 send_shakes:
     {
@@ -885,44 +881,43 @@ void CCamera::SetComplexMode(u16 mode) {
  *
  */
 void CCamera::LoadIntoMikeCamera() {
-    CCamera *camera = this;
     VECTOR v;
 
-    if (((CameraBruceMoveOwner *)camera->mTripod)->mPhysicsState ==
+    if (((CameraBruceMoveOwner *)mTripod)->mPhysicsState ==
         PHYSICS_IN_WALLRIDE) {
         MikeCamera[Camera_CurrentMikeCamera].Position.vx =
-            (camera->mTripodPos.vx + camera->old_offset.vx) >> 12;
+            (mTripodPos.vx + old_offset.vx) >> 12;
         MikeCamera[Camera_CurrentMikeCamera].Position.vy =
-            (camera->mTripodPos.vy + camera->old_offset.vy) >> 12;
+            (mTripodPos.vy + old_offset.vy) >> 12;
         MikeCamera[Camera_CurrentMikeCamera].Position.vz =
-            (camera->mTripodPos.vz + camera->old_offset.vz) >> 12;
+            (mTripodPos.vz + old_offset.vz) >> 12;
 
-        camera->mO = camera->old_orientation;
+        mO = old_orientation;
     } else {
         MikeCamera[Camera_CurrentMikeCamera].Position.vx =
-            (camera->mPos.vx + camera->real_cam_offset.vx) >> 12;
+            (mPos.vx + real_cam_offset.vx) >> 12;
         MikeCamera[Camera_CurrentMikeCamera].Position.vy =
-            (camera->mPos.vy + camera->real_cam_offset.vy) >> 12;
+            (mPos.vy + real_cam_offset.vy) >> 12;
         MikeCamera[Camera_CurrentMikeCamera].Position.vz =
-            (camera->mPos.vz + camera->real_cam_offset.vz) >> 12;
+            (mPos.vz + real_cam_offset.vz) >> 12;
 
-        camera->old_orientation = camera->mO;
+        old_orientation = mO;
         Camera_RebuildOldOffset(
-            *camera,
+            *this,
             MikeCamera[Camera_CurrentMikeCamera].Position.vx,
             MikeCamera[Camera_CurrentMikeCamera].Position.vy,
             MikeCamera[Camera_CurrentMikeCamera].Position.vz);
     }
 
     MikeCamera[Camera_CurrentMikeCamera].Focus.vx =
-        (camera->mFocusPos.vx + Camera_CamOffset.vx) >> 12;
+        (mFocusPos.vx + Camera_CamOffset.vx) >> 12;
     MikeCamera[Camera_CurrentMikeCamera].Focus.vy =
-        (camera->mFocusPos.vy + Camera_CamOffset.vy) >> 12;
+        (mFocusPos.vy + Camera_CamOffset.vy) >> 12;
     MikeCamera[Camera_CurrentMikeCamera].Focus.vz =
-        (camera->mFocusPos.vz + Camera_CamOffset.vz) >> 12;
+        (mFocusPos.vz + Camera_CamOffset.vz) >> 12;
 
     QToM(
-        camera->mO,
+        mO,
         MikeCamera[Camera_CurrentMikeCamera].Transform);
     TransMatrix(
         &MikeCamera[Camera_CurrentMikeCamera].Transform,
@@ -940,11 +935,10 @@ void CCamera::LoadIntoMikeCamera() {
  *
  */
 void CCamera::ResetOrientation() {
-    CCamera *camera = this;
     VECTOR vtemp1;
     VECTOR vtemp2;
     CameraBruceMoveOwner *pBruce =
-        (CameraBruceMoveOwner *)camera->mTripod;
+        (CameraBruceMoveOwner *)mTripod;
 
     vtemp1.vx = 0;
     vtemp1.vy = 0;
@@ -953,24 +947,24 @@ void CCamera::ResetOrientation() {
         &pBruce->mRotationMatrix,
         &vtemp1, &vtemp2);
 
-    camera->vFront.vx = vtemp2.vx;
-    camera->vFront.vy = vtemp2.vy;
-    camera->vFront.vz = vtemp2.vz;
+    vFront.vx = vtemp2.vx;
+    vFront.vy = vtemp2.vy;
+    vFront.vz = vtemp2.vz;
 
-    camera->mOldVFront = camera->vFront << 12;
-    camera->mVFront = camera->mOldVFront;
+    mOldVFront = vFront << 12;
+    mVFront = mOldVFront;
 
-    camera->mTripodPos = camera->mTripod->mPos;
-    camera->mOldTripodPos = camera->mTripodPos;
+    mTripodPos = mTripod->mPos;
+    mOldTripodPos = mTripodPos;
 
-    Camera_CurrentMikeCamera = camera->mMikeIndex;
+    Camera_CurrentMikeCamera = mMikeIndex;
 
-    camera->CM_Normal();
+    CM_Normal();
 
-    camera->mStoppedO = camera->mPrevO = camera->mO = camera->mDesiredO;
-    camera->mStoppedOValid = (void *)1;
+    mStoppedO = mPrevO = mO = mDesiredO;
+    mStoppedOValid = (void *)1;
 
-    camera->LoadIntoMikeCamera();
+    LoadIntoMikeCamera();
 }
 
 
@@ -984,7 +978,6 @@ void CCamera::ResetOrientation() {
  * @param self Camera whose desired orientation and collision history are updated.
  */
 void CCamera::ReactToCollision() {
-    CCamera *camera = this;
     SLineInfo line_info;
     MATRIX m;
     VECTOR vLeft;
@@ -1002,58 +995,56 @@ void CCamera::ReactToCollision() {
     if (GameFrozen != 0) {
         return;
     }
-    if (camera->mTimer < 13) {
+    if (mTimer < 13) {
         return;
     }
 
-    QToM(camera->mDesiredO, m);
+    QToM(mDesiredO, m);
 
-    ++camera->mColCheckIndex;
-    if (camera->mColCheckIndex > 2) {
-        camera->mColCheckIndex = 0;
-        ++camera->mColCheckCycleCounter;
+    ++mColCheckIndex;
+    if (mColCheckIndex > 2) {
+        mColCheckIndex = 0;
+        ++mColCheckCycleCounter;
     }
 
-    if (camera->mColCheckIndex == 2) {
-        camera->mPrevColAngBuffer[2] = camera->mColAngBuffer[2];
-        line_info.StartCoords.vx = camera->mPos.vx;
-        line_info.StartCoords.vy = camera->mPos.vy;
-        line_info.StartCoords.vz = camera->mPos.vz;
+    if (mColCheckIndex == 2) {
+        mPrevColAngBuffer[2] = mColAngBuffer[2];
+        copyVector(&line_info.StartCoords, &mPos);
         line_info.EndCoords.Set(
-            camera->mPos.vx, camera->mPos.vy, camera->mPos.vz);
+            mPos.vx, mPos.vy, mPos.vz);
         line_info.EndCoords.vy += 0xbb8000;
         M3dColij_InitLineInfo(&line_info);
         line_info.RecordTriggerZoneHits = 0;
         M3dZone_LineToItem(&line_info, 1);
 
         if (line_info.pItem != 0) {
-            camera->mDownDist = line_info.Distance;
+            mDownDist = line_info.Distance;
             if (line_info.Distance < 0x78) {
                 int ratio =
                     ((0x78 - line_info.Distance) * 0x1000) / 0x78;
-                camera->mColAngBuffer[2] =
+                mColAngBuffer[2] =
                     (s16)((ratio * ratio) >> 15);
             } else {
-                camera->mColAngBuffer[2] = 0;
+                mColAngBuffer[2] = 0;
             }
         } else {
-            if (((CameraBruceAiOwner *)camera->mTripod)->mPhysicsState ==
+            if (((CameraBruceAiOwner *)mTripod)->mPhysicsState ==
                 PHYSICS_IN_AIR) {
-                camera->mColAngBuffer[2] = 0x200;
+                mColAngBuffer[2] = 0x200;
             } else {
-                camera->mColAngBuffer[2] = camera->mPrevColAngBuffer[2];
+                mColAngBuffer[2] = mPrevColAngBuffer[2];
             }
-            camera->mDownDist = -1;
+            mDownDist = -1;
         }
 
-        if (((CameraBruceAiOwner *)camera->mTripod)->mPhysicsState ==
+        if (((CameraBruceAiOwner *)mTripod)->mPhysicsState ==
             PHYSICS_ON_INVISIBLE) {
             setVector(&vTemp, 0, Camera_CamDist << 13, 0);
             ApplyMatrixLV(&m, &vTemp, &vBack);
 
-            line_info.StartCoords.vx = camera->mPos.vx;
-            line_info.StartCoords.vy = camera->mPos.vy;
-            line_info.StartCoords.vz = camera->mPos.vz;
+            line_info.StartCoords.vx = mPos.vx;
+            line_info.StartCoords.vy = mPos.vy;
+            line_info.StartCoords.vz = mPos.vz;
             line_info.EndCoords.vx = line_info.StartCoords.vx + vBack.vx;
             line_info.EndCoords.vy = line_info.StartCoords.vy + vBack.vy;
             line_info.EndCoords.vz = line_info.StartCoords.vz + vBack.vz;
@@ -1062,7 +1053,7 @@ void CCamera::ReactToCollision() {
             CameraCollisionCheck = 1;
             M3dZone_LineToItem(&line_info, 1);
             CameraCollisionCheck = 0;
-            camera->mColAngBuffer[2] = 0;
+            mColAngBuffer[2] = 0;
 
             if (line_info.pItem != 0) {
                 if (line_info.Length == 0) {
@@ -1076,29 +1067,27 @@ void CCamera::ReactToCollision() {
                 int ang = 300;
                 ang *= ratio;
                 ang >>= 12;
-                camera->mColAngBuffer[2] += (s16)ang;
-                camera->mDownDist = line_info.Distance;
+                mColAngBuffer[2] += (s16)ang;
+                mDownDist = line_info.Distance;
             } else {
-                camera->mDownDist = Camera_CamDist;
+                mDownDist = Camera_CamDist;
             }
         }
     }
 
-    vTemp.vx = Camera_CamDist * -0x2000;
-    vTemp.vz = 0;
-    vTemp.vy = 0;
+    setVector(&vTemp, Camera_CamDist * -0x2000, 0, 0);
     ApplyMatrixLV(&m, &vTemp, &vLeft);
     vRight.vx = -vLeft.vx;
     vRight.vy = -vLeft.vy;
     vRight.vz = -vLeft.vz;
 
-    if (camera->mCollisionRayLR != 0) {
-        if (camera->mColCheckIndex == 0) {
-            camera->mPrevColAngBuffer[0] = camera->mColAngBuffer[0];
-            if ((camera->mColCheckCycleCounter & 1) != 0) {
-                line_info.StartCoords.vx = camera->mPos.vx;
-                line_info.StartCoords.vy = camera->mPos.vy;
-                line_info.StartCoords.vz = camera->mPos.vz;
+    if (mCollisionRayLR != 0) {
+        if (mColCheckIndex == 0) {
+            mPrevColAngBuffer[0] = mColAngBuffer[0];
+            if ((mColCheckCycleCounter & 1) != 0) {
+                line_info.StartCoords.vx = mPos.vx;
+                line_info.StartCoords.vy = mPos.vy;
+                line_info.StartCoords.vz = mPos.vz;
                 line_info.EndCoords.vx =
                     line_info.StartCoords.vx + vLeft.vx;
                 line_info.EndCoords.vy =
@@ -1106,17 +1095,17 @@ void CCamera::ReactToCollision() {
                 line_info.EndCoords.vz =
                     line_info.StartCoords.vz + vLeft.vz;
             } else {
-                line_info.StartCoords.vx = camera->mTripodPos.vx;
-                line_info.StartCoords.vy = camera->mTripodPos.vy;
-                line_info.StartCoords.vz = camera->mTripodPos.vz;
+                line_info.StartCoords.vx = mTripodPos.vx;
+                line_info.StartCoords.vy = mTripodPos.vy;
+                line_info.StartCoords.vz = mTripodPos.vz;
                 line_info.EndCoords.vx =
-                    ((camera->mPos.vx + line_info.StartCoords.vx) >> 1) +
+                    ((mPos.vx + line_info.StartCoords.vx) >> 1) +
                     vLeft.vx;
                 line_info.EndCoords.vy =
-                    ((camera->mPos.vy + line_info.StartCoords.vy) >> 1) +
+                    ((mPos.vy + line_info.StartCoords.vy) >> 1) +
                     vLeft.vy;
                 line_info.EndCoords.vz =
-                    ((camera->mPos.vz + line_info.StartCoords.vz) >> 1) +
+                    ((mPos.vz + line_info.StartCoords.vz) >> 1) +
                     vLeft.vz;
             }
             M3dColij_InitLineInfo(&line_info);
@@ -1124,7 +1113,7 @@ void CCamera::ReactToCollision() {
             CameraCollisionCheck = 1;
             M3dZone_LineToItem(&line_info, 1);
             CameraCollisionCheck = 0;
-            camera->mColAngBuffer[0] = 0;
+            mColAngBuffer[0] = 0;
             if (line_info.pItem != 0) {
                 if (line_info.Length == 0) {
                     line_info.Length = 1;
@@ -1132,18 +1121,18 @@ void CCamera::ReactToCollision() {
                 int ratio =
                     ((line_info.Length - line_info.Distance) * 0x1000) /
                     line_info.Length;
-                camera->mColAngBuffer[0] =
-                    (s16)((camera->mCollisionAngLR *
+                mColAngBuffer[0] =
+                    (s16)((mCollisionAngLR *
                            ((ratio * ratio) >> 12)) >> 12);
             }
         }
 
-        if (camera->mColCheckIndex == 1) {
-            camera->mPrevColAngBuffer[1] = camera->mColAngBuffer[1];
-            if ((camera->mColCheckCycleCounter & 1) != 0) {
-                line_info.StartCoords.vx = camera->mPos.vx;
-                line_info.StartCoords.vy = camera->mPos.vy;
-                line_info.StartCoords.vz = camera->mPos.vz;
+        if (mColCheckIndex == 1) {
+            mPrevColAngBuffer[1] = mColAngBuffer[1];
+            if ((mColCheckCycleCounter & 1) != 0) {
+                line_info.StartCoords.vx = mPos.vx;
+                line_info.StartCoords.vy = mPos.vy;
+                line_info.StartCoords.vz = mPos.vz;
                 line_info.EndCoords.vx =
                     line_info.StartCoords.vx + vRight.vx;
                 line_info.EndCoords.vy =
@@ -1151,17 +1140,17 @@ void CCamera::ReactToCollision() {
                 line_info.EndCoords.vz =
                     line_info.StartCoords.vz + vRight.vz;
             } else {
-                line_info.StartCoords.vx = camera->mTripodPos.vx;
-                line_info.StartCoords.vy = camera->mTripodPos.vy;
-                line_info.StartCoords.vz = camera->mTripodPos.vz;
+                line_info.StartCoords.vx = mTripodPos.vx;
+                line_info.StartCoords.vy = mTripodPos.vy;
+                line_info.StartCoords.vz = mTripodPos.vz;
                 line_info.EndCoords.vx =
-                    ((camera->mPos.vx + line_info.StartCoords.vx) >> 1) +
+                    ((mPos.vx + line_info.StartCoords.vx) >> 1) +
                     vRight.vx;
                 line_info.EndCoords.vy =
-                    ((camera->mPos.vy + line_info.StartCoords.vy) >> 1) +
+                    ((mPos.vy + line_info.StartCoords.vy) >> 1) +
                     vRight.vy;
                 line_info.EndCoords.vz =
-                    ((camera->mPos.vz + line_info.StartCoords.vz) >> 1) +
+                    ((mPos.vz + line_info.StartCoords.vz) >> 1) +
                     vRight.vz;
             }
             M3dColij_InitLineInfo(&line_info);
@@ -1169,7 +1158,7 @@ void CCamera::ReactToCollision() {
             CameraCollisionCheck = 1;
             M3dZone_LineToItem(&line_info, 1);
             CameraCollisionCheck = 0;
-            camera->mColAngBuffer[1] = 0;
+            mColAngBuffer[1] = 0;
             if (line_info.pItem != 0) {
                 if (line_info.Length == 0) {
                     line_info.Length = 1;
@@ -1177,8 +1166,8 @@ void CCamera::ReactToCollision() {
                 int ratio =
                     ((line_info.Length - line_info.Distance) * 0x1000) /
                     line_info.Length;
-                camera->mColAngBuffer[1] =
-                    -(s16)((camera->mCollisionAngLR *
+                mColAngBuffer[1] =
+                    -(s16)((mCollisionAngLR *
                             ((ratio * ratio) >> 12)) >> 12);
             }
         }
@@ -1189,29 +1178,29 @@ void CCamera::ReactToCollision() {
     setVector(&vTemp, 0x64000, 0, 0);
     ApplyMatrixLV(&m, &vTemp, &vOffset);
 
-    if (camera->big_air_timer < 1 &&
-        ((CameraBruceAiOwner *)camera->mTripod)->mPhysicsState !=
+    if (big_air_timer < 1 &&
+        ((CameraBruceAiOwner *)mTripod)->mPhysicsState !=
             PHYSICS_ON_INVISIBLE &&
-        camera->mCollisionBack != 0) {
+        mCollisionBack != 0) {
         u32 ratioL;
         u32 ratioR = 0;
         int ang;
-        camera->mPrevColAngBuffer[3] = camera->mColAngBuffer[3];
+        mPrevColAngBuffer[3] = mColAngBuffer[3];
 
         line_info.StartCoords.vx =
-            camera->mTripodPos.vx + (vOffset.vx >> 1);
+            mTripodPos.vx + (vOffset.vx >> 1);
         line_info.StartCoords.vy =
-            camera->mTripodPos.vy + (vOffset.vy >> 1);
+            mTripodPos.vy + (vOffset.vy >> 1);
         line_info.StartCoords.vz =
-            camera->mTripodPos.vz + (vOffset.vz >> 1);
+            mTripodPos.vz + (vOffset.vz >> 1);
         line_info.EndCoords.vx =
-            camera->mTripodPos.vx - vOffset.vx +
+            mTripodPos.vx - vOffset.vx +
             vBack.vx * 2;
         line_info.EndCoords.vy =
-            camera->mTripodPos.vy - vOffset.vy +
+            mTripodPos.vy - vOffset.vy +
             vBack.vy * 2;
         line_info.EndCoords.vz =
-            camera->mTripodPos.vz - vOffset.vz +
+            mTripodPos.vz - vOffset.vz +
             vBack.vz * 2;
         M3dColij_InitLineInfo(&line_info);
         line_info.RecordTriggerZoneHits = 0;
@@ -1231,19 +1220,19 @@ void CCamera::ReactToCollision() {
         }
 
         line_info.StartCoords.vx =
-            camera->mTripodPos.vx - (vOffset.vx >> 1);
+            mTripodPos.vx - (vOffset.vx >> 1);
         line_info.StartCoords.vy =
-            camera->mTripodPos.vy - (vOffset.vy >> 1);
+            mTripodPos.vy - (vOffset.vy >> 1);
         line_info.StartCoords.vz =
-            camera->mTripodPos.vz - (vOffset.vz >> 1);
+            mTripodPos.vz - (vOffset.vz >> 1);
         line_info.EndCoords.vx =
-            camera->mTripodPos.vx + vOffset.vx +
+            mTripodPos.vx + vOffset.vx +
             vBack.vx * 2;
         line_info.EndCoords.vy =
-            camera->mTripodPos.vy + vOffset.vy +
+            mTripodPos.vy + vOffset.vy +
             vBack.vy * 2;
         line_info.EndCoords.vz =
-            camera->mTripodPos.vz + vOffset.vz +
+            mTripodPos.vz + vOffset.vz +
             vBack.vz * 2;
         M3dColij_InitLineInfo(&line_info);
         line_info.RecordTriggerZoneHits = 0;
@@ -1262,111 +1251,111 @@ void CCamera::ReactToCollision() {
         }
 
         ang = 0x568;
-        if (((CameraBruceAiOwner *)camera->mTripod)->mPhysicsState ==
+        if (((CameraBruceAiOwner *)mTripod)->mPhysicsState ==
             PHYSICS_ON_RAIL) {
             ratioR = 0;
             ratioL = 0;
         }
-        camera->mColAngBuffer[3] = 0;
+        mColAngBuffer[3] = 0;
         if (ratioR != 0 || ratioL != 0) {
-            if (((camera->mPrevColAngBuffer[1] +
-                  camera->mColAngBuffer[1]) >> 1) != 0 &&
-                ((camera->mPrevColAngBuffer[0] +
-                  camera->mColAngBuffer[0]) >> 1) <
-                    -((camera->mPrevColAngBuffer[1] +
-                       camera->mColAngBuffer[1]) >> 1)) {
+            if (((mPrevColAngBuffer[1] +
+                  mColAngBuffer[1]) >> 1) != 0 &&
+                ((mPrevColAngBuffer[0] +
+                  mColAngBuffer[0]) >> 1) <
+                    -((mPrevColAngBuffer[1] +
+                       mColAngBuffer[1]) >> 1)) {
                 ang *= ratioR;
                 ang >>= 12;
-                camera->mColAngBuffer[3] = -(s16)ang;
+                mColAngBuffer[3] = -(s16)ang;
             }
-            if (((camera->mPrevColAngBuffer[0] +
-                  camera->mColAngBuffer[0]) >> 1) != 0) {
+            if (((mPrevColAngBuffer[0] +
+                  mColAngBuffer[0]) >> 1) != 0) {
                 ang *= ratioL;
-                if (-((camera->mPrevColAngBuffer[1] +
-                       camera->mColAngBuffer[1]) >> 1) <
-                    ((camera->mPrevColAngBuffer[0] +
-                      camera->mColAngBuffer[0]) >> 1)) {
+                if (-((mPrevColAngBuffer[1] +
+                       mColAngBuffer[1]) >> 1) <
+                    ((mPrevColAngBuffer[0] +
+                      mColAngBuffer[0]) >> 1)) {
                     ang >>= 12;
-                    camera->mColAngBuffer[3] = (s16)ang;
+                    mColAngBuffer[3] = (s16)ang;
                 }
             }
         }
     }
 
-    if (camera->big_air_timer > 0 ||
-        ((CameraBruceAiOwner *)camera->mTripod)->mPhysicsState ==
+    if (big_air_timer > 0 ||
+        ((CameraBruceAiOwner *)mTripod)->mPhysicsState ==
             PHYSICS_ON_INVISIBLE) {
-        camera->mColAngBuffer[3] = 0;
-        camera->mPrevColAngBuffer[3] = 0;
+        mColAngBuffer[3] = 0;
+        mPrevColAngBuffer[3] = 0;
     }
 
-    Utils_CalcUnit(vVel, camera->mVel);
-    if (camera->mColCheckIndex == 4) {
-        camera->mPrevColAngBuffer[4] = camera->mColAngBuffer[4];
+    Utils_CalcUnit(vVel, mVel);
+    if (mColCheckIndex == 4) {
+        mPrevColAngBuffer[4] = mColAngBuffer[4];
         vVel *= Camera_CamDist;
-        line_info.EndCoords.vx = camera->mPos.vx + vVel.vx;
-        line_info.EndCoords.vy = camera->mPos.vy + vVel.vy;
-        line_info.EndCoords.vz = camera->mPos.vz + vVel.vz;
-        line_info.StartCoords.vx = camera->mPos.vx;
-        line_info.StartCoords.vy = camera->mPos.vy;
-        line_info.StartCoords.vz = camera->mPos.vz;
+        line_info.EndCoords.vx = mPos.vx + vVel.vx;
+        line_info.EndCoords.vy = mPos.vy + vVel.vy;
+        line_info.EndCoords.vz = mPos.vz + vVel.vz;
+        line_info.StartCoords.vx = mPos.vx;
+        line_info.StartCoords.vy = mPos.vy;
+        line_info.StartCoords.vz = mPos.vz;
         M3dColij_InitLineInfo(&line_info);
         line_info.RecordTriggerZoneHits = 0;
         CameraCollisionCheck = 1;
         M3dZone_LineToItem(&line_info, 1);
         CameraCollisionCheck = 0;
 
-        Utils_CalcUnit(vVel, camera->mVel);
-        CVector vworlddown = camera->mTripod->mPos - camera->mPos;
+        Utils_CalcUnit(vVel, mVel);
+        CVector vworlddown = mTripod->mPos - mPos;
         Utils_CalcUnit(vStick, vworlddown);
-        camera->mColAngBuffer[4] = 0;
+        mColAngBuffer[4] = 0;
         if (line_info.pItem != 0) {
             if (line_info.Length == 0) {
                 line_info.Length = 1;
             }
             int ratio =
                 ((line_info.Length - line_info.Distance) * 0x1000) / line_info.Length;
-            camera->mColAngBuffer[4] =
+            mColAngBuffer[4] =
                 (s16)((ratio * ratio) >> 16);
         }
     }
 
     int ang =
-        (camera->mPrevColAngBuffer[2] + camera->mColAngBuffer[2]) >> 1;
+        (mPrevColAngBuffer[2] + mColAngBuffer[2]) >> 1;
     if (ang != 0) {
-        camera->mDesiredO = operator*(
-            camera->mDesiredO, QFromXRot((s16)ang));
+        mDesiredO = operator*(
+            mDesiredO, QFromXRot((s16)ang));
     }
 
     ang =
-        (camera->mPrevColAngBuffer[0] + camera->mColAngBuffer[0]) >> 1;
+        (mPrevColAngBuffer[0] + mColAngBuffer[0]) >> 1;
     if (ang != 0) {
-        camera->mDesiredO = operator*(
-            camera->mDesiredO, QFromYRot((s16)ang));
+        mDesiredO = operator*(
+            mDesiredO, QFromYRot((s16)ang));
     }
 
     ang =
-        (camera->mPrevColAngBuffer[1] + camera->mColAngBuffer[1]) >> 1;
+        (mPrevColAngBuffer[1] + mColAngBuffer[1]) >> 1;
     if (ang != 0) {
-        camera->mDesiredO = operator*(
-            camera->mDesiredO, QFromYRot((s16)ang));
+        mDesiredO = operator*(
+            mDesiredO, QFromYRot((s16)ang));
     }
 
-    if (camera->mColAngBuffer[4] != 0) {
-        CVector vworlddown = camera->mTripod->mPos - camera->mPos;
+    if (mColAngBuffer[4] != 0) {
+        CVector vworlddown = mTripod->mPos - mPos;
         Utils_CalcUnit(vStick, vworlddown);
 
         gte_ldopv1(&vVel);
         gte_ldopv2(&vStick);
         gte_op0();
         gte_stlvnl(&vColCheck);
-        int correction = camera->mColAngBuffer[4];
+        int correction = mColAngBuffer[4];
         vColCheck.vx *= correction;
         vColCheck.vy *= correction;
         vColCheck.vz *= correction;
 
         CQuat rotation = QFromV(vColCheck);
-        CQuat &desired_o = camera->mDesiredO;
+        CQuat &desired_o = mDesiredO;
         int ox = desired_o.x;
         int oy = desired_o.y;
         int oz = desired_o.z;
@@ -1387,10 +1376,10 @@ void CCamera::ReactToCollision() {
     }
 
     ang =
-        (camera->mPrevColAngBuffer[3] + camera->mColAngBuffer[3]) >> 1;
+        (mPrevColAngBuffer[3] + mColAngBuffer[3]) >> 1;
     if (ang != 0) {
         CQuat rotation = QFromYRot((s16)ang);
-        CQuat &desired_o = camera->mDesiredO;
+        CQuat &desired_o = mDesiredO;
         int ox = desired_o.x;
         int oy = desired_o.y;
         int oz = desired_o.z;
@@ -1410,7 +1399,7 @@ void CCamera::ReactToCollision() {
         desired_o.w = nw;
     }
 
-    if (camera->mStoppedOValid != 0) {
+    if (mStoppedOValid != 0) {
         CVector vworlddown(0, 0x1000, 0);
         VECTOR v_temp;
         VECTOR v_temp2;
@@ -1426,7 +1415,7 @@ void CCamera::ReactToCollision() {
         vdown.vy = v_temp2.vy;
         vdown.vz = v_temp2.vz;
 
-        QToM(camera->mStoppedO, mstop);
+        QToM(mStoppedO, mstop);
         v_temp.vx = 0;
         v_temp.vy = 0;
         v_temp.vz = 0x1000;
@@ -1446,69 +1435,69 @@ void CCamera::ReactToCollision() {
                     &vworlddown, &vstop) >> 31)) -
                (Mips_CVecDotProd(
                     &vworlddown, &vstop) >> 31));
-        if (camera->mDownDist < 0 || dot_stop > 0x76c) {
-            camera->mStoppedOValid = 0;
+        if (mDownDist < 0 || dot_stop > 0x76c) {
+            mStoppedOValid = 0;
         }
     }
 
-    if (camera->mSpeed < 4 ||
-        camera->mTripodPos == camera->mOldTripodPos ||
-        ((CameraBruceAiOwner *)camera->mTripod)->mInBail != 0) {
-        if (camera->mStoppedOValid == 0 && camera->mDownDist >= 0) {
+    if (mSpeed < 4 ||
+        mTripodPos == mOldTripodPos ||
+        ((CameraBruceAiOwner *)mTripod)->mInBail != 0) {
+        if (mStoppedOValid == 0 && mDownDist >= 0) {
             Quat_Slerp(
-                camera->mO, camera->mDesiredO, 0x600, camera->mStoppedO);
-            camera->mStoppedOValid = (void *)1;
+                mO, mDesiredO, 0x600, mStoppedO);
+            mStoppedOValid = (void *)1;
         }
 
-        if (GState == 0 && camera->mStoppedOValid != 0) {
-            if (((camera->mPrevColAngBuffer[0] +
-                  camera->mColAngBuffer[0]) >> 1) == 0 &&
-                ((camera->mPrevColAngBuffer[1] +
-                  camera->mColAngBuffer[1]) >> 1) == 0 &&
-                ((camera->mPrevColAngBuffer[3] +
-                  camera->mColAngBuffer[3]) >> 1) == 0) {
+        if (GState == 0 && mStoppedOValid != 0) {
+            if (((mPrevColAngBuffer[0] +
+                  mColAngBuffer[0]) >> 1) == 0 &&
+                ((mPrevColAngBuffer[1] +
+                  mColAngBuffer[1]) >> 1) == 0 &&
+                ((mPrevColAngBuffer[3] +
+                  mColAngBuffer[3]) >> 1) == 0) {
                 if (GenerateLevel == 0) {
                     Quat_Slerp(
-                        camera->mO, camera->mDesiredO, 0x5e7,
-                        camera->mStoppedO);
+                        mO, mDesiredO, 0x5e7,
+                        mStoppedO);
                 }
             }
 
-            camera->mDesiredO = camera->mStoppedO;
+            mDesiredO = mStoppedO;
 
             int stopped_angle =
-                (camera->mPrevColAngBuffer[1] +
-                 camera->mColAngBuffer[1]) >> 1;
+                (mPrevColAngBuffer[1] +
+                 mColAngBuffer[1]) >> 1;
             if (stopped_angle != 0 &&
-                ((camera->mPrevColAngBuffer[0] +
-                  camera->mColAngBuffer[0]) >> 1) == 0 &&
-                ((camera->mPrevColAngBuffer[3] +
-                  camera->mColAngBuffer[3]) >> 1) == 0) {
-                camera->mDesiredO = operator*(
-                    camera->mDesiredO,
+                ((mPrevColAngBuffer[0] +
+                  mColAngBuffer[0]) >> 1) == 0 &&
+                ((mPrevColAngBuffer[3] +
+                  mColAngBuffer[3]) >> 1) == 0) {
+                mDesiredO = operator*(
+                    mDesiredO,
                     QFromYRot((s16)stopped_angle));
             } else if (
-                ((camera->mPrevColAngBuffer[1] +
-                  camera->mColAngBuffer[1]) >> 1) == 0 &&
-                ((camera->mPrevColAngBuffer[0] +
-                  camera->mColAngBuffer[0]) >> 1) != 0 &&
-                ((camera->mPrevColAngBuffer[3] +
-                  camera->mColAngBuffer[3]) >> 1) == 0) {
-                camera->mDesiredO = operator*(
-                    camera->mDesiredO,
+                ((mPrevColAngBuffer[1] +
+                  mColAngBuffer[1]) >> 1) == 0 &&
+                ((mPrevColAngBuffer[0] +
+                  mColAngBuffer[0]) >> 1) != 0 &&
+                ((mPrevColAngBuffer[3] +
+                  mColAngBuffer[3]) >> 1) == 0) {
+                mDesiredO = operator*(
+                    mDesiredO,
                     QFromYRot((s16)(
-                        (camera->mPrevColAngBuffer[0] +
-                         camera->mColAngBuffer[0]) >> 1)));
+                        (mPrevColAngBuffer[0] +
+                         mColAngBuffer[0]) >> 1)));
             }
         }
     } else {
-        camera->mStoppedOValid = 0;
-        camera->mStoppedExtraYRot = 0;
+        mStoppedOValid = 0;
+        mStoppedExtraYRot = 0;
     }
 
-    if (camera->mStoppedExtraYRot != 0) {
-        CQuat rotation = QFromYRot(camera->mStoppedExtraYRot);
-        CQuat &desired_o = camera->mDesiredO;
+    if (mStoppedExtraYRot != 0) {
+        CQuat rotation = QFromYRot(mStoppedExtraYRot);
+        CQuat &desired_o = mDesiredO;
         int ox = desired_o.x;
         int oy = desired_o.y;
         int oz = desired_o.z;
@@ -1960,18 +1949,17 @@ int CCamera::GetZoom() {
  *
  */
 void CCamera::TweakMenu() {
-    CCamera *camera = this;
     u8 c8 = 0xc8;
 
     // Display labels and camera positions
     CamPos::DisplayLabels(0x64, 0x32, c8, c8, c8);
     Font_String(
-        0xc8, 0x28, CameraPositionATextOwner, c8, c8, c8, 0);
-    CamPos *camPos0 = &camera->mPosA;
+        0xc8, 0x28, DAT_800DBB00, c8, c8, c8, 0);
+    CamPos *camPos0 = &mPosA;
     camPos0->Display(0xc8, 0x32, 0x50, 0, 0);
     Font_String(
-        0x12c, 0x28, CameraPositionBTextOwner, c8, c8, c8, 0);
-    CamPos *camPos1 = &camera->mPosB;
+        0x12c, 0x28, DAT_800DBB08, c8, c8, c8, 0);
+    CamPos *camPos1 = &mPosB;
     camPos1->Display(0x12c, 0x32, 0x50, 0, 0);
 
     // Check Right.Triggered (Pad[1])
@@ -2162,9 +2150,9 @@ static u16 CameraOwnerTweakCol
     __attribute__((section(".sdata"))) = 0;
 
 /** Headings used by CCamera and CamPos's debug displays. */
-static char CameraPositionATextOwner[]
+static char DAT_800DBB00[]
     __attribute__((section(".sdata"), aligned(4))) = "Pos A";
-static char CameraPositionBTextOwner[]
+static char DAT_800DBB08[]
     __attribute__((section(".sdata"), aligned(4))) = "Pos B";
 
 /* Owner-private AI state immediately follows the tweak labels in the target. */
@@ -2190,30 +2178,29 @@ static int Mick_Select_Released
  *
  */
 void CCamera::AI() {
-    CCamera *camera = this;
     static int old_camYOffset;
     static int old_camDist;
     static int old_camPitch;
 
-    Camera_CurrentMikeCamera = camera->mMikeIndex;
+    Camera_CurrentMikeCamera = mMikeIndex;
 
-    if (camera->mCalcTripod != 0) {
-        camera->mOldTripodPos = camera->mTripodPos;
-        if (camera->new_focus != 0) {
-            camera->mTripodPos = camera->mTripod->mPos;
+    if (mCalcTripod != 0) {
+        mOldTripodPos = mTripodPos;
+        if (new_focus != 0) {
+            mTripodPos = mTripod->mPos;
         } else {
-            camera->mTripodPos =
-                ((camera->mTripod->mPos << 1) + camera->mOldTripodPos) / 3;
+            mTripodPos =
+                ((mTripod->mPos << 1) + mOldTripodPos) / 3;
         }
     }
 
-    if (camera->mCalcFocus != 0) {
-        camera->mOldFocusPos = camera->mFocusPos;
-        if (camera->new_focus != 0) {
-            camera->mFocusPos = camera->mFocus->mPos;
+    if (mCalcFocus != 0) {
+        mOldFocusPos = mFocusPos;
+        if (new_focus != 0) {
+            mFocusPos = mFocus->mPos;
         } else {
-            camera->mFocusPos =
-                ((camera->mFocus->mPos << 1) + camera->mOldFocusPos) / 3;
+            mFocusPos =
+                ((mFocus->mPos << 1) + mOldFocusPos) / 3;
         }
     }
 
@@ -2243,7 +2230,7 @@ void CCamera::AI() {
             old_camYOffset = camYOffset;
             old_camDist = camDist;
             old_camPitch = camPitch;
-            old_GlobalZoom = camera->mZoom;
+            old_GlobalZoom = mZoom;
         }
     }
 
@@ -2252,22 +2239,22 @@ void CCamera::AI() {
             camYOffset = old_camYOffset;
             camDist = old_camDist;
             camPitch = old_camPitch;
-            camera->mZoom = old_GlobalZoom;
+            mZoom = old_GlobalZoom;
         }
         if (Pad[0].Square.Pressed != 0) {
-            --camera->mZoom;
+            --mZoom;
         }
         if (Pad[0].Circle.Pressed != 0) {
-            ++camera->mZoom;
+            ++mZoom;
         }
         if (Pad[0].Triangle.Pressed != 0) {
-            camera->mZoom = 0x100;
+            mZoom = 0x100;
         }
         if (Pad[1].Square.Pressed != 0) {
-            camera->extra_YRot -= 10;
+            extra_YRot -= 10;
         }
         if (Pad[1].Circle.Pressed != 0) {
-            camera->extra_YRot += 10;
+            extra_YRot += 10;
         }
         if (Pad[1].Left.Pressed != 0) {
             camDist -= Pad[1].Select.Pressed != 0 ? 32 : 8;
@@ -2300,130 +2287,130 @@ void CCamera::AI() {
         if (Mick_CameraTweak == 0) {
             return;
         }
-        camera->CM_Normal();
-        camera->MoveToDesiredPos(0x137);
+        CM_Normal();
+        MoveToDesiredPos(0x137);
         return;
     }
 
-    ++camera->mTimer;
-    if (camera->mZoomTime != 0) {
-        --camera->mZoomTime;
-        camera->mZoom += camera->mZoomIncrement;
+    ++mTimer;
+    if (mZoomTime != 0) {
+        --mZoomTime;
+        mZoom += mZoomIncrement;
     }
-    pCurrentViewport->Zoom = (u16)camera->mZoom;
+    pCurrentViewport->Zoom = (u16)mZoom;
 
-    Utils_CalcAim(camera->mAngles, camera->mPos, camera->mFocusPos);
+    Utils_CalcAim(mAngles, mPos, mFocusPos);
 
-    if (((CameraBruceAiOwner *)camera->mTripod)->mInAirTimer != 0 &&
-        camera->mTripodPosYDamper != 0) {
-        if (((CameraBruceAiOwner *)camera->mTripod)->mVel.vy < 0) {
-            ++camera->jump_uptimer;
+    if (((CameraBruceAiOwner *)mTripod)->mInAirTimer != 0 &&
+        mTripodPosYDamper != 0) {
+        if (((CameraBruceAiOwner *)mTripod)->mVel.vy < 0) {
+            ++jump_uptimer;
         } else {
-            --camera->jump_uptimer;
+            --jump_uptimer;
         }
-        camera->jump_acc +=
-            ((-((CameraBruceAiOwner *)camera->mTripod)->mVel.vy >> 12) *
-             camera->mTripodPosYDamper);
-        if (camera->jump_uptimer > 0) {
-            camera->mTripodPos.vy += camera->jump_acc;
+        jump_acc +=
+            ((-((CameraBruceAiOwner *)mTripod)->mVel.vy >> 12) *
+             mTripodPosYDamper);
+        if (jump_uptimer > 0) {
+            mTripodPos.vy += jump_acc;
         }
     } else {
-        camera->jump_acc = 0;
-        camera->jump_uptimer = 0;
+        jump_acc = 0;
+        jump_uptimer = 0;
     }
 
-    if (camera->mPitchDamper != 0) {
-        if (((CameraBruceAiOwner *)camera->mTripod)->mVel.vy < 0) {
-            Camera_CamPitch -= camera->mPitchDamper;
+    if (mPitchDamper != 0) {
+        if (((CameraBruceAiOwner *)mTripod)->mVel.vy < 0) {
+            Camera_CamPitch -= mPitchDamper;
         }
-        if (((CameraBruceAiOwner *)camera->mTripod)->mVel.vy > 0) {
-            Camera_CamPitch -= camera->mPitchDamper >> 1;
+        if (((CameraBruceAiOwner *)mTripod)->mVel.vy > 0) {
+            Camera_CamPitch -= mPitchDamper >> 1;
         }
         Camera_CamPitch &= 0xfff;
     }
 
-    switch (camera->mCameraMode) {
+    switch (mCameraMode) {
     case 1:
-        camera->CM_Normal();
+        CM_Normal();
         break;
     case 2:
-        camera->CM_NoBigAir();
+        CM_NoBigAir();
         break;
     case 0x17:
-        camera->CM_CompetitionIntro();
-        camera->LoadIntoMikeCamera();
+        CM_CompetitionIntro();
+        LoadIntoMikeCamera();
         return;
     default:
         break;
     }
 
-    if (((CameraBruceAiOwner *)camera->mTripod)->mInBail == 0) {
-        if (camera->mTripodPos == camera->mOldTripodPos) {
-            camera->MoveToDesiredPos(0x97);
-        } else if (camera->mSpeed < 4) {
-            camera->MoveToDesiredPos(0x97);
-        } else if (((CameraBruceAiOwner *)camera->mTripod)->mPhysicsState !=
+    if (((CameraBruceAiOwner *)mTripod)->mInBail == 0) {
+        if (mTripodPos == mOldTripodPos) {
+            MoveToDesiredPos(0x97);
+        } else if (mSpeed < 4) {
+            MoveToDesiredPos(0x97);
+        } else if (((CameraBruceAiOwner *)mTripod)->mPhysicsState !=
                    PHYSICS_IN_AIR) {
-            camera->MoveToDesiredPos(0x137);
-        } else if (camera->mTimer < 0x12) {
-            camera->MoveToDesiredPos(0x137);
+            MoveToDesiredPos(0x137);
+        } else if (mTimer < 0x12) {
+            MoveToDesiredPos(0x137);
         } else {
-            camera->MoveToDesiredPos(0x97);
+            MoveToDesiredPos(0x97);
         }
     } else {
-        camera->MoveToDesiredPos(0x137);
+        MoveToDesiredPos(0x137);
     }
-    Utils_CalcAim(camera->mAngles, camera->mPos, camera->mFocusPos);
+    Utils_CalcAim(mAngles, mPos, mFocusPos);
 
-    if (camera->mShakeAmplitude.vx != 0 ||
-        camera->mShakeAmplitude.vy != 0 ||
-        camera->mShakeAmplitude.vz != 0) {
-        camera->mO = operator*(
+    if (mShakeAmplitude.vx != 0 ||
+        mShakeAmplitude.vy != 0 ||
+        mShakeAmplitude.vz != 0) {
+        mO = operator*(
             operator*(
                 operator*(
                     QFromYRot((s16)(
-                        (camera->mShakeAmplitude.vy *
-                         Camera_Sine(camera->mShakeSpeed.vy * TTime)) /
+                        (mShakeAmplitude.vy *
+                         Camera_Sine(mShakeSpeed.vy * TTime)) /
                         0x1000)),
-                    camera->mO),
+                    mO),
                 QFromXRot((s16)(
-                    (camera->mShakeAmplitude.vx *
-                     Camera_Sine(camera->mShakeSpeed.vx * TTime)) /
+                    (mShakeAmplitude.vx *
+                     Camera_Sine(mShakeSpeed.vx * TTime)) /
                     0x1000))),
             QFromZRot((s16)(
-                (camera->mShakeAmplitude.vz *
-                 Camera_Sine(camera->mShakeSpeed.vz * TTime)) /
+                (mShakeAmplitude.vz *
+                 Camera_Sine(mShakeSpeed.vz * TTime)) /
                 0x1000)));
 
-        CSVector oldamp = camera->mShakeAmplitude;
-        if (camera->mShakeAmplitude.vx < 0) {
-            camera->mShakeAmplitude.vx += camera->mShakeDecay.vx;
+        CSVector oldamp = mShakeAmplitude;
+        if (mShakeAmplitude.vx < 0) {
+            mShakeAmplitude.vx += mShakeDecay.vx;
         } else {
-            camera->mShakeAmplitude.vx -= camera->mShakeDecay.vx;
+            mShakeAmplitude.vx -= mShakeDecay.vx;
         }
-        if (camera->mShakeAmplitude.vy < 0) {
-            camera->mShakeAmplitude.vy += camera->mShakeDecay.vy;
+        if (mShakeAmplitude.vy < 0) {
+            mShakeAmplitude.vy += mShakeDecay.vy;
         } else {
-            camera->mShakeAmplitude.vy -= camera->mShakeDecay.vy;
+            mShakeAmplitude.vy -= mShakeDecay.vy;
         }
-        if (camera->mShakeAmplitude.vz < 0) {
-            camera->mShakeAmplitude.vz += camera->mShakeDecay.vz;
+        if (mShakeAmplitude.vz < 0) {
+            mShakeAmplitude.vz += mShakeDecay.vz;
         } else {
-            camera->mShakeAmplitude.vz -= camera->mShakeDecay.vz;
+            mShakeAmplitude.vz -= mShakeDecay.vz;
         }
 
-        if (((u16)oldamp.vx ^ (u16)camera->mShakeAmplitude.vx) & 0x8000) {
-            camera->mShakeAmplitude.vx = 0;
+        if (((u16)oldamp.vx ^ (u16)mShakeAmplitude.vx) & 0x8000) {
+            mShakeAmplitude.vx = 0;
         }
-        if (((u16)oldamp.vy ^ (u16)camera->mShakeAmplitude.vy) & 0x8000) {
-            camera->mShakeAmplitude.vy = 0;
+        if (((u16)oldamp.vy ^ (u16)mShakeAmplitude.vy) & 0x8000) {
+            mShakeAmplitude.vy = 0;
         }
-        if (((u16)oldamp.vz ^ (u16)camera->mShakeAmplitude.vz) & 0x8000) {
-            camera->mShakeAmplitude.vz = 0;
+        if (((u16)oldamp.vz ^ (u16)mShakeAmplitude.vz) & 0x8000) {
+            mShakeAmplitude.vz = 0;
         }
     }
 
-    camera->LoadIntoMikeCamera();
+    LoadIntoMikeCamera();
 }
 
 
@@ -2435,14 +2422,13 @@ void CCamera::AI() {
  * Demangled: CCamera::CM_Normal(void)
  */
 void CCamera::CM_Normal() {
-    CCamera *camera = this;
     CVector vUp;
     CVector vRight;
     CSVector ang1;
     int dot_front;
-    CVector temp_vel = camera->mTripodPos - camera->mOldTripodPos;
+    CVector temp_vel = mTripodPos - mOldTripodPos;
 
-    vUp = ((CameraBruceMoveOwner *)camera->mTripod)->mUp;
+    vUp = ((CameraBruceMoveOwner *)mTripod)->mUp;
 
     CVector Down(0, 0x1000, 0);
     CVector Zero(0, 0, 0);
@@ -2461,68 +2447,69 @@ void CCamera::CM_Normal() {
          (Mips_CVecDotProd(&temp_front, &vUp) >> 31)) -
         (Mips_CVecDotProd(&temp_front, &vUp) >> 31);
 
-    ++camera->in_pool_timer;
+    ++in_pool_timer;
     if (dot_up < 0xdf4) {
-        if (((CameraBruceMoveOwner *)camera->mTripod)->mPhysicsState ==
+        if (((CameraBruceMoveOwner *)mTripod)->mPhysicsState ==
                 PHYSICS_ON_INVISIBLE ||
-            ((CameraBruceMoveOwner *)camera->mTripod)->mPhysicsState ==
+            ((CameraBruceMoveOwner *)mTripod)->mPhysicsState ==
                 PHYSICS_IN_HANDPLANT) {
-            if (camera->big_air == 0 &&
-                ((CameraBruceMoveOwner *)camera->mTripod)->mManIsJumping != 0) {
-                ++((CameraBruceMoveOwner *)camera->mTripod)->mBigAirs;
+            if (big_air == 0 &&
+                ((CameraBruceMoveOwner *)mTripod)->mManIsJumping != 0) {
+                ++((CameraBruceMoveOwner *)mTripod)->mBigAirs;
             }
 
-            ++camera->turn_delay_timer;
-            if (camera->turn_delay_timer >= 4) {
+            ++turn_delay_timer;
+            if (turn_delay_timer >= 4) {
                 CVector U(0, 0x1000000, 0);
-                camera->vFront = U;
+                vFront = U;
             } else {
                 Utils_GetVecFromMagDir(
-                    camera->vFront, 0x1000, ang1);
+                    vFront, 0x1000, ang1);
             }
-            camera->big_air = (void *)1;
-            camera->in_pool_timer = 0;
+            big_air = (void *)1;
+            in_pool_timer = 0;
             goto front_selected;
         }
     }
 
     if ((dot_front >> 12) >= 0x7d1 ||
         temp_vel.Length() < 5) {
-        camera->turn_delay_timer = 0;
-        if (dot_up < 0xdf4 && camera->big_air == (void *)1) {
-            camera->in_pool_timer = 0;
+        turn_delay_timer = 0;
+        if (dot_up < 0xdf4 && big_air == (void *)1) {
+            in_pool_timer = 0;
         }
-        camera->big_air = 0;
+        big_air = 0;
     } else {
-        camera->turn_delay_timer = 0;
+        turn_delay_timer = 0;
         Utils_GetVecFromMagDir(
-            camera->vFront, 0x1000, ang1);
-        if (dot_up < 0xdf4 && camera->big_air == (void *)1) {
-            camera->in_pool_timer = 0;
+            vFront, 0x1000, ang1);
+        if (dot_up < 0xdf4 && big_air == (void *)1) {
+            in_pool_timer = 0;
         }
-        camera->big_air = 0;
+        big_air = 0;
     }
 
 front_selected:
-    camera->mOldVFront = camera->mVFront;
-    if (camera->mTripodPos == camera->mOldTripodPos) {
-        camera->mVFront = camera->mOldVFront;
+    mOldVFront = mVFront;
+    if (mTripodPos == mOldTripodPos) {
+        mVFront = mOldVFront;
     } else {
-        camera->mVFront = (camera->mOldVFront + camera->vFront) >> 1;
+        mVFront = (mOldVFront + vFront) >> 1;
     }
 
-    if (camera->mTimer < 12) {
-        camera->mVFront = Camera_VectorNegate(
-        reinterpret_cast<CameraCompetitionSkater *>(GSkater[0])->mFront) << 12;
-        camera->mOldVFront = camera->mVFront;
-        camera->vFront = camera->mOldVFront;
+    if (mTimer < 12) {
+        mVFront =
+            reinterpret_cast<CameraCompetitionSkater *>(
+                GSkater[0])->mFront.operator-() << 12;
+        mOldVFront = mVFront;
+        vFront = mOldVFront;
     }
 
-    camera->vFront = camera->mVFront;
+    vFront = mVFront;
     CVector U;
     CVector V;
     CVector N;
-    N = camera->vFront >> 12;
+    N = vFront >> 12;
     V.vx = -vUp.vx;
     V.vy = -vUp.vy;
     V.vz = -vUp.vz;
@@ -2552,10 +2539,10 @@ front_selected:
     tm.m[0][2] = (s16)N.vx;
     tm.m[1][2] = (s16)N.vy;
     tm.m[2][2] = (s16)N.vz;
-    MToQ(tm, camera->mDesiredO);
+    MToQ(tm, mDesiredO);
 
-    camera->mDesiredO = operator*(
-        camera->mDesiredO, QFromYRot((s16)camera->extra_YRot));
+    mDesiredO = operator*(
+        mDesiredO, QFromYRot((s16)extra_YRot));
 }
 
 
@@ -2568,9 +2555,8 @@ front_selected:
  *
  */
 void CCamera::StartCompetitionIntro() {
-    CCamera *camera = this;
-    camera->mCompIntroTimer = 0;
-    camera->mCameraMode = 0x17;
+    mCompIntroTimer = 0;
+    mCameraMode = 0x17;
     Competition_ResetMarquee();
 }
 
@@ -2584,15 +2570,14 @@ void CCamera::StartCompetitionIntro() {
  *
  */
 void CCamera::CM_CompetitionIntro() {
-    CCamera *camera = this;
 
-    if (camera->mCompIntroTimer == 0) {
+    if (mCompIntroTimer == 0) {
         VECTOR v1;
         VECTOR v2;
         int speed_lag_dist;
         MATRIX m;
 
-        camera->mCameraMode = 1;
+        mCameraMode = 1;
         reinterpret_cast<CameraCompetitionSkater *>(GSkater[0])->mVel.vx =
             reinterpret_cast<CameraCompetitionSkater *>(GSkater[0])->mFront.vx * 20;
         reinterpret_cast<CameraCompetitionSkater *>(GSkater[0])->mVel.vy =
@@ -2610,26 +2595,26 @@ void CCamera::CM_CompetitionIntro() {
         reinterpret_cast<CameraCompetitionSkater *>(GSkater[0])->mVel.vy = 0;
         speed_lag_dist = Camera_CamDist >> 1;
         reinterpret_cast<CameraCompetitionSkater *>(GSkater[0])->mVel.vz = 0;
-        camera->mCameraMode = 0x17;
+        mCameraMode = 0x17;
 
-        camera->prev_speed_lag_dist = speed_lag_dist;
+        prev_speed_lag_dist = speed_lag_dist;
         v1.vx = 0;
         v1.vy = 0;
         v1.vz = -(speed_lag_dist << 12);
 
-        QToM(camera->mO, m);
+        QToM(mO, m);
         ApplyMatrixLV(&m, &v1, &v2);
         v1.vx = Camera_CamOffset.vx;
         v1.vy = Camera_CamOffset.vy;
         v1.vz = Camera_CamOffset.vz;
-        ApplyMatrixLV(&m, &v1, &camera->real_cam_offset);
+        ApplyMatrixLV(&m, &v1, &real_cam_offset);
 
-        camera->mPos.vx = camera->mTripodPos.vx + v2.vx;
-        camera->mPos.vy = camera->mTripodPos.vy + v2.vy;
-        camera->mCompIntroEndPos.vx = camera->mPos.vx;
-        camera->mPos.vz = camera->mTripodPos.vz + v2.vz;
-        camera->mCompIntroEndPos.vy = camera->mPos.vy;
-        camera->mCompIntroEndPos.vz = camera->mPos.vz;
+        mPos.vx = mTripodPos.vx + v2.vx;
+        mPos.vy = mTripodPos.vy + v2.vy;
+        mCompIntroEndPos.vx = mPos.vx;
+        mPos.vz = mTripodPos.vz + v2.vz;
+        mCompIntroEndPos.vy = mPos.vy;
+        mCompIntroEndPos.vz = mPos.vz;
     }
 
     /* The trailing legacy barrier keeps the two automatic CQuat destructor
@@ -2639,7 +2624,7 @@ void CCamera::CM_CompetitionIntro() {
     CQuat begin_o;
     CQuat end_o;
     CVector begin_pos;
-    end_o = camera->mDesiredO;
+    end_o = mDesiredO;
     begin_o = operator*(
         operator*(
             QFromYRot(
@@ -2650,14 +2635,14 @@ void CCamera::CM_CompetitionIntro() {
             Levels[GLevel].IntroStartAngZ));
 
     int slerp_time =
-        (int)(((u32)camera->mCompIntroTimer << 12) / 130u);
-    Quat_Slerp(begin_o, end_o, slerp_time, camera->mO);
+        (int)(((u32)mCompIntroTimer << 12) / 130u);
+    Quat_Slerp(begin_o, end_o, slerp_time, mO);
 
-    if ((u32)camera->mCompIntroTimer >= 131u) {
+    if ((u32)mCompIntroTimer >= 131u) {
         Video_Start(
             GSkater[0],
             VIDEO_RECORD, 1, 0x7fffffff);
-        camera->mCameraMode = 1;
+        mCameraMode = 1;
     } else {
         Competition_MarqueeDisplay();
         begin_pos.vx =
@@ -2667,27 +2652,27 @@ void CCamera::CM_CompetitionIntro() {
         begin_pos.vz =
             Levels[GLevel].IntroStartPosZ << 12;
         CVector offset_inc;
-        offset_inc = (begin_pos - camera->mCompIntroEndPos) / 130;
+        offset_inc = (begin_pos - mCompIntroEndPos) / 130;
         CVector offset =
             (offset_inc * 130) -
-            (camera->mCompIntroTimer * offset_inc);
+            (mCompIntroTimer * offset_inc);
 
-        camera->mPos.vx = camera->mCompIntroEndPos.vx + offset.vx;
-        camera->mPos.vy = camera->mCompIntroEndPos.vy + offset.vy;
-        camera->mPos.vz = camera->mCompIntroEndPos.vz + offset.vz;
+        mPos.vx = mCompIntroEndPos.vx + offset.vx;
+        mPos.vy = mCompIntroEndPos.vy + offset.vy;
+        mPos.vz = mCompIntroEndPos.vz + offset.vz;
 
         int activated = 0;
         if (Pad[0].X.Pressed != 0 || Pad[1].X.Pressed != 0) {
             activated = 1;
         }
         if (activated) {
-            camera->mSpeedUpIntro = (void *)1;
+            mSpeedUpIntro = (void *)1;
         }
 
-        if (camera->mSpeedUpIntro != 0) {
-            camera->mCompIntroTimer += 6;
+        if (mSpeedUpIntro != 0) {
+            mCompIntroTimer += 6;
         } else {
-            camera->mCompIntroTimer += 1;
+            mCompIntroTimer += 1;
         }
     }
     }
@@ -2718,17 +2703,16 @@ int CCamera::InCompetitionIntro() {
  *
  */
 void CCamera::CM_NoBigAir() {
-    CCamera *camera = this;
     CVector vUp;
     CVector vRight;
     CSVector ang1;
     int dot_front;
-    CVector temp_vel = camera->mTripodPos - camera->mOldTripodPos;
+    CVector temp_vel = mTripodPos - mOldTripodPos;
 
-    if (camera->mTripod == 0) {
+    if (mTripod == 0) {
         vUp = CVector(0, -0x1000, 0);
     } else {
-        vUp = ((CameraBruceMoveOwner *)camera->mTripod)->mUp;
+        vUp = ((CameraBruceMoveOwner *)mTripod)->mUp;
     }
 
     CVector Down(0, 0x1000, 0);
@@ -2750,27 +2734,27 @@ void CCamera::CM_NoBigAir() {
          (Mips_CVecDotProd(&temp_front, &vUp) >> 31)) >> 12;
 
     if (dot_front >= 0x7d1) {
-        camera->big_air = 0;
+        big_air = 0;
     } else if (temp_vel.Length() < 5) {
-        camera->big_air = 0;
+        big_air = 0;
     } else {
-        camera->big_air = 0;
+        big_air = 0;
         Utils_GetVecFromMagDir(
-            camera->vFront, 0x1000, ang1);
+            vFront, 0x1000, ang1);
     }
 
-    camera->mOldVFront = camera->mVFront;
-    if (camera->mTripodPos == camera->mOldTripodPos) {
-        camera->mVFront = camera->mOldVFront;
+    mOldVFront = mVFront;
+    if (mTripodPos == mOldTripodPos) {
+        mVFront = mOldVFront;
     } else {
-        camera->mVFront = (camera->mOldVFront + camera->vFront) >> 1;
+        mVFront = (mOldVFront + vFront) >> 1;
     }
 
-    camera->vFront = camera->mVFront;
+    vFront = mVFront;
     CVector U;
     CVector V;
     CVector N;
-    N = camera->vFront >> 12;
+    N = vFront >> 12;
     V.vx = -vUp.vx;
     V.vy = -vUp.vy;
     V.vz = -vUp.vz;
@@ -2800,11 +2784,11 @@ void CCamera::CM_NoBigAir() {
     tm.m[0][2] = (s16)N.vx;
     tm.m[1][2] = (s16)N.vy;
     tm.m[2][2] = (s16)N.vz;
-    MToQ(tm, camera->mDesiredO);
+    MToQ(tm, mDesiredO);
 
-    camera->mDesiredO = operator*(
-        camera->mDesiredO, QFromYRot((s16)camera->extra_YRot));
-    camera->big_air = 0;
+    mDesiredO = operator*(
+        mDesiredO, QFromYRot((s16)extra_YRot));
+    big_air = 0;
 }
 
 
@@ -2841,39 +2825,38 @@ CamPos::~CamPos() {
  * Demangled: CamPos::Display(unsigned short, unsigned short, unsigned char, unsigned char, unsigned char)
  */
 void CamPos::Display(u16 x, u16 y, u8 r, u8 g, u8 b) {
-    CamPos *camPos = this;
-    if (camPos->calc_mTripod != 0) {
+    if (calc_mTripod != 0) {
         Font_String(
-            x, y, CameraFollowTextOwner, r, g, b, 0);
+            x, y, DAT_800DBB28, r, g, b, 0);
         Font_Number(
-            x, (u16)(y + 8), camPos->mTripod->mPos.vx >> 12,
+            x, (u16)(y + 8), mTripod->mPos.vx >> 12,
             r, g, b, 0);
         Font_Number(
-            x, (u16)(y + 16), camPos->mTripod->mPos.vy >> 12,
+            x, (u16)(y + 16), mTripod->mPos.vy >> 12,
             r, g, b, 0);
         Font_Number(
-            x, (u16)(y + 24), camPos->mTripod->mPos.vz >> 12,
+            x, (u16)(y + 24), mTripod->mPos.vz >> 12,
             r, g, b, 0);
     } else {
         Font_String(
-            x, y, CameraFixedTextOwner, r, g, b, 0);
+            x, y, DAT_800DBB30, r, g, b, 0);
         Font_Number(
-            x, (u16)(y + 8), camPos->mTripodPos.vx >> 12, r, g, b, 0);
+            x, (u16)(y + 8), mTripodPos.vx >> 12, r, g, b, 0);
         Font_Number(
-            x, (u16)(y + 16), camPos->mTripodPos.vy >> 12, r, g, b, 0);
+            x, (u16)(y + 16), mTripodPos.vy >> 12, r, g, b, 0);
         Font_Number(
-            x, (u16)(y + 24), camPos->mTripodPos.vz >> 12, r, g, b, 0);
+            x, (u16)(y + 24), mTripodPos.vz >> 12, r, g, b, 0);
     }
     Font_String(
-        x, (u16)(y + 40), CameraQuaternionTextOwner, r, g, b, 0);
+        x, (u16)(y + 40), DAT_800DBB38, r, g, b, 0);
     Font_Number(
-        x, (u16)(y + 48), camPos->mStickLength, r, g, b, 0);
+        x, (u16)(y + 48), mStickLength, r, g, b, 0);
     Font_Number(
-        x, (u16)(y + 64), camPos->mStickOffset.vx >> 12, r, g, b, 0);
+        x, (u16)(y + 64), mStickOffset.vx >> 12, r, g, b, 0);
     Font_Number(
-        x, (u16)(y + 72), camPos->mStickOffset.vy >> 12, r, g, b, 0);
+        x, (u16)(y + 72), mStickOffset.vy >> 12, r, g, b, 0);
     Font_Number(
-        x, (u16)(y + 80), camPos->mStickOffset.vz >> 12, r, g, b, 0);
+        x, (u16)(y + 80), mStickOffset.vz >> 12, r, g, b, 0);
 }
 
 
@@ -2892,17 +2875,17 @@ void CamPos::Display(u16 x, u16 y, u8 r, u8 g, u8 b) {
  * @param b  Blue component (0-255).
  */
 void CamPos::DisplayLabels(u16 x, u16 y, u8 r, u8 g, u8 b) {
-    Font_String(x, y, CameraTripodTextOwner, r, g, b, 0);
+    Font_String(x, y, DAT_800DBB44, r, g, b, 0);
     u16 x2 = (u16)(x + 0x14);
-    Font_String(x2, (u16)(y + 8), CameraXTextOwner, r, g, b, 0);
-    Font_String(x2, (u16)(y + 0x10), CameraYTextOwner, r, g, b, 0);
-    Font_String(x2, (u16)(y + 0x18), CameraZTextOwner, r, g, b, 0);
-    Font_String(x, (u16)(y + 0x28), CameraStickOrientationTextOwner, r, g, b, 0);
-    Font_String(x, (u16)(y + 0x30), CameraStickLengthTextOwner, r, g, b, 0);
-    Font_String(x, (u16)(y + 0x38), CameraStickOffsetTextOwner, r, g, b, 0);
-    Font_String(x2, (u16)(y + 0x40), CameraXTextOwner, r, g, b, 0);
-    Font_String(x2, (u16)(y + 0x48), CameraYTextOwner, r, g, b, 0);
-    Font_String(x2, (u16)(y + 0x50), CameraZTextOwner, r, g, b, 0);
+    Font_String(x2, (u16)(y + 8), DAT_800DBB4C, r, g, b, 0);
+    Font_String(x2, (u16)(y + 0x10), DAT_800DBB50, r, g, b, 0);
+    Font_String(x2, (u16)(y + 0x18), DAT_800DBB54, r, g, b, 0);
+    Font_String(x, (u16)(y + 0x28), DAT_800DBB58, r, g, b, 0);
+    Font_String(x, (u16)(y + 0x30), DAT_800DBB60, r, g, b, 0);
+    Font_String(x, (u16)(y + 0x38), DAT_800DBB70, r, g, b, 0);
+    Font_String(x2, (u16)(y + 0x40), DAT_800DBB4C, r, g, b, 0);
+    Font_String(x2, (u16)(y + 0x48), DAT_800DBB50, r, g, b, 0);
+    Font_String(x2, (u16)(y + 0x50), DAT_800DBB54, r, g, b, 0);
 }
 
 
@@ -2922,39 +2905,34 @@ void CamPos::DisplayLabels(u16 x, u16 y, u8 r, u8 g, u8 b) {
 
 int yangle __attribute__((section(".sdata"))) = 0;
 
-static char CameraFollowTextOwner[]
+static char DAT_800DBB28[]
     __attribute__((section(".sdata"), aligned(4))) = "Follow";
-static char CameraFixedTextOwner[]
+static char DAT_800DBB30[]
     __attribute__((section(".sdata"), aligned(4))) = "Fixed";
-static char CameraQuaternionTextOwner[]
+static char DAT_800DBB38[]
     __attribute__((section(".sdata"), aligned(4))) = "quaternion";
-static char CameraTripodTextOwner[]
+static char DAT_800DBB44[]
     __attribute__((section(".sdata"), aligned(4))) = "Tripod";
-static char CameraXTextOwner[]
+static char DAT_800DBB4C[]
     __attribute__((section(".sdata"), aligned(4))) = "x";
-static char CameraYTextOwner[]
+static char DAT_800DBB50[]
     __attribute__((section(".sdata"), aligned(4))) = "y";
-static char CameraZTextOwner[]
+static char DAT_800DBB54[]
     __attribute__((section(".sdata"), aligned(4))) = "z";
-static char CameraStickOrientationTextOwner[]
+static char DAT_800DBB58[]
     __attribute__((section(".sdata"), aligned(4))) = "Stick O";
-static char CameraStickLengthTextOwner[]
+static char DAT_800DBB60[]
     __attribute__((section(".sdata"), aligned(4))) = "Stick Length";
-static char CameraStickOffsetTextOwner[]
+static char DAT_800DBB70[]
     __attribute__((section(".sdata"), aligned(4))) = "Stick Offset";
 
-extern "C" void CameraAnimParamDestructor(void)
-    asm("__DOT__t9AnimParam1Z5CQuat");
-/** Raw address view retained solely for CameraCamPosVtableImage. */
-extern "C" void CameraCamPosDestructor(void)
-    asm("_._6CamPos");
-extern "C" void CameraQuatDestructor(void)
-    asm("__DOT__5CQuat_8007E81C");
+/** Owner-local address view retained solely for CameraCamPosVtableImage. */
+void CameraCamPosDestructor(void) asm("_._6CamPos");
 
 /** Destructor-only dispatch tables for CAMERA's embedded value types. */
 static unsigned int CameraAnimParamVtableImage[4]
     __attribute__((section(".sdata"), aligned(4))) = {
-        0, 0, (unsigned int)&CameraAnimParamDestructor, 0,
+        0, 0, (unsigned int)&__DOT__t9AnimParam1Z5CQuat, 0,
     };
 static unsigned int CameraCamPosVtableImage[4]
     __attribute__((section(".sdata"), aligned(4))) = {
@@ -2962,5 +2940,5 @@ static unsigned int CameraCamPosVtableImage[4]
     };
 static unsigned int CameraQuatVtableImage[4]
     __attribute__((section(".sdata"), aligned(4))) = {
-        0, 0, (unsigned int)&CameraQuatDestructor, 0,
+        0, 0, (unsigned int)&__DOT__5CQuat_8007E81C, 0,
     };

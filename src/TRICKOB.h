@@ -13,11 +13,6 @@
 struct Item;
 struct CTrickOb;
 
-/** Construct one trigger object using the target C++ constructor ABI. */
-extern "C" CTrickOb *CTrickOb_Construct(
-    CTrickOb *object, unsigned short node, unsigned short delayLevel)
-    asm("__8CTrickObUsUs");
-
 void TrickOb_Init(void);
 void TrickOb_DeleteAll(void);
 /**
@@ -74,6 +69,8 @@ struct CTrickOb
     CTrickOb *mpNext;
     Item *mpItem;
 
+    /** Constructs and links one trigger object. */
+    CTrickOb(unsigned short node, unsigned short delayLevel);
     /** Unlinks this trigger from the active trick-object list. */
     ~CTrickOb();
     /** Releases trigger storage through the owning CClass allocator. */

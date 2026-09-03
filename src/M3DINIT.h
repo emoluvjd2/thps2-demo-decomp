@@ -10,10 +10,10 @@ struct STexWibItemInfo;
 #endif
 
 /** Model part index enlarged for the character-select head preview. */
-extern "C" int GHeadPart M3DINIT_SHARED_STATE_DECL_ATTR; // 0x800DC574
+extern int GHeadPart M3DINIT_SHARED_STATE_DECL_ATTR; // 0x800DC574
 
 /** Vertical offset applied to the enlarged character-select head. */
-extern "C" int GHeadUp M3DINIT_SHARED_STATE_DECL_ATTR; // 0x800DC584
+extern int GHeadUp M3DINIT_SHARED_STATE_DECL_ATTR; // 0x800DC584
 
 #undef M3DINIT_SHARED_STATE_DECL_ATTR
 
@@ -33,3 +33,15 @@ void M3dInit_ParsePSX(int Region);
 void M3dInit_FlagZeroWibbles(STexWibItemInfo *pTexWibItemInfo);
 
 #endif // THPS2_M3DINIT_H
+
+#ifdef M3DINIT_DECLARE_BOARD_WHEEL_PARTS
+/**
+ * Model-part indices selected while fixing up the active skater model.
+ *
+ * This owner-only view retains M3DINIT's original declaration encounter and
+ * GP-relative compiler treatment without exposing the state to API clients.
+ */
+extern int GBoardPart, GWheel1Part, GWheel2Part;
+
+#undef M3DINIT_DECLARE_BOARD_WHEEL_PARTS
+#endif

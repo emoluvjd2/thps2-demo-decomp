@@ -10,6 +10,8 @@
 #include "RFRONT.h"
 #undef RFRONT_OWNER_DECLARATIONS
 #include "MAIN.h"
+#include "VBLANKUPDATEBAR.h"
+#include "SOFTRESETSTATE.h"
 
 /** States returned to the main front-end state machine. */
 enum EPausedStatus
@@ -110,16 +112,10 @@ enum EMemCardState
 struct VerticalMenu;
 
 extern "C" {
-extern ELoadAction GLoadAction;
 #define SAVEACTION_WITHIN_C_LINKAGE
 #include "SAVEACTION.h"
-extern int VideoToDisk;
 #define CARDSTATUS_WITHIN_C_LINKAGE
 #include "CARDSTATUS.h"
-#define SOFTRESETSTATE_ABSOLUTE_DECLARATION
-#define SOFTRESETSTATE_WITHIN_C_LINKAGE
-#include "SOFTRESETSTATE.h"
-extern int VblankUpdateBar __attribute__((section(".data")));
 }
 
 #include "CARD.h"
@@ -170,6 +166,12 @@ struct RFrontSpriteVTable
 #include "globals.h"
 #include "CMENU.h"
 #include "SPRITE.h"
+
+/** Return caller-owned storage for an ordinary placement construction. */
+inline void *operator new(unsigned int, void *storage)
+{
+    return storage;
+}
 
 /** One cached text rectangle and the sprite used to restore its background. */
 struct RFrontCachedBackground
@@ -321,21 +323,16 @@ inline RFrontCareerLoadBlock *RFront_GetCareerLoadBlock(unsigned long *block)
     return reinterpret_cast<RFrontCareerLoadBlock *>(block);
 }
 
-extern "C" {
 /** Readable, typed bindings for collaborator ABIs not yet owned by one API. */
 #define VIDEOINFO_DECLARE_GVINFO1
 #include "VIDEOINFO.h"
 
 /** Addressing views for RFRONT state owned by this or collaborating TUs. */
-extern char NameBuf asm("SaveGameName");
-extern char NameBackup1 asm("LastCareerName");
-extern char NameBackup2 asm("LastVideoName");
+#define RFRONT_DECLARE_SAVE_NAME_ADDRESS_VIEWS
+#include "RFRONT.h"
 #define FRONTTIMERS_LEFT_RIGHT_TIMER_ABSOLUTE_DECLARATION
-#define FRONTTIMERS_WITHIN_C_LINKAGE
 #include "FRONTTIMERS.h"
-#define YESNOMENU_WITHIN_C_LINKAGE
 #include "YESNOMENU.h"
-}
 
 #include "MESS.h"
 int InCompetition(void);
@@ -348,16 +345,12 @@ int Competition_IsOver(void);
  * The SDK header's returned pointer keeps `$v0` live and changes the following
  * delay-slot allocation, while this declaration reproduces the original call.
  */
-extern "C" void strcpy(char *destination, const char *source);
+#define RFRONT_DECLARE_VOID_STRCPY_ABI
+#include "RFRONT.h"
 void ResetOT(void);
-Sprite *RFront_ConstructSprite(Sprite *sprite, int x, int y, int width,
-                               int height, int pack, int sliceWidth,
-                               int sliceHeight)
-    asm("__6Spriteiiiiiii");
-VerticalMenu *RFront_ConstructVerticalMenu(
+extern "C" VerticalMenu *__12VerticalMenuiiiPPciPiT6i(
     VerticalMenu *menu, int top, int bottom, int spacing, char **items,
-    int count, int *first, int *last, int flags)
-    asm("__12VerticalMenuiiiPPciPiT6i");
+    int count, int *first, int *last, int flags);
 #include "MEM.h"
 
 #include "SFX.h"
@@ -573,8 +566,8 @@ void Front_DirtyRectText(int x, int y, const char * pText) {
     pSpriteObj = static_cast<Sprite *>(
         ::CClass::operator new(sizeof(Sprite)));
     if (pSpriteObj != 0) {
-        pSpriteObj = RFront_ConstructSprite(
-            pSpriteObj, left, base[FreeSprite].y, w, h, 1, 32, 128);
+        pSpriteObj = ::new (pSpriteObj) Sprite(
+            left, base[FreeSprite].y, w, h, 1, 32, 128);
     }
     entry->pSprite = pSpriteObj;
     BGCache[FreeSprite].captureStatus = 2;
@@ -730,7 +723,7 @@ void Front_ExtractASCIINameFromSJIS(char * pSJIS, char * pASCII) {
  */
 void Front_SetSJISName(char * SJISName) {
     register int i asm("$5") = 9;
-    int buf = reinterpret_cast<int>(&NameBuf);
+    int buf = reinterpret_cast<int>(&RFrontSaveNameViews::SaveGameName);
     char *p;
     unsigned char c;
 
@@ -746,7 +739,8 @@ void Front_SetSJISName(char * SJISName) {
 
 fill_phase:
     if (i >= 0) {
-        register int buf2 asm("$7") = reinterpret_cast<int>(&NameBuf);
+        register int buf2 asm("$7") =
+            reinterpret_cast<int>(&RFrontSaveNameViews::SaveGameName);
         int sp = 0x20;
         p = reinterpret_cast<char *>(i + buf2);
         do {
@@ -761,7 +755,8 @@ fill_phase:
 
     {
         register int j asm("$5") = 0;
-        register int bp asm("$11") = reinterpret_cast<int>(&NameBuf);
+        register int bp asm("$11") =
+            reinterpret_cast<int>(&RFrontSaveNameViews::SaveGameName);
         register int K82 asm("$10") = 0x82;
         register int K20 asm("$9") = 0x20;
         register int K81 asm("$8") = 0x81;
@@ -821,9 +816,11 @@ void InitEnterName(void) {
     Pad[1].Up.Triggered = 0;
     Pad[1].Down.Triggered = 0;
     if (GSaveAction == SAVE_VIDEO) {
-        strcpy(&NameBuf, &NameBackup2);
+        strcpy(&RFrontSaveNameViews::SaveGameName,
+               &RFrontSaveNameViews::LastVideoName);
     } else {
-        strcpy(&NameBuf, &NameBackup1);
+        strcpy(&RFrontSaveNameViews::SaveGameName,
+               &RFrontSaveNameViews::LastCareerName);
     }
 }
 
@@ -1019,10 +1016,10 @@ void Front_MemCardDisplay(void) {
                 Mess_SetScale((SizeUp * 6) + RFRONT_FULL_SCALE);
             }
 
-            if ((&NameBuf)[i] != 0)
+            if ((&RFrontSaveNameViews::SaveGameName)[i] != 0)
             {
                 char tmp[3] = "\0\0";
-                tmp[0] = (&NameBuf)[i];
+                tmp[0] = (&RFrontSaveNameViews::SaveGameName)[i];
                 Mess_DrawText(
                     XMid + (i * RFRONT_NAME_SPACING) - RFRONT_NAME_HALF_WIDTH, 92, tmp, 0, 0, RFRONT_FULL_SCALE, 0);
             }
@@ -1253,7 +1250,7 @@ void Front_MemCardHiResDisplay(void) {
                 ::CClass::operator new(sizeof(VerticalMenu)));
             if (m != 0)
             {
-                m = RFront_ConstructVerticalMenu(
+                m = __12VerticalMenuiiiPPciPiT6i(
                     m, 100, 398, 0xf, VertMenuItem,
                     (NumVertMenuItems < 6) ? NumVertMenuItems : 5,
                     0, 0, 0);
@@ -1371,7 +1368,7 @@ void Front_MemCardHiResDisplay(void) {
  */
 int NameWasBlank(void) {
     int i = 0;
-    register char *buf asm("$5") = &NameBuf;
+    register char *buf asm("$5") = &RFrontSaveNameViews::SaveGameName;
     asm("" : "+r"(buf), "+r"(i));
     int space = ' ';
     char *p;
@@ -1527,7 +1524,8 @@ EPausedStatus Front_MemCardUpdate(void) {
                 for (int i = 0; i < 10; ++i)
                 {
                     RFrontNameStorageView *names =
-                        RFront_NameStorage(&NameBuf);
+                        RFront_NameStorage(
+                            &RFrontSaveNameViews::SaveGameName);
                     names->saveGameName[i] = names->storedCareerName[i];
                 }
                 MCState = SVSTATUS_SAVING;
@@ -1600,17 +1598,17 @@ EPausedStatus Front_MemCardUpdate(void) {
         {
             SizeUp = 16;
             SFX_PlayX(0x11, RFRONT_SFX_VOLUME, 0);
-            if ((RFront_NameBytes(&NameBuf)[CursorPos] == ' ') ||
-                (RFront_NameBytes(&NameBuf)[CursorPos] == '\0'))
+            if ((RFront_NameBytes(&RFrontSaveNameViews::SaveGameName)[CursorPos] == ' ') ||
+                (RFront_NameBytes(&RFrontSaveNameViews::SaveGameName)[CursorPos] == '\0'))
             {
-                RFront_NameBytes(&NameBuf)[CursorPos] = 'A';
+                RFront_NameBytes(&RFrontSaveNameViews::SaveGameName)[CursorPos] = 'A';
             }
             else
             {
-                ++RFront_NameBytes(&NameBuf)[CursorPos];
-                if (RFront_NameBytes(&NameBuf)[CursorPos] > 'Z')
+                ++RFront_NameBytes(&RFrontSaveNameViews::SaveGameName)[CursorPos];
+                if (RFront_NameBytes(&RFrontSaveNameViews::SaveGameName)[CursorPos] > 'Z')
                 {
-                    RFront_NameBytes(&NameBuf)[CursorPos] = ' ';
+                    RFront_NameBytes(&RFrontSaveNameViews::SaveGameName)[CursorPos] = ' ';
                 }
             }
         }
@@ -1619,17 +1617,17 @@ EPausedStatus Front_MemCardUpdate(void) {
         {
             SizeUp = 16;
             SFX_PlayX(0x11, RFRONT_SFX_VOLUME, 0);
-            if ((RFront_NameBytes(&NameBuf)[CursorPos] == ' ') ||
-                (RFront_NameBytes(&NameBuf)[CursorPos] == '\0'))
+            if ((RFront_NameBytes(&RFrontSaveNameViews::SaveGameName)[CursorPos] == ' ') ||
+                (RFront_NameBytes(&RFrontSaveNameViews::SaveGameName)[CursorPos] == '\0'))
             {
-                RFront_NameBytes(&NameBuf)[CursorPos] = 'Z';
+                RFront_NameBytes(&RFrontSaveNameViews::SaveGameName)[CursorPos] = 'Z';
             }
             else
             {
-                --RFront_NameBytes(&NameBuf)[CursorPos];
-                if (RFront_NameBytes(&NameBuf)[CursorPos] < 'A')
+                --RFront_NameBytes(&RFrontSaveNameViews::SaveGameName)[CursorPos];
+                if (RFront_NameBytes(&RFrontSaveNameViews::SaveGameName)[CursorPos] < 'A')
                 {
-                    RFront_NameBytes(&NameBuf)[CursorPos] = ' ';
+                    RFront_NameBytes(&RFrontSaveNameViews::SaveGameName)[CursorPos] = ' ';
                 }
             }
         }
@@ -1663,8 +1661,10 @@ EPausedStatus Front_MemCardUpdate(void) {
         }
 
         strcpy(
-            GSaveAction == SAVE_VIDEO ? &NameBackup2 : &NameBackup1,
-            &NameBuf);
+            GSaveAction == SAVE_VIDEO
+                ? &RFrontSaveNameViews::LastVideoName
+                : &RFrontSaveNameViews::LastCareerName,
+            &RFrontSaveNameViews::SaveGameName);
 
         if (GoBack == 0)
         {
@@ -1957,7 +1957,8 @@ EPausedStatus Front_MemCardUpdate(void) {
                 {
                     reinterpret_cast<RFrontStoredCareerStateView *>(
                         &GLoadAction)
-                        ->storedCareerName[i] = (&NameBuf)[i];
+                        ->storedCareerName[i] =
+                            (&RFrontSaveNameViews::SaveGameName)[i];
                     ++i;
                 } while (i < 10);
             }
@@ -1973,10 +1974,11 @@ EPausedStatus Front_MemCardUpdate(void) {
     case SVSTATUS_SAVING2:
     {
         GSoftResetEnabled = 0;
-        unsigned char first = static_cast<unsigned char>(NameBuf);
+        unsigned char first = static_cast<unsigned char>(
+            RFrontSaveNameViews::SaveGameName);
         if (static_cast<unsigned int>(first - 'A') >= 26U)
         {
-            NameBuf = 'A';
+            RFrontSaveNameViews::SaveGameName = 'A';
             first = 'A';
         }
 
@@ -2330,7 +2332,8 @@ EPausedStatus Front_MemCardUpdate(void) {
                 GLoadedCareerIsSaved = 0;
                 Front_ExtractASCIINameFromSJIS(
                     RFront_GetCareerLoadBlock(pTmp)->sjisName,
-                    (RFront_NameStorage(&NameBuf))->storedCareerName);
+                    (RFront_NameStorage(
+                        &RFrontSaveNameViews::SaveGameName))->storedCareerName);
                 nextState = LVSTATUS_LOADCOMPLETED;
             }
             MCState = nextState;

@@ -5,48 +5,11 @@
 //
 // Compiled with cc1plus (GCC 2.91.66-psx). Compiler auto-mangles symbol names.
 
-struct SpoolItem {
-    void *isAvailable;
-    char name[16];
-    int type;
-    int region;
-    unsigned char *pData;
-};
-
 #include "FILEIO.h"
+#include "SPOOLER.h"
 
-#include "globals.h"
-
-/** Manages the fixed 64-entry asynchronous file queue. */
-struct Spooler {
-    struct CClass CClass;
-    struct SpoolItem mItem[64];
-    int mNumItems;
-    int mCurrentItem;
-    int mStatus;
-
-    static Spooler *SpoolMgr;
-
-    Spooler();
-    ~Spooler();
-    int AddFile(char *, int);
-    void BeginSpoolingCurrentFile();
-    static void Cleanup();
-    void *GetFile(int id);
-    static void Init();
-    int IsFileLoaded(int id);
-    int IsSetDone();
-    void KillFile(int slot);
-    static void OrderHelper(int *array, int num, int first);
-    void Reset();
-    void Spooool();
-    void Update();
-};
-
-typedef char SpoolItem_size_must_be_32[
-    (sizeof(SpoolItem) == 32) ? 1 : -1];
-typedef char Spooler_size_must_be_2064[
-    (sizeof(Spooler) == 2064) ? 1 : -1];
+/** Return caller-owned storage for an ordinary placement construction. */
+inline void *operator new(unsigned int, void *storage) { return storage; }
 
 /** Prefix of the GCC 2.x dispatch table used for deleting destruction. */
 struct SpoolerDispatchTable {
@@ -71,10 +34,6 @@ static inline Field *NextSpoolItemField(Field *field)
 // Typed interfaces to the memory and PSX-spool owners.
 #include "SPOOL.h"
 
-/** Addressable typed view of the constructor symbol used by Init. */
-Spooler *Spooler_DefaultConstructor(Spooler *instance)
-    asm("__7Spooler");
-
 #include "MEM.h"
 #include <STDIO.H>
 #include <STRINGS.H>
@@ -83,31 +42,31 @@ Spooler *Spooler_DefaultConstructor(Spooler *instance)
 Spooler *Spooler::SpoolMgr = 0;
 
 /** Filename and platform suffixes used by the spooler in original order. */
-static char Spooler_NameFormatOwner[4] asm("DAT_800da698")
+static char DAT_800da698[4]
     __attribute__((section(".sdata"))) = "%s";
-static char Spooler_LowerPlatformOwner[4] asm("DAT_800da69c")
+static char DAT_800da69c[4]
     __attribute__((section(".sdata"))) = "psx";
-static char Spooler_UpperPlatformOwner[4] asm("DAT_800da6a0")
+static char DAT_800da6a0[4]
     __attribute__((section(".sdata"))) = "PSX";
 
 // Keep the call sites opaque to the literals' owner definitions above.  The
 // original compiler addressed these three strings absolutely even though the
 // object stores them in small data; seeing the definitions here makes GCC 2.x
 // incorrectly choose gp-relative addressing.
-extern "C" char Spooler_NameFormat[] asm("DAT_800da698");
-extern "C" char Spooler_LowerPlatform[] asm("DAT_800da69c");
-extern "C" char Spooler_UpperPlatform[] asm("DAT_800da6a0");
+#define SPOOLER_DECLARE_OWNER_ADDRESS_VIEWS
+#include "SPOOLER.h"
 
 // Vtables
 // GCC 2.x emits a private copy of `CClass::~CClass` beside a private base
 // vtable in every owner that derives from CClass.  `MAIN.SYM` records 25 such
 // `_._6CClass` copies and names no base vtable, so both are file-local here.
 // The filesystem-safe spelling keeps the per-address target assembly reachable.
-static void Spooler_ClassDestructor(CClass *instance, int flags)
-    asm("__DOT__6CClass_8005A6B8");
+extern "C" {
+static void __DOT__6CClass_8005A6B8(CClass *instance, int flags);
+}
 
-// C++ forbids taking a destructor's address, so the public vtable slot uses an
-// addressable declaration of the symbol this owner already defines.
+// C++ forbids taking a destructor's address, so the manual vtable slot retains
+// an owner-local addressable view of the natural destructor symbol.
 void Spooler_DestructorAbi(Spooler *instance, int flags)
     asm("_._7Spooler");
 
@@ -124,7 +83,8 @@ static SpoolerDestructorSlot Spooler_VTableDtor = Spooler_DestructorAbi;
 static int __vt_7Spooler_base
     __attribute__((section(".sdata"), aligned(8))) = 0;
 static int Spooler_BaseVTableIndex = 0;
-static CClassDestructorSlot Spooler_BaseVTableDtor = Spooler_ClassDestructor;
+static CClassDestructorSlot Spooler_BaseVTableDtor =
+    __DOT__6CClass_8005A6B8;
 
 // === Function implementations (address order) ===
 
@@ -139,7 +99,7 @@ void Spooler::Init()
     Spooler *instance = (Spooler *)::CClass::operator new(sizeof(Spooler));
     if (instance != 0)
     {
-        instance = Spooler_DefaultConstructor(instance);
+        instance = ::new (instance) Spooler();
     }
     SpoolMgr = instance;
 }
@@ -303,7 +263,7 @@ void Spooler::Reset()
 int Spooler::AddFile(char *filename, int ignoreExt)
 {
     int n;
-    sprintf(mItem[mNumItems].name, Spooler_NameFormat, filename);
+    sprintf(mItem[mNumItems].name, SpoolerAddressViews::DAT_800da698, filename);
 
     n = 0;
     if (*filename != '.')
@@ -317,8 +277,8 @@ int Spooler::AddFile(char *filename, int ignoreExt)
     if (ignoreExt == 0)
     {
         char *extension = filename + n + 1;
-        if (strcmp(extension, Spooler_LowerPlatform) == 0 ||
-            strcmp(extension, Spooler_UpperPlatform) == 0)
+        if (strcmp(extension, SpoolerAddressViews::DAT_800da69c) == 0 ||
+            strcmp(extension, SpoolerAddressViews::DAT_800da6a0) == 0)
         {
             mItem[mNumItems].type = 1;
             mItem[mNumItems].name[n] = 0;
@@ -491,7 +451,7 @@ void Spooler::KillFile(int slot)
  * GCC emitted this private `CClass::~CClass` copy last in the owner's text,
  * so it stays at the end of the translation unit.
  */
-static void Spooler_ClassDestructor(CClass *instance, int flags)
+static void __DOT__6CClass_8005A6B8(CClass *instance, int flags)
 {
     instance->vtable = &__vt_7Spooler_base;
     if (flags & 1)

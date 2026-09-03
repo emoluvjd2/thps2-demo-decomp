@@ -31,7 +31,7 @@ struct SAnimFrame;
 #endif
 
 /** Glyph animation used by the large immediate-mode font. */
-extern "C" SAnimFrame *BigFontAnim FONT_SHARED_STATE_DECL_ATTR; // 0x800DA3D8
+extern SAnimFrame *BigFontAnim FONT_SHARED_STATE_DECL_ATTR; // 0x800DA3D8
 
 #undef FONT_SHARED_STATE_DECL_ATTR
 
@@ -56,13 +56,8 @@ struct SString {
     struct CVector Pos;
 };
 
-// === Variables (gp-relative in this TU) ===
-extern "C" SString *BufferPos;       // 0x800DA3F4
-extern "C" char *pNumberStrings;       // 0x800DA3F8
-
 // === Variables (absolute in this TU) ===
 #include "CAMERASELECTION.h"
-extern "C" SString StringBuffer[];     // 0x800B9A78
 #include "PDOUBLEBUFFER.h"
 
 #endif // FONT_OWNER_DECLARATIONS

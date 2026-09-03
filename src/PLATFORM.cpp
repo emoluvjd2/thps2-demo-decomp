@@ -3,6 +3,7 @@
 #include "PLATFORM.h"
 #include "MAIN.h"
 #include "MECH.h"
+#include "PHYSICSSTATE.h"
 #include "SFX.h"
 #include "OB.h"
 #include "CBODY.h"
@@ -92,12 +93,22 @@ struct CPlatform {
     /** Apply this platform's configured bounce response to a skater. */
     void Bounce(CBruce *pSkater, const CVector &direction);
     void BouncyAI();
+    /** Run one platform AI update. */
+    void AI();
+    /** Apply one platform hit and report whether it was accepted. */
+    int Hit(int damage, const CVector &knock, int whatHit);
     /** Advance this platform's translation and rotation. */
     void DoPhysics();
     /** Update this platform's movement target. */
     void MoveTo(CVector &pos);
     /** No-op pattern hook used when script processing is disabled. */
     void ProcessPattern();
+    /** Execute one scripted platform command. */
+    int ExecuteCommand(unsigned short command);
+    /** Store one script-visible platform variable. */
+    void SetVariable(unsigned short variable);
+    /** Read one script-visible platform variable. */
+    short GetVariable(unsigned short variable);
 #endif
 };
 
@@ -144,6 +155,9 @@ struct PlatformVirtualTable {
 struct CBruce {
     struct CSuperOwner CSuper;
     u8 _opaqueTail[5228 - 400];
+
+    /** Drive one controller vibration actuator for this skater. */
+    void Vibrate(int time, int motor, int value);
 };
 
 typedef char CItem_platform_size_check[
@@ -317,60 +331,29 @@ enum PlatformConstant {
 #include "GLEVEL.h"
 #include "CURRENTOBJFILE.h"
 
-extern "C" void Platform_InitItem(CItemOwner *, char *)
-    asm("InitItem__5CItemPc");
-
-// === Extern "C" forward declarations ===
-extern "C" void Platform_CBaddyDestructorAbi(CBaddy *, int)
-    asm("_._6CBaddy");
-extern "C" void CPlatform_dtor(CPlatform *, int) asm("_._9CPlatform");
-extern "C" void CPlatform_AI(CPlatform *) asm("AI__9CPlatform");
-extern "C" int CPlatform_Hit(
-    CPlatform *, int, const CVector &, int)
-    asm("Hit__9CPlatformiRC7CVectori");
-extern "C" int CPlatform_ExecuteCommand(CPlatform *, unsigned short)
-    asm("ExecuteCommand__9CPlatformUs");
-// Typed cross-TU dependencies not yet exposed by narrow shared APIs.
-extern "C" void CPlatform_SetVariable(CPlatform *, unsigned short)
-    asm("SetVariable__9CPlatformUs");
-extern "C" short CPlatform_GetVariable(CPlatform *, unsigned short)
-    asm("GetVariable__9CPlatformUs");
-extern "C" void Platform_CBaddySetVariable(CBaddy *, u16)
-    asm("SetVariable__6CBaddyUs");
-extern "C" short Platform_CBaddyGetVariable(CBaddy *, u16)
-    asm("GetVariable__6CBaddyUs");
-extern "C" void Platform_VectorSubtract(
-    CVectorOwner *, const CVectorOwner *, const CVectorOwner *)
-    asm("__mi__FRC7CVectorT0");
-extern "C" CVector WorldGravity;
+// === ABI address views and typed dependencies ===
+#define CBADDY_DECLARE_DESTRUCTOR
+#define CBADDY_DESTRUCTOR_NAME Platform_CBaddyDestructorAbi
+#define CBADDY_DESTRUCTOR_RECEIVER CBaddy
+#include "CBADDYABI.h"
+void CPlatform_dtor(CPlatform *, int) asm("_._9CPlatform");
 #define M3DMATHS_TYPED_API
 #include "M3DMATHS.h"
 #undef M3DMATHS_TYPED_API
-extern "C" CVector Platform_VectorSum(
-    const CVector &, const CVector &)
-    asm("__pl__FRC7CVectorT0");
-extern "C" int Platform_CBaddyExecuteCommand(CBaddy *, unsigned short)
-    asm("ExecuteCommand__6CBaddyUs");
-extern "C" void Platform_Vibrate(CBruce *, int, int, int)
-    asm("Vibrate__6CBruceiii");
-extern "C" void Platform_CBaddyDie(CBaddy *) asm("Die__6CBaddy");
-extern "C" void Platform_DoLightingSetup(CBodyOwner *)
-    asm("DoLightingSetup__5CBody");
-extern "C" void Platform_DeleteStuff(CBodyOwner *)
-    asm("DeleteStuff__5CBody");
+#include "CVECTOROPS.h"
 
 /**
  * Platform virtual dispatch table in its original read-only owner section.
  */
-extern "C" PlatformPrimaryVTable __vt_9CPlatform
+PlatformPrimaryVTable __vt_9CPlatform
     __attribute__((section(".rdata"), aligned(8))) = {
         0,
         0,
         CPlatform_dtor,
-        reinterpret_cast<void (*)(CPlatform *)>(Platform_CBaddyDie),
-        CPlatform_AI,
-        reinterpret_cast<void (*)(CBodyOwner *)>(CBody_EveryFrame),
-        Platform_DoLightingSetup,
+        (void (*)(CPlatform *))&CBaddy::Die,
+        (void (*)(CPlatform *))&CPlatform::AI,
+        (void (*)(CBodyOwner *))&CBody::EveryFrame,
+        (void (*)(CBodyOwner *))&CBody::DoLightingSetup,
 };
 
 /**
@@ -381,11 +364,11 @@ extern "C" PlatformPrimaryVTable __vt_9CPlatform
  */
 static PlatformVirtualTailTable PlatformVirtualTail
     __attribute__((section(".rdata"), aligned(4))) = {
-        CPlatform_Hit,
-        Platform_DeleteStuff,
-        CPlatform_ExecuteCommand,
-        CPlatform_SetVariable,
-        CPlatform_GetVariable,
+        (int (*)(CPlatform *, int, const CVector &, int))&CPlatform::Hit,
+        (void (*)(CBodyOwner *))&CBody::DeleteStuff,
+        (int (*)(CPlatform *, unsigned short))&CPlatform::ExecuteCommand,
+        (void (*)(CPlatform *, unsigned short))&CPlatform::SetVariable,
+        (short (*)(CPlatform *, unsigned short))&CPlatform::GetVariable,
 };
 
 // === Function implementations (address order) ===
@@ -398,7 +381,6 @@ static PlatformVirtualTailTable PlatformVirtualTail
  */
 CPlatform::CPlatform(short *p_info, int node_index)
 {
-    CPlatform *_this = this;
     // The target keeps this address as a scalar across InitItem. A direct
     // typed vtable assignment changes eight constructor instructions.
     int vtbl = reinterpret_cast<int>(&__vt_9CPlatform);
@@ -410,25 +392,26 @@ CPlatform::CPlatform(short *p_info, int node_index)
     // direct assignment changes eight constructor instructions.
     CBruce *player = pCurrentPlayer;
     *reinterpret_cast<int *>(
-        &_this->CBaddy.CSuper.CBody.CItem.vtable) = vtbl;
-    _this->CBaddy.mpCreatedByPlayer = player;
-    Platform_InitItem(&_this->CBaddy.CSuper.CBody.CItem, objFile);
+        &CBaddy.CSuper.CBody.CItem.vtable) = vtbl;
+    CBaddy.mpCreatedByPlayer = player;
+    reinterpret_cast<CItem *>(&CBaddy.CSuper.CBody.CItem)->InitItem(
+        objFile);
     CBody *body = reinterpret_cast<CBody *>(
-        &_this->CBaddy.CSuper.CBody);
+        &CBaddy.CSuper.CBody);
     body->AttachTo(reinterpret_cast<CBody **>(&EnvironmentalObjectList));
-    unsigned short flags = _this->CBaddy.CSuper.CBody.CItem.mFlags;
-    _this->mType = PlatformObjectType;
+    unsigned short flags = CBaddy.CSuper.CBody.CItem.mFlags;
+    mType = PlatformObjectType;
     flags |= PlatformInitialItemFlags;
     flags &= 0xFFFD;
-    _this->CBaddy.CSuper.CBody.CItem.mFlags = flags;
+    CBaddy.CSuper.CBody.CItem.mFlags = flags;
     short *pos = body->SquirtPos(p_info);
     short *angles = body->SquirtAngles(pos);
-    _this->CBaddy.mpScript = reinterpret_cast<u16 *>(angles);
-    _this->CBaddy.CSuper.CBody.mNode =
+    CBaddy.mpScript = reinterpret_cast<u16 *>(angles);
+    CBaddy.CSuper.CBody.mNode =
         static_cast<unsigned short>(node_index);
-    _this->mLoopingSoundUpdate = -1;
-    _this->CBaddy.mBaddyAttributes[0] = PlatformDefaultMoveSpeed;
-    _this->CBaddy.mDoScript = 1;
+    mLoopingSoundUpdate = -1;
+    CBaddy.mBaddyAttributes[0] = PlatformDefaultMoveSpeed;
+    CBaddy.mDoScript = 1;
 }
 
 /**
@@ -462,8 +445,7 @@ void CPlatform_dtor(CPlatform *_this, int __in_chrg)
  */
 void CPlatform::Bounce(CBruce *pSkater, const CVector &Direction)
 {
-    CPlatform *self = this;
-    CPlatform *platform = self;
+    CPlatform *platform = this;
     int flags = platform->CBaddy.mSpecificFlags;
     if (!(flags & PlatformBounceEnabled))
         return;
@@ -494,7 +476,7 @@ void CPlatform::Bounce(CBruce *pSkater, const CVector &Direction)
         SFX_PlayX(0x3C, PlatformSoundVolume, 0);
     standard_bounce:
         SFX_Grunt(pSkater);
-        Platform_Vibrate(pSkater, 6, 1, 0x78);
+        pSkater->Vibrate(6, 1, 0x78);
 
         {
             int Height = Speed < 40
@@ -538,7 +520,7 @@ void CPlatform::Bounce(CBruce *pSkater, const CVector &Direction)
             SFX_PlayX(0x52, PlatformSoundVolume, 0);
         }
 
-        Platform_Vibrate(pSkater, 2, 1, 0xB4);
+        pSkater->Vibrate(2, 1, 0xB4);
         {
             CVectorOwner *velocity = &platform->CBaddy.CSuper.CBody.mVel;
             int a = Direction.vx;
@@ -663,7 +645,7 @@ void CPlatform::BouncyAI()
 
     NewVel %= Fric;
     NewVel.KillSmall();
-    NewPos = Platform_VectorSum(
+    NewPos = operator+(
         PlatformVector(this->CBaddy.CSuper.CBody.CItem.mPos), NewVel);
 
     CVector Dir = NewVel;
@@ -856,10 +838,10 @@ void CPlatform::BouncyAI()
 /**
  * Advances scripted platform scale, movement, steering, physics, and sound.
  *
- * @param platform  Platform instance being updated.
  */
-void CPlatform_AI(CPlatform *platform)
+void CPlatform::AI()
 {
+    CPlatform *platform = this;
     if (platform->mScaleXTimer != 0)
     {
         platform->mScaleXTimer--;
@@ -913,11 +895,11 @@ void CPlatform_AI(CPlatform *platform)
 
     if ((platform->CBaddy.mSpecificFlags & PlatformMovingToTarget) != 0)
     {
-        CVectorOwner distance;
-        Platform_VectorSubtract(
-            &distance, &platform->CBaddy.CSuper.CBody.CItem.mPos,
-            &platform->CBaddy.mTargetPos);
-        int distanceToTarget = PlatformVector(distance).Length();
+        CVector distance =
+            PLATFORM_CONST_VECTOR_VIEW(
+                platform->CBaddy.CSuper.CBody.CItem.mPos) -
+            PLATFORM_CONST_VECTOR_VIEW(platform->CBaddy.mTargetPos);
+        int distanceToTarget = distance.Length();
         int reachedTarget = !(
             static_cast<int>(platform->CBaddy.mBaddyAttributes[0]) <
             distanceToTarget);
@@ -963,12 +945,13 @@ void CPlatform_AI(CPlatform *platform)
                         platform->CBaddy.mTargetPos));
                 int ang_acc;
                 {
-                    CVectorOwner remaining;
-                    Platform_VectorSubtract(
-                        &remaining, &platform->CBaddy.mTargetPos,
-                        &platform->CBaddy.CSuper.CBody.CItem.mPos);
+                    CVector remaining =
+                        PLATFORM_CONST_VECTOR_VIEW(
+                            platform->CBaddy.mTargetPos) -
+                        PLATFORM_CONST_VECTOR_VIEW(
+                            platform->CBaddy.CSuper.CBody.CItem.mPos);
                     ang_acc = PlatformTurnNumerator /
-                        PlatformVector(remaining).Length();
+                        remaining.Length();
                 }
                 if (ang_acc < -PlatformMaxAngularAcceleration)
                     ang_acc = -PlatformMaxAngularAcceleration;
@@ -1035,12 +1018,13 @@ void CPlatform_AI(CPlatform *platform)
                         platform->CBaddy.mTargetPos));
                 int ang_acc;
                 {
-                    CVectorOwner remaining;
-                    Platform_VectorSubtract(
-                        &remaining, &platform->CBaddy.mTargetPos,
-                        &platform->CBaddy.CSuper.CBody.CItem.mPos);
+                    CVector remaining =
+                        PLATFORM_CONST_VECTOR_VIEW(
+                            platform->CBaddy.mTargetPos) -
+                        PLATFORM_CONST_VECTOR_VIEW(
+                            platform->CBaddy.CSuper.CBody.CItem.mPos);
                     ang_acc = PlatformTurnNumerator /
-                        PlatformVector(remaining).Length();
+                        remaining.Length();
                 }
                 if (ang_acc < -PlatformMaxAngularAcceleration)
                     ang_acc = -PlatformMaxAngularAcceleration;
@@ -1113,40 +1097,38 @@ void CPlatform_AI(CPlatform *platform)
 /**
  * Damage a platform, flashing it while alive or shattering it on death.
  *
- * @param self Platform receiving the hit.
  * @param damage Health removed by the hit.
  * @param knock Knockback vector retained by the virtual ABI.
  * @param whathit Hit-category value retained by the virtual ABI.
  * @return One after processing the hit.
  */
-int CPlatform_Hit(
-    CPlatform *self, int damage, const CVector &knock, int whathit)
+int CPlatform::Hit(int damage, const CVector &knock, int whathit)
 {
-    u8 hitCount = self->CBaddy.mHit;
-    u16 health = self->CBaddy.mBaddyAttributes[1];
+    u8 hitCount = CBaddy.mHit;
+    u16 health = CBaddy.mBaddyAttributes[1];
     hitCount++;
-    self->CBaddy.mHit = hitCount;
+    CBaddy.mHit = hitCount;
     if (health != 0)
     {
-        s16 hp = self->CBaddy.CSuper.CBody.mHealth;
-        u16 hpu = static_cast<u16>(self->CBaddy.CSuper.CBody.mHealth);
+        s16 hp = CBaddy.CSuper.CBody.mHealth;
+        u16 hpu = static_cast<u16>(CBaddy.CSuper.CBody.mHealth);
         if (hp > 0)
         {
-            self->CBaddy.CSuper.CBody.mHealth = hpu - damage;
-            if (self->CBaddy.CSuper.CBody.mHealth <= 0)
+            CBaddy.CSuper.CBody.mHealth = hpu - damage;
+            if (CBaddy.CSuper.CBody.mHealth <= 0)
             {
                 PlatformVirtualTable *vtbl =
-                    GetPlatformVirtualTable(self);
-                vtbl->Die(self);
+                    GetPlatformVirtualTable(this);
+                vtbl->Die(this);
                 Shatter_Item(
                     PlatformShatterItem(
-                        self->CBaddy.CSuper.CBody.CItem),
+                        CBaddy.CSuper.CBody.CItem),
                     0, 1);
             }
             else
             {
                 reinterpret_cast<CItem *>(
-                    &self->CBaddy.CSuper.CBody.CItem)
+                    &CBaddy.CSuper.CBody.CItem)
                     ->Flash(3, 0xFF, 0xFF, 0xFF);
             }
         }
@@ -1160,12 +1142,11 @@ int CPlatform_Hit(
  */
 void CPlatform::DoPhysics()
 {
-    CPlatform *self = this;
-    int mode = self->CBaddy.mBaddyAttributes[2];
+    int mode = CBaddy.mBaddyAttributes[2];
 
-    self->CBaddy.CSuper.CBody.mNormal.vz = 0;
-    self->CBaddy.CSuper.CBody.mNormal.vy = 0;
-    self->CBaddy.CSuper.CBody.mNormal.vx = 0;
+    CBaddy.CSuper.CBody.mNormal.vz = 0;
+    CBaddy.CSuper.CBody.mNormal.vy = 0;
+    CBaddy.CSuper.CBody.mNormal.vx = 0;
 
     if (mode == 0)
     {
@@ -1173,15 +1154,15 @@ void CPlatform::DoPhysics()
         // measured all-pin cleanup changes 97 instructions and 3 relocs;
         // removing the translation, angle, or position groups separately
         // changes 19, 55, and 38 instructions respectively.
-        int oldVelX = self->CBaddy.CSuper.CBody.mVel.vx;
-        int accX = self->CBaddy.CSuper.CBody.mAcc.vx;
-        register int oldVelY asm("$6") = self->CBaddy.CSuper.CBody.mVel.vy;
-        register int accY asm("$4") = self->CBaddy.CSuper.CBody.mAcc.vy;
-        register int oldVelZ asm("$5") = self->CBaddy.CSuper.CBody.mVel.vz;
+        int oldVelX = CBaddy.CSuper.CBody.mVel.vx;
+        int accX = CBaddy.CSuper.CBody.mAcc.vx;
+        register int oldVelY asm("$6") = CBaddy.CSuper.CBody.mVel.vy;
+        register int accY asm("$4") = CBaddy.CSuper.CBody.mAcc.vy;
+        register int oldVelZ asm("$5") = CBaddy.CSuper.CBody.mVel.vz;
         int vx = oldVelX + accX;
         register int vy asm("$11") = oldVelY + accY;
         accX = vx + PlatformVelocityRounding;
-        oldVelX = self->CBaddy.CSuper.CBody.mAcc.vz;
+        oldVelX = CBaddy.CSuper.CBody.mAcc.vz;
         register int vz asm("$13") = oldVelZ + oldVelX;
 
         if (static_cast<u32>(accX) < PlatformVelocityDeadZone)
@@ -1199,25 +1180,25 @@ void CPlatform::DoPhysics()
             vz = 0;
         }
 
-        register int sx asm("$9") = self->CBaddy.CSuper.CBody.mAngVel.vx;
-        register int sy asm("$10") = self->CBaddy.CSuper.CBody.mAngVel.vy;
-        register int sz asm("$8") = self->CBaddy.CSuper.CBody.mAngVel.vz;
+        register int sx asm("$9") = CBaddy.CSuper.CBody.mAngVel.vx;
+        register int sy asm("$10") = CBaddy.CSuper.CBody.mAngVel.vy;
+        register int sz asm("$8") = CBaddy.CSuper.CBody.mAngVel.vz;
         register int angleX asm("$7") =
-            static_cast<u16>(self->CBaddy.CSuper.CBody.CItem.mAngles.vx);
+            static_cast<u16>(CBaddy.CSuper.CBody.CItem.mAngles.vx);
         register int angAccX asm("$2") =
-            static_cast<u16>(self->CBaddy.CSuper.CBody.mAngAcc.vx);
+            static_cast<u16>(CBaddy.CSuper.CBody.mAngAcc.vx);
         register int angleY asm("$6") =
-            static_cast<u16>(self->CBaddy.CSuper.CBody.CItem.mAngles.vy);
+            static_cast<u16>(CBaddy.CSuper.CBody.CItem.mAngles.vy);
         register int angAccY asm("$3") =
-            static_cast<u16>(self->CBaddy.CSuper.CBody.mAngAcc.vy);
+            static_cast<u16>(CBaddy.CSuper.CBody.mAngAcc.vy);
         register int angleZ asm("$5") =
-            static_cast<u16>(self->CBaddy.CSuper.CBody.CItem.mAngles.vz);
+            static_cast<u16>(CBaddy.CSuper.CBody.CItem.mAngles.vz);
         register int angAccZ asm("$4") =
-            static_cast<u16>(self->CBaddy.CSuper.CBody.mAngAcc.vz);
+            static_cast<u16>(CBaddy.CSuper.CBody.mAngAcc.vz);
 
-        self->CBaddy.CSuper.CBody.mVel.vx = vx;
-        self->CBaddy.CSuper.CBody.mVel.vy = vy;
-        self->CBaddy.CSuper.CBody.mVel.vz = vz;
+        CBaddy.CSuper.CBody.mVel.vx = vx;
+        CBaddy.CSuper.CBody.mVel.vy = vy;
+        CBaddy.CSuper.CBody.mVel.vz = vz;
 
         angleX = sx + angleX;
         sx = static_cast<s16>(sx + angAccX);
@@ -1231,25 +1212,25 @@ void CPlatform::DoPhysics()
         // change 36 instructions; even relaxing only Z has the same result.
         register int posX asm("$2") =
             *reinterpret_cast<volatile int *>(
-                &self->CBaddy.CSuper.CBody.CItem.mPos.vx);
+                &CBaddy.CSuper.CBody.CItem.mPos.vx);
         register int posY asm("$3") =
             *reinterpret_cast<volatile int *>(
-                &self->CBaddy.CSuper.CBody.CItem.mPos.vy);
+                &CBaddy.CSuper.CBody.CItem.mPos.vy);
         int posZ =
             *reinterpret_cast<volatile int *>(
-                &self->CBaddy.CSuper.CBody.CItem.mPos.vz);
+                &CBaddy.CSuper.CBody.CItem.mPos.vz);
         angleZ &= PlatformAngleMask;
 
-        self->CBaddy.CSuper.CBody.CItem.mAngles.vx = angleX;
-        self->CBaddy.CSuper.CBody.CItem.mAngles.vy = angleY;
-        self->CBaddy.CSuper.CBody.CItem.mAngles.vz = angleZ;
+        CBaddy.CSuper.CBody.CItem.mAngles.vx = angleX;
+        CBaddy.CSuper.CBody.CItem.mAngles.vy = angleY;
+        CBaddy.CSuper.CBody.CItem.mAngles.vz = angleZ;
 
         posX += vx;
         posY += vy;
         posZ += vz;
-        self->CBaddy.CSuper.CBody.CItem.mPos.vx = posX;
-        self->CBaddy.CSuper.CBody.CItem.mPos.vy = posY;
-        self->CBaddy.CSuper.CBody.CItem.mPos.vz = posZ;
+        CBaddy.CSuper.CBody.CItem.mPos.vx = posX;
+        CBaddy.CSuper.CBody.CItem.mPos.vy = posY;
+        CBaddy.CSuper.CBody.CItem.mPos.vz = posZ;
 
         if (static_cast<u16>(sx + 1) < 3)
         {
@@ -1264,9 +1245,9 @@ void CPlatform::DoPhysics()
             sz = 0;
         }
 
-        self->CBaddy.CSuper.CBody.mAngVel.vx = sx;
-        self->CBaddy.CSuper.CBody.mAngVel.vy = sy;
-        self->CBaddy.CSuper.CBody.mAngVel.vz = sz;
+        CBaddy.CSuper.CBody.mAngVel.vx = sx;
+        CBaddy.CSuper.CBody.mAngVel.vy = sy;
+        CBaddy.CSuper.CBody.mAngVel.vz = sz;
     }
     else
     {
@@ -1278,26 +1259,26 @@ void CPlatform::DoPhysics()
             return;
         }
 
-        CVectorOwner *velocity = &self->CBaddy.CSuper.CBody.mVel;
+        CVectorOwner *velocity = &CBaddy.CSuper.CBody.mVel;
         PLATFORM_VECTOR_VIEW(*velocity) +=
-            PLATFORM_CONST_VECTOR_VIEW(self->CBaddy.CSuper.CBody.mAcc);
+            PLATFORM_CONST_VECTOR_VIEW(CBaddy.CSuper.CBody.mAcc);
         PLATFORM_VECTOR_VIEW(*velocity) %=
-            self->CBaddy.CSuper.CBody.mFric;
+            CBaddy.CSuper.CBody.mFric;
         PLATFORM_VECTOR_VIEW(*velocity).KillSmall();
-        PLATFORM_VECTOR_VIEW(self->CBaddy.CSuper.CBody.CItem.mPos) +=
+        PLATFORM_VECTOR_VIEW(CBaddy.CSuper.CBody.CItem.mPos) +=
             PLATFORM_CONST_VECTOR_VIEW(*velocity);
 
         CSVectorOwner *angles =
-            &self->CBaddy.CSuper.CBody.CItem.mAngles;
-        CSVectorOwner *angVel = &self->CBaddy.CSuper.CBody.mAngVel;
+            &CBaddy.CSuper.CBody.CItem.mAngles;
+        CSVectorOwner *angVel = &CBaddy.CSuper.CBody.mAngVel;
         PLATFORM_SHORT_VECTOR_VIEW(*angles) +=
             PLATFORM_CONST_SHORT_VECTOR_VIEW(*angVel);
         PLATFORM_SHORT_VECTOR_VIEW(*angles).Mask();
         PLATFORM_SHORT_VECTOR_VIEW(*angVel) +=
             PLATFORM_CONST_SHORT_VECTOR_VIEW(
-                self->CBaddy.CSuper.CBody.mAngAcc);
+                CBaddy.CSuper.CBody.mAngAcc);
         PLATFORM_SHORT_VECTOR_VIEW(*angVel) %=
-            self->CBaddy.CSuper.CBody.mAngFric;
+            CBaddy.CSuper.CBody.mAngFric;
         PLATFORM_SHORT_VECTOR_VIEW(*angVel).KillSmall();
     }
 }
@@ -1309,12 +1290,11 @@ void CPlatform::DoPhysics()
  */
 void CPlatform::MoveTo(CVector &pos)
 {
-    CPlatform *self = this;
-    if (PLATFORM_VECTOR_VIEW(self->CBaddy.mTargetPos) != pos)
+    if (PLATFORM_VECTOR_VIEW(CBaddy.mTargetPos) != pos)
     {
-        self->CBaddy.mTargetPos =
+        CBaddy.mTargetPos =
             PlatformOwnerVector(pos);
-        self->CBaddy.mSpecificFlags |= PlatformMovingToTarget;
+        CBaddy.mSpecificFlags |= PlatformMovingToTarget;
     }
 }
 
@@ -1326,15 +1306,13 @@ void CPlatform::ProcessPattern()
 /**
  * Execute a platform-specific script opcode.
  *
- * @param self Platform executing the script command.
  * @param command  Script opcode to consume.
  * @return One while script execution may continue, or zero after a blocking
  *         wait or destructive command.
  */
-int CPlatform_ExecuteCommand(
-    CPlatform *self, unsigned short command)
+int CPlatform::ExecuteCommand(unsigned short command)
 {
-    struct CPlatform *plat = self;
+    struct CPlatform *plat = this;
     struct CItemOwner *item = &plat->CBaddy.CSuper.CBody.CItem;
 
     /* Scale commands only take effect once the per-item scale is enabled. */
@@ -1537,7 +1515,7 @@ int CPlatform_ExecuteCommand(
         int shift = 12;
         pos <<= shift;
         plat->CBaddy.mpScript = reinterpret_cast<unsigned short *>(p_pos);
-        self->MoveTo(pos);
+        MoveTo(pos);
         break;
     }
 
@@ -1549,12 +1527,12 @@ int CPlatform_ExecuteCommand(
         if ((node & PlatformScriptVariableFlag) != 0)
         {
             PlatformVirtualTable *vtable =
-                GetPlatformVirtualTable(self);
-            node = vtable->GetVariable(self, node) & PlatformScriptWordMask;
+                GetPlatformVirtualTable(this);
+            node = vtable->GetVariable(this, node) & PlatformScriptWordMask;
         }
         CVector pos;
         Trig_GetPosition(pos, node);
-        self->MoveTo(pos);
+        MoveTo(pos);
         break;
     }
 
@@ -1570,31 +1548,31 @@ int CPlatform_ExecuteCommand(
         pos <<= shift;
         pos += PLATFORM_CONST_VECTOR_VIEW(item->mPos);
         plat->CBaddy.mpScript = reinterpret_cast<unsigned short *>(p_pos);
-        self->MoveTo(pos);
+        MoveTo(pos);
         break;
     }
 
     case PlatformCommandDie:
     {
-        PlatformVirtualTable *vtable = GetPlatformVirtualTable(self);
-        vtable->Die(self);
+        PlatformVirtualTable *vtable = GetPlatformVirtualTable(this);
+        vtable->Die(this);
         return 0;
     }
 
     case PlatformCommandShatter:
     {
         item->mFlags |= PlatformItemShattered;
-        PlatformVirtualTable *vtable = GetPlatformVirtualTable(self);
-        vtable->Die(self);
+        PlatformVirtualTable *vtable = GetPlatformVirtualTable(this);
+        vtable->Die(this);
         Shatter_Item(
             PLATFORM_SHATTER_ITEM_POINTER(
-                &self->CBaddy.CSuper.CBody.CItem),
+                &CBaddy.CSuper.CBody.CItem),
             0, 0);
         return 0;
     }
 
     default:
-        return Platform_CBaddyExecuteCommand(&plat->CBaddy, command);
+        return plat->CBaddy.ExecuteCommand(command);
     }
 #undef PLATFORM_ENABLE_SCALE
     return 1;
@@ -1604,11 +1582,9 @@ int CPlatform_ExecuteCommand(
  * Consume platform-specific script variables, updating movement/orientation
  * fields directly and delegating unknown variables to CBaddy.
  *
- * @param self  Platform consuming the script variable.
  * @param variable Script variable identifier to consume.
  */
-void CPlatform_SetVariable(
-    CPlatform *self, unsigned short variable)
+void CPlatform::SetVariable(unsigned short variable)
 {
     variable &= PlatformScriptWordMask;
     CSVectorOwner *vecBase;
@@ -1619,43 +1595,43 @@ void CPlatform_SetVariable(
     {
     case PlatformVariableApplyGravity:
     {
-        u16 *script = self->CBaddy.mpScript;
+        u16 *script = CBaddy.mpScript;
         u8 value = *reinterpret_cast<u8 *>(script);
-        self->CBaddy.mpScript = script + 1;
-        self->CBaddy.mApplyGravity = value;
+        CBaddy.mpScript = script + 1;
+        CBaddy.mApplyGravity = value;
         break;
     }
     case PlatformVariableModelIndex:
     {
-        u16 *script = self->CBaddy.mpScript;
+        u16 *script = CBaddy.mpScript;
         u16 value = *script;
-        self->CBaddy.mpScript = script + 1;
-        self->CBaddy.CSuper.CBody.CItem.mModel = value;
+        CBaddy.mpScript = script + 1;
+        CBaddy.CSuper.CBody.CItem.mModel = value;
         break;
     }
     case PlatformVariableModelChecksum:
     {
         unsigned int *p_checksum = PLATFORM_ALIGNED_SCRIPT(
-            unsigned int, self->CBaddy.mpScript);
+            unsigned int, CBaddy.mpScript);
         unsigned int model = Spool_GetModel(
             *p_checksum,
-            self->CBaddy.CSuper.CBody.CItem.mRegion);
-        u16 flags = self->CBaddy.CSuper.CBody.CItem.mFlags;
-        self->CBaddy.CSuper.CBody.CItem.mModel = model;
-        self->CBaddy.mpScript = reinterpret_cast<u16 *>(p_checksum + 1);
+            CBaddy.CSuper.CBody.CItem.mRegion);
+        u16 flags = CBaddy.CSuper.CBody.CItem.mFlags;
+        CBaddy.CSuper.CBody.CItem.mModel = model;
+        CBaddy.mpScript = reinterpret_cast<u16 *>(p_checksum + 1);
         flags &= 0xFFFE;
-        self->CBaddy.CSuper.CBody.CItem.mFlags = flags;
+        CBaddy.CSuper.CBody.CItem.mFlags = flags;
         break;
     }
     case PlatformVariableVelocity:
     {
-        s16 x = self->CBaddy.GetScriptValue();
-        s16 y = self->CBaddy.GetScriptValue();
-        s16 z = self->CBaddy.GetScriptValue();
+        s16 x = CBaddy.GetScriptValue();
+        s16 y = CBaddy.GetScriptValue();
+        s16 z = CBaddy.GetScriptValue();
         int vx = static_cast<int>(x) << 12;
         int vy = static_cast<int>(y) << 12;
         int vz = static_cast<int>(z) << 12;
-        CVectorOwner *dest = &self->CBaddy.CSuper.CBody.mVel;
+        CVectorOwner *dest = &CBaddy.CSuper.CBody.mVel;
         dest->vx = vx;
         dest->vy = vy;
         dest->vz = vz;
@@ -1663,40 +1639,40 @@ void CPlatform_SetVariable(
     }
     case PlatformVariableAngles:
     {
-        s16 x = self->CBaddy.GetScriptValue();
-        vecY = self->CBaddy.GetScriptValue();
+        s16 x = CBaddy.GetScriptValue();
+        vecY = CBaddy.GetScriptValue();
         // Each of these three script-vector cases needs the inherited $a0
         // binding; stripping the group changes nine instructions.
-        register CBaddy *arg asm("$4") = &self->CBaddy;
+        register struct CBaddy *arg asm("$4") = &CBaddy;
         vecY <<= 16;
         vecY >>= 16;
         vecZ = arg->GetScriptValue();
-        vecBase = &self->CBaddy.CSuper.CBody.CItem.mAngles;
-        self->CBaddy.CSuper.CBody.CItem.mAngles.vx = x;
+        vecBase = &CBaddy.CSuper.CBody.CItem.mAngles;
+        CBaddy.CSuper.CBody.CItem.mAngles.vx = x;
         goto storeShortVector;
     }
     case PlatformVariableAngularVelocity:
     {
-        s16 x = self->CBaddy.GetScriptValue();
-        vecY = self->CBaddy.GetScriptValue();
-        register CBaddy *arg asm("$4") = &self->CBaddy;
+        s16 x = CBaddy.GetScriptValue();
+        vecY = CBaddy.GetScriptValue();
+        register struct CBaddy *arg asm("$4") = &CBaddy;
         vecY <<= 16;
         vecY >>= 16;
         vecZ = arg->GetScriptValue();
-        vecBase = &self->CBaddy.CSuper.CBody.mAngVel;
-        self->CBaddy.CSuper.CBody.mAngVel.vx = x;
+        vecBase = &CBaddy.CSuper.CBody.mAngVel;
+        CBaddy.CSuper.CBody.mAngVel.vx = x;
         goto storeShortVector;
     }
     case PlatformVariableAngularAcceleration:
     {
-        s16 x = self->CBaddy.GetScriptValue();
-        vecY = self->CBaddy.GetScriptValue();
-        register CBaddy *arg asm("$4") = &self->CBaddy;
+        s16 x = CBaddy.GetScriptValue();
+        vecY = CBaddy.GetScriptValue();
+        register struct CBaddy *arg asm("$4") = &CBaddy;
         vecY <<= 16;
         vecY >>= 16;
         vecZ = arg->GetScriptValue();
-        vecBase = &self->CBaddy.CSuper.CBody.mAngAcc;
-        self->CBaddy.CSuper.CBody.mAngAcc.vx = x;
+        vecBase = &CBaddy.CSuper.CBody.mAngAcc;
+        CBaddy.CSuper.CBody.mAngAcc.vx = x;
         goto storeShortVector;
     }
 storeShortVector:
@@ -1704,7 +1680,7 @@ storeShortVector:
         vecBase->vz = vecZ;
         break;
     default:
-        Platform_CBaddySetVariable(&self->CBaddy, variable);
+        CBaddy.SetVariable(variable);
         break;
     }
 }
@@ -1712,19 +1688,17 @@ storeShortVector:
 /**
  * Read a platform-specific script variable or delegate it to CBaddy.
  *
- * @param self Platform supplying the requested script variable.
  * @param variable Script variable identifier.
  * @return The signed script value.
  */
-short CPlatform_GetVariable(
-    CPlatform *self, unsigned short variable)
+short CPlatform::GetVariable(unsigned short variable)
 {
     variable &= PlatformScriptWordMask;
     if (variable == PlatformVariableNotTrodUponTimer)
     {
-        return self->mNotTrodUponScriptValue;
+        return mNotTrodUponScriptValue;
     }
-    return Platform_CBaddyGetVariable(&self->CBaddy, variable);
+    return CBaddy.GetVariable(variable);
 }
 
 /**

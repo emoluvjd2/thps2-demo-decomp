@@ -50,7 +50,6 @@ typedef char level_editor_runtime_camera_size_must_be_0x684[
 // === Forward type declarations ===
 
 class EditorCamera;
-class LevelEditor;
 class SelectManager;
 
 /** Owner-local EditorInModel (source model) layout; matches MAIN.SYM. */
@@ -164,17 +163,20 @@ typedef char editor_level_generator_lists_size_must_be_0x792c[
 
 struct ModelFace;
 struct RailInfo;
-/** Pointer-only sliced-image service view used by the editor arrows. */
-struct SlicedImage2
+
+#include "IMAGEBASE.h"
+
+/** Sliced-image service view used by the editor arrows. */
+struct SlicedImage2 : Image
 {
+    unsigned char opaque[32];
+
     int screenWidth();
 };
-/** Opaque Sprite2 storage with its natural bitmap constructor. */
-struct Sprite2
+/** Sprite storage with its natural sliced-image base. */
+struct Sprite2 : SlicedImage2
 {
-    unsigned char storage[60];
-
-    /** Allocate opaque sprite storage through the shared CClass arena. */
+    /** Allocate sprite storage through the shared CClass arena. */
     static void *operator new(unsigned int size) throw()
     {
         return ::CClass::operator new(size);
@@ -182,6 +184,11 @@ struct Sprite2
     /** Build a sprite from a bitmap file. */
     Sprite2(char *name, int pack, int sliceWidth, int sliceHeight);
 };
+
+typedef char editor_sliced_image2_size_must_be_60[
+    (sizeof(SlicedImage2) == 60) ? 1 : -1];
+typedef char editor_sprite2_size_must_be_60[
+    (sizeof(Sprite2) == 60) ? 1 : -1];
 /** Pointer-only menu service used by the editor wrapper. */
 struct BasicMenu
 {
@@ -486,34 +493,34 @@ struct Cursor : CClass {
 
 typedef char level_editor_Cursor_size_must_be_5372[(sizeof(Cursor) == 5372) ? 1 : -1];
 
-// === $gp-relative globals ===
+// === Owner-local vtable anchors ===
 extern int __vt_12EditorCamera;
 extern int __vt_12EditorCamera_base;
-
-// === External function declarations ===
-#include <STDIO.H>
-
-// SelectManager globals — non-$gp (accessed via lui/addiu absolute addressing)
-extern "C" const char s_demo_pieces_left[] asm("DAT_800B3C18");
-extern "C" const char s_not_available_in_demo[]
-    asm("s_not_available_in_demo_800b3c30");
 extern int __vt_11LevelEditor;
 extern int __vt_11LevelEditor_base;
 extern int __vt_13SelectManager;
 extern int __vt_13SelectManager_base;
+extern int __vt_6Cursor;
+extern int __vt_base_6Cursor;
+
+// === External function declarations ===
+#include <STDIO.H>
+
+// SelectManager diagnostics retained by the original object.
+extern const char DAT_800B3C18[];
+extern const char s_not_available_in_demo_800b3c30[];
 
 // Draw__11LevelEditor helpers
 #include "DB.h"
 
 // === Extern "C" forward declarations ===
 // Cursor methods are declared as members on `struct Cursor` above (Phase F1.6).
-extern int __vt_6Cursor;
-// LEVELEDITOR addresses this small owner global absolutely in the target.
-extern int NotInDemoPiece __attribute__((section(".data")));
 #include "PDOUBLEBUFFER.h"
-extern "C" EditorTextMenuView *LevelEditor_ConstructTextMenu(
-    EditorTextMenuView *, const char **, int *, int, const char *, bool)
-    asm("__15TextMenuWrapperPCPcPiiPcb");
+#define MENU_ABI_DECLARATIONS_ONLY
+#define MENU_DECLARE_TEXT_WRAPPER_CONSTRUCTOR_ABI
+#define MENU_TEXT_WRAPPER_CONSTRUCTOR_RECEIVER EditorTextMenuView
+#include "MENU.h"
+#undef MENU_ABI_DECLARATIONS_ONLY
 // --- __11LevelEditor ctor dependencies ---
 #include "SPOOL.h"
 #include "PAL.h"
@@ -566,16 +573,15 @@ void LevelEditor_Main(void)
  */
 LevelEditor::LevelEditor()
 {
-    LevelEditor *editor = this;
     char theme_name[10];
 
-    editor->CClass.vtable = &__vt_11LevelEditor;
-    editor->NewTheme = -1;
+    this->CClass.vtable = &__vt_11LevelEditor;
+    this->NewTheme = -1;
     Spool_RemoveUnusedTextures();
     Pal_RemoveUnusedPalettes();
     Pack_DefragmentFully();
     printf("Welcome to the Level Editor\n");
-    editor->CreateMenu();
+    this->CreateMenu();
     Db_Init();
     FontManager::LoadFont("ingame1.fnt");
     if (!GenerateLevel) {
@@ -591,50 +597,50 @@ LevelEditor::LevelEditor()
         obj = ::new (obj) SelectManager;
     {
         int theme = GenerateThemeNumber;
-        editor->PieceManager = static_cast<SelectManager *>(obj);
-        editor->PieceManager->SetTheme(theme);
+        this->PieceManager = static_cast<SelectManager *>(obj);
+        this->PieceManager->SetTheme(theme);
     }
 
     obj = ::CClass::operator new(0xa634);
     if (obj != 0)
         obj = ::new (obj) LevelGenerator(false);
     int theme = GenerateThemeNumber;
-    editor->Gen = static_cast<LevelGenerator *>(obj);
+    this->Gen = static_cast<LevelGenerator *>(obj);
     sprintf(theme_name, "SkEd%d", theme + 1);
-    editor->Gen->LoadModels(theme_name);
-    editor->Gen->CreatePSX(&editor->mRegion, true);
-    int region = editor->mRegion;
-    editor->pItemList =
+    this->Gen->LoadModels(theme_name);
+    this->Gen->CreatePSX(&this->mRegion, true);
+    int region = this->mRegion;
+    this->pItemList =
         reinterpret_cast<Item *>(PSXRegion[region].pPSX + 3);
     printf("mRegion is %d\n", region);
 
     obj = ::CClass::operator new(sizeof(EditorCamera));
     if (obj != 0)
         obj = ::new (obj) EditorCamera;
-    editor->mCamera = static_cast<EditorCamera *>(obj);
+    this->mCamera = static_cast<EditorCamera *>(obj);
 
     obj = ::CClass::operator new(sizeof(Cursor));
     if (obj != 0)
-        obj = ::new (obj) Cursor(*editor->Gen);
-    editor->mCursor = static_cast<Cursor *>(obj);
+        obj = ::new (obj) Cursor(*this->Gen);
+    this->mCursor = static_cast<Cursor *>(obj);
 
     {
-        int pidx = editor->PieceManager->GetPieceIndex();
-        editor->mCursor->SetPiece(pidx);
+        int pidx = this->PieceManager->GetPieceIndex();
+        this->mCursor->SetPiece(pidx);
     }
-    editor->mCursor->SetCameraTargetVector(
-        editor->mCamera->GetCameraTargetVector());
+    this->mCursor->SetCameraTargetVector(
+        this->mCamera->GetCameraTargetVector());
 
-    editor->mViewPort.xR = 0x200;
-    editor->mViewPort.yB = 0xf0;
-    editor->mViewPort.xL = 0;
-    editor->mViewPort.yT = 0;
-    editor->mViewPort.Hither = 0xa;
-    editor->mViewPort.Yon = 0x7530;
-    editor->mViewPort.TanHalf = 0xd55;
-    editor->mTime = VSync(-1);
+    this->mViewPort.xR = 0x200;
+    this->mViewPort.yB = 0xf0;
+    this->mViewPort.xL = 0;
+    this->mViewPort.yT = 0;
+    this->mViewPort.Hither = 0xa;
+    this->mViewPort.Yon = 0x7530;
+    this->mViewPort.TanHalf = 0xd55;
+    this->mTime = VSync(-1);
     Pad_ClearTriggers(Pad);
-    editor->mPadWait = 0;
+    this->mPadWait = 0;
 }
 
 /**
@@ -648,17 +654,16 @@ LevelEditor::LevelEditor()
  */
 LevelEditor::~LevelEditor()
 {
-    LevelEditor *editor = this;
-    editor->CClass.vtable = &__vt_11LevelEditor;
+    this->CClass.vtable = &__vt_11LevelEditor;
 
-    ::CClass *obj = static_cast< ::CClass *>(editor->mCamera);
+    ::CClass *obj = static_cast< ::CClass *>(this->mCamera);
     if (obj != 0)
     {
         int *vt = obj->vtable;
         reinterpret_cast<void (*)(::CClass *, int)>(vt[2])(obj, 3);
     }
 
-    obj = static_cast< ::CClass *>(editor->mCursor);
+    obj = static_cast< ::CClass *>(this->mCursor);
     if (obj != 0)
     {
         int *vt = obj->vtable;
@@ -667,14 +672,14 @@ LevelEditor::~LevelEditor()
 
     LevelGenerator::UnloadOutPSX(true);
 
-    obj = reinterpret_cast< ::CClass *>(editor->Gen);
+    obj = reinterpret_cast< ::CClass *>(this->Gen);
     if (obj != 0)
     {
         int *vt = obj->vtable;
         reinterpret_cast<void (*)(::CClass *, int)>(vt[2])(obj, 3);
     }
 
-    obj = static_cast< ::CClass *>(editor->PieceManager);
+    obj = static_cast< ::CClass *>(this->PieceManager);
     if (obj != 0)
     {
         int *vt = obj->vtable;
@@ -686,7 +691,7 @@ LevelEditor::~LevelEditor()
     pCurrentViewport = (SViewport *)-1;
     M3d_OTPushback = 0;
     M3d_OTPushback2 = 0;
-    editor->CClass.vtable = vtbase;
+    this->CClass.vtable = vtbase;
 }
 
 /**
@@ -699,13 +704,12 @@ LevelEditor::~LevelEditor()
  */
 void LevelEditor::Draw()
 {
-    LevelEditor *editor = this;
     Db_DisplayDraw();
     Db_FlipClear();
     SCamera *C = MikeCamera;
-    editor->PieceManager->Draw();
+    this->PieceManager->Draw();
 
-    EditorTextMenuView *wrapper = editor->Wrapper;
+    EditorTextMenuView *wrapper = this->Wrapper;
     if (wrapper != 0)
     {
         EditorDrawableView *menu =
@@ -715,23 +719,23 @@ void LevelEditor::Draw()
     }
 
     M3d_RenderSetup(
-        C, &editor->mViewPort, reinterpret_cast<EditorDoubleBufferView *>(pDoubleBuffer)->OrderingTable);
+        C, &this->mViewPort, reinterpret_cast<EditorDoubleBufferView *>(pDoubleBuffer)->OrderingTable);
 
     ForceWireFrameColor = 0x8000;
     CurrentOrderingTable += 200;
-    editor->mCursor->PushbackPieces(true);
-    M3d_Render(editor->pItemList);
+    this->mCursor->PushbackPieces(true);
+    M3d_Render(this->pItemList);
 
     M3d_OTPushback = 0;
     M3d_OTPushback2 = 0;
     CurrentOrderingTable -= 100;
-    editor->mCursor->Draw();
+    this->mCursor->Draw();
 
     M3d_OTPushback = 0x400;
     M3d_OTPushback2 = 0x400;
     CurrentOrderingTable -= 100;
-    editor->mCursor->PushbackPieces(false);
-    M3d_Render(editor->pItemList);
+    this->mCursor->PushbackPieces(false);
+    M3d_Render(this->pItemList);
 
     M3d_RenderCleanup();
     ForceWireFrameColor = 0;
@@ -748,58 +752,57 @@ void LevelEditor::Draw()
  */
 int LevelEditor::Update()
 {
-    LevelEditor *editor = this;
     int new_time;
 
-    editor->UpdateMenu();
-    if (editor->MenuState == 4)
+    this->UpdateMenu();
+    if (this->MenuState == 4)
     {
         return 1;
     }
 
-    if (editor->DidLoad != 0)
+    if (this->DidLoad != 0)
     {
-        editor->DidLoad = 0;
-        editor->Gen->CreatePSX(&editor->mRegion, true);
-        editor->pItemList = (struct Item *)(PSXRegion[editor->mRegion].pPSX + 3);
-        editor->mCursor->Move(editor->mCursor->X,
-                              editor->mCursor->Y,
-                              editor->mCursor->Z);
-        editor->mCursor->ResortGrid = (void *)1;
+        this->DidLoad = 0;
+        this->Gen->CreatePSX(&this->mRegion, true);
+        this->pItemList = (struct Item *)(PSXRegion[this->mRegion].pPSX + 3);
+        this->mCursor->Move(this->mCursor->X,
+                              this->mCursor->Y,
+                              this->mCursor->Z);
+        this->mCursor->ResortGrid = (void *)1;
     }
 
-    if (editor->MenuState == 0)
+    if (this->MenuState == 0)
     {
-        editor->PieceManager->SetMenuState(true);
-        editor->HandleInput();
+        this->PieceManager->SetMenuState(true);
+        this->HandleInput();
 
-        if (editor->NewTheme != -1)
+        if (this->NewTheme != -1)
         {
             char theme_name[10];
 
-            GenerateThemeNumber = editor->NewTheme;
-            editor->NewTheme = -1;
+            GenerateThemeNumber = this->NewTheme;
+            this->NewTheme = -1;
             LevelGenerator::SetMapTheme(GenerateThemeNumber);
-            editor->PieceManager->SetTheme(GenerateThemeNumber);
+            this->PieceManager->SetTheme(GenerateThemeNumber);
             sprintf(theme_name, "SkEd%d", GenerateThemeNumber + 1);
             LevelGenerator::UnloadOutPSX(true);
-            editor->Gen->LoadModels(theme_name);
-            editor->Gen->CreatePSX(&editor->mRegion, true);
-            editor->mCursor->ResortGrid = (void *)1;
-            editor->pItemList = (struct Item *)(PSXRegion[editor->mRegion].pPSX + 3);
+            this->Gen->LoadModels(theme_name);
+            this->Gen->CreatePSX(&this->mRegion, true);
+            this->mCursor->ResortGrid = (void *)1;
+            this->pItemList = (struct Item *)(PSXRegion[this->mRegion].pPSX + 3);
         }
     }
     else
     {
-        editor->PieceManager->SetMenuState(false);
+        this->PieceManager->SetMenuState(false);
     }
 
-    editor->mCursor->Update();
-    editor->mCamera->SetTarget(editor->mCursor->CameraX,
+    this->mCursor->Update();
+    this->mCamera->SetTarget(this->mCursor->CameraX,
                                0,
-                               editor->mCursor->CameraZ);
-    editor->mCamera->Update();
-    editor->PieceManager->Update();
+                               this->mCursor->CameraZ);
+    this->mCamera->Update();
+    this->PieceManager->Update();
 
     while (DrawSync(1) != 0)
     {
@@ -808,12 +811,12 @@ int LevelEditor::Update()
     do
     {
         new_time = VSync(-1);
-    } while (new_time < editor->mTime + 2);
-    editor->mTime = new_time;
+    } while (new_time < this->mTime + 2);
+    this->mTime = new_time;
 
-    if (editor->mPadWait != 0)
+    if (this->mPadWait != 0)
     {
-        editor->mPadWait--;
+        this->mPadWait--;
     }
 
     Pad_Update();
@@ -833,99 +836,98 @@ int LevelEditor::Update()
  */
 void LevelEditor::HandleInput()
 {
-    LevelEditor *editor = this;
     if (Pad[0].Square.Triggered != 0)
     {
         Pad[0].Square.Triggered = 0;
-        editor->mCamera->Rotate();
-        editor->mCursor->SetCameraTargetVector(
-            editor->mCamera->GetCameraTargetVector());
-        editor->mCursor->ResortGrid = (void *)1;
+        this->mCamera->Rotate();
+        this->mCursor->SetCameraTargetVector(
+            this->mCamera->GetCameraTargetVector());
+        this->mCursor->ResortGrid = (void *)1;
     }
 
     if (Pad[0].Circle.Triggered != 0)
     {
         Pad[0].Circle.Triggered = 0;
-        editor->mCursor->Rotate(1);
+        this->mCursor->Rotate(1);
     }
 
     if (Pad[0].Select.Triggered != 0)
     {
         Pad[0].Select.Triggered = 0;
-        editor->mCamera->SwitchType();
+        this->mCamera->SwitchType();
     }
 
     if (Pad[0].X.Triggered != 0)
     {
         Pad[0].X.Triggered = 0;
-        if (editor->mCursor->Stamp() != 0)
+        if (this->mCursor->Stamp() != 0)
         {
             SFX_PlayX(0xea, 0x2000, 0);
-            editor->Gen->CreatePSX(&editor->mRegion, false);
+            this->Gen->CreatePSX(&this->mRegion, false);
         }
         else
         {
             SFX_PlayX(0x92, 0x2000, 0);
         }
-        editor->mCursor->ResortGrid = (void *)1;
-        editor->pItemList =
-            (Item *)(PSXRegion[editor->mRegion].pPSX + 3);
+        this->mCursor->ResortGrid = (void *)1;
+        this->pItemList =
+            (Item *)(PSXRegion[this->mRegion].pPSX + 3);
     }
 
     if (Pad[0].Triangle.Triggered != 0)
     {
         Pad[0].Triangle.Triggered = 0;
-        if (editor->mCursor->Remove() != 0)
+        if (this->mCursor->Remove() != 0)
         {
             SFX_PlayX(0x93, 0x2000, 0);
-            editor->Gen->CreatePSX(&editor->mRegion, false);
+            this->Gen->CreatePSX(&this->mRegion, false);
         }
         else
         {
             SFX_PlayX(0x92, 0x2000, 0);
         }
-        editor->mCursor->ResortGrid = (void *)1;
-        editor->pItemList =
-            (Item *)(PSXRegion[editor->mRegion].pPSX + 3);
+        this->mCursor->ResortGrid = (void *)1;
+        this->pItemList =
+            (Item *)(PSXRegion[this->mRegion].pPSX + 3);
     }
 
     if (Pad[0].LeftTwo.Triggered != 0)
     {
         Pad[0].LeftTwo.Triggered = 0;
-        editor->PieceManager->ChangeCategory(-1);
-        editor->mCursor->SetPiece(
-            editor->PieceManager->GetPieceIndex());
+        this->PieceManager->ChangeCategory(-1);
+        this->mCursor->SetPiece(
+            this->PieceManager->GetPieceIndex());
     }
 
     if (Pad[0].LeftOne.Triggered != 0)
     {
         Pad[0].LeftOne.Triggered = 0;
-        editor->PieceManager->ChangeCategory(1);
-        editor->mCursor->SetPiece(
-            editor->PieceManager->GetPieceIndex());
+        this->PieceManager->ChangeCategory(1);
+        this->mCursor->SetPiece(
+            this->PieceManager->GetPieceIndex());
     }
 
     if (Pad[0].RightTwo.Triggered != 0)
     {
         Pad[0].RightTwo.Triggered = 0;
-        editor->PieceManager->ChangePiece(-1);
-        editor->mCursor->SetPiece(
-            editor->PieceManager->GetPieceIndex());
+        this->PieceManager->ChangePiece(-1);
+        this->mCursor->SetPiece(
+            this->PieceManager->GetPieceIndex());
     }
 
     if (Pad[0].RightOne.Triggered != 0)
     {
         Pad[0].RightOne.Triggered = 0;
-        editor->PieceManager->ChangePiece(1);
-        editor->mCursor->SetPiece(
-            editor->PieceManager->GetPieceIndex());
+        this->PieceManager->ChangePiece(1);
+        this->mCursor->SetPiece(
+            this->PieceManager->GetPieceIndex());
     }
 
     int press = -1;
-    if ((Pad[0].Left.Pressed != 0 && editor->mPadWait == 0) ||
+    if ((Pad[0].Left.Pressed != 0 && this->mPadWait == 0) ||
         Pad[0].Left.Triggered != 0)
     {
-        editor->mPadWait = 4;
+        this->mPadWait = 4;
         press = 2;
         if (Pad[0].Left.Triggered != 0)
         {
@@ -933,10 +935,10 @@ void LevelEditor::HandleInput()
         }
     }
 
-    if ((Pad[0].Right.Pressed != 0 && editor->mPadWait == 0) ||
+    if ((Pad[0].Right.Pressed != 0 && this->mPadWait == 0) ||
         Pad[0].Right.Triggered != 0)
     {
-        editor->mPadWait = 4;
+        this->mPadWait = 4;
         press = 0;
         if (Pad[0].Right.Triggered != 0)
         {
@@ -944,10 +946,10 @@ void LevelEditor::HandleInput()
         }
     }
 
-    if ((Pad[0].Up.Pressed != 0 && editor->mPadWait == 0) ||
+    if ((Pad[0].Up.Pressed != 0 && this->mPadWait == 0) ||
         Pad[0].Up.Triggered != 0)
     {
-        editor->mPadWait = 4;
+        this->mPadWait = 4;
         press = 1;
         if (Pad[0].Up.Triggered != 0)
         {
@@ -955,10 +957,10 @@ void LevelEditor::HandleInput()
         }
     }
 
-    if ((Pad[0].Down.Pressed != 0 && editor->mPadWait == 0) ||
+    if ((Pad[0].Down.Pressed != 0 && this->mPadWait == 0) ||
         Pad[0].Down.Triggered != 0)
     {
-        editor->mPadWait = 4;
+        this->mPadWait = 4;
         press = 3;
         if (Pad[0].Down.Triggered != 0)
         {
@@ -968,8 +970,8 @@ void LevelEditor::HandleInput()
 
     if (press != -1)
     {
-        press = editor->mCamera->TranslatePress(press);
-        editor->mCursor->Move(press);
+        press = this->mCamera->TranslatePress(press);
+        this->mCursor->Move(press);
     }
 }
 
@@ -983,10 +985,9 @@ void LevelEditor::HandleInput()
  */
 void LevelEditor::CreateMenu()
 {
-    LevelEditor *editor = this;
-    editor->MenuState = NOTHING;
-    editor->Wrapper = 0;
-    editor->DidLoad = 0;
+    this->MenuState = NOTHING;
+    this->Wrapper = 0;
+    this->DidLoad = 0;
 }
 
 /**
@@ -998,7 +999,6 @@ void LevelEditor::CreateMenu()
  * Mangled:   UpdateMenu__11LevelEditor
  * Demangled: LevelEditor::UpdateMenu(void)
  *
- * @param editor Active level-editor session.
  */
 void LevelEditor::UpdateMenu()
 {
@@ -1032,7 +1032,7 @@ void LevelEditor::UpdateMenu()
                     ::CClass::operator new(sizeof(EditorTextMenuView)));
             if (wrapper != 0)
             {
-                wrapper = LevelEditor_ConstructTextMenu(
+                wrapper = __15TextMenuWrapperPCPcPiiPcb(
                     wrapper, names, ids, 6,
                     "ingame1.fnt", false);
             }
@@ -1103,7 +1103,7 @@ destroy_main_menu:
                     ::CClass::operator new(sizeof(EditorTextMenuView)));
             if (wrapper != 0)
             {
-                wrapper = LevelEditor_ConstructTextMenu(
+                wrapper = __15TextMenuWrapperPCPcPiiPcb(
                     wrapper, name_ptrs, ids, 10,
                     "ingame1.fnt", true);
             }
@@ -1152,7 +1152,7 @@ destroy_main_menu:
                     ::CClass::operator new(sizeof(EditorTextMenuView)));
             if (wrapper != 0)
             {
-                wrapper = LevelEditor_ConstructTextMenu(
+                wrapper = __15TextMenuWrapperPCPcPiiPcb(
                     wrapper, name_ptrs, ids, 10,
                     "ingame1.fnt", true);
             }
@@ -1207,7 +1207,7 @@ destroy_main_menu:
                     ::CClass::operator new(sizeof(EditorTextMenuView)));
             if (wrapper != 0)
             {
-                wrapper = LevelEditor_ConstructTextMenu(
+                wrapper = __15TextMenuWrapperPCPcPiiPcb(
                     wrapper, names, ids, 4,
                     "ingame1.fnt", false);
             }
@@ -1257,7 +1257,7 @@ destroy_main_menu:
                     ::CClass::operator new(sizeof(EditorTextMenuView)));
             if (wrapper != 0)
             {
-                wrapper = LevelEditor_ConstructTextMenu(
+                wrapper = __15TextMenuWrapperPCPcPiiPcb(
                     wrapper, names, ids, 3,
                     "ingame1.fnt", false);
             }
@@ -1356,84 +1356,83 @@ update_menu:
  */
 SelectManager::SelectManager()
 {
-    SelectManager *manager = this;
-    manager->vtable = &__vt_13SelectManager;
-    ::new (FontFromStorage(&manager->TheFont)) Font;
-    ::new (FontFromStorage(&manager->PromptFont)) Font;
+    this->vtable = &__vt_13SelectManager;
+    ::new (FontFromStorage(&this->TheFont)) Font;
+    ::new (FontFromStorage(&this->PromptFont)) Font;
 
     int i = 0;
     while (PieceMap[i].map[0] != 0xff)
     {
         i++;
     }
-    manager->NumPieces = i;
+    this->NumPieces = i;
 
     i = 0;
     while (CategoryMap[i].firstPiece != 0xff)
     {
         i++;
     }
-    manager->NumCategories = i;
+    this->NumCategories = i;
 
     Font *loaded_font = FontManager::LoadFont("s2park1.fnt");
-    *(EditorFontAssignmentView *)&manager->TheFont =
+    *(EditorFontAssignmentView *)&this->TheFont =
         *(EditorFontAssignmentView *)loaded_font;
-    manager->TheFont.JustX = 0;
-    manager->TheFont.ShadowDx = 2;
-    manager->TheFont.ShadowDy = 2;
-    manager->TheFont.SpaceX = 1;
-    *(EditorFontAssignmentView *)&manager->PromptFont =
-        *(EditorFontAssignmentView *)&manager->TheFont;
-    manager->PromptFont.JustY = 2;
+    this->TheFont.JustX = 0;
+    this->TheFont.ShadowDx = 2;
+    this->TheFont.ShadowDy = 2;
+    this->TheFont.SpaceX = 1;
+    *(EditorFontAssignmentView *)&this->PromptFont =
+        *(EditorFontAssignmentView *)&this->TheFont;
+    this->PromptFont.JustY = 2;
 
-    manager->WindowHeight = 43;
-    manager->WindowMidpoint = 28;
-    manager->WindowTop = -43;
+    this->WindowHeight = 43;
+    this->WindowMidpoint = 28;
+    this->WindowTop = -43;
     Sprite2 *sprite = new Sprite2("s2l1l2.bmp", 1, 0, 0);
-    manager->LeftButton = sprite;
-    ((EditorSpriteJustificationView *)manager->LeftButton)->JustX = 2;
-    ((EditorSpriteJustificationView *)manager->LeftButton)->JustY = 1;
-    manager->LeftX =
-        reinterpret_cast<SlicedImage2 *>(manager->LeftButton)->screenWidth() +
+    this->LeftButton = sprite;
+    ((EditorSpriteJustificationView *)this->LeftButton)->JustX = 2;
+    ((EditorSpriteJustificationView *)this->LeftButton)->JustY = 1;
+    this->LeftX =
+        reinterpret_cast<SlicedImage2 *>(this->LeftButton)->screenWidth() +
         12;
 
     sprite = new Sprite2("s2r1r2.bmp", 1, 0, 0);
-    manager->RightButton = sprite;
-    ((EditorSpriteJustificationView *)manager->RightButton)->JustX = 0;
-    ((EditorSpriteJustificationView *)manager->RightButton)->JustY = 1;
-    manager->RightX =
-        0x1f2 - reinterpret_cast<SlicedImage2 *>(manager->RightButton)
+    this->RightButton = sprite;
+    ((EditorSpriteJustificationView *)this->RightButton)->JustX = 0;
+    ((EditorSpriteJustificationView *)this->RightButton)->JustY = 1;
+    this->RightX =
+        0x1f2 - reinterpret_cast<SlicedImage2 *>(this->RightButton)
                     ->screenWidth();
 
-    manager->Theme = 0;
-    manager->Category = -1;
-    manager->Piece = -1;
-    manager->UnpackCount = 0;
-    manager->SetCategory(0);
+    this->Theme = 0;
+    this->Category = -1;
+    this->Piece = -1;
+    this->UnpackCount = 0;
+    this->SetCategory(0);
 
     PromptScreenElement *prompt = new PromptScreenElement(
-        "s2EDsqua.bmp", "view ", FontFromStorage(&manager->PromptFont),
+        "s2EDsqua.bmp", "view ", FontFromStorage(&this->PromptFont),
         60, 221, -1, 260);
-    manager->PromptItem[0] = reinterpret_cast<ScreenElement *>(prompt);
+    this->PromptItem[0] = reinterpret_cast<ScreenElement *>(prompt);
 
     prompt = new PromptScreenElement(
-        "s2EDcirc.bmp", "piece ", FontFromStorage(&manager->PromptFont),
+        "s2EDcirc.bmp", "piece ", FontFromStorage(&this->PromptFont),
         144, 221, -1, 260);
-    manager->PromptItem[1] = reinterpret_cast<ScreenElement *>(prompt);
+    this->PromptItem[1] = reinterpret_cast<ScreenElement *>(prompt);
 
     prompt = new PromptScreenElement(
-        "s2EDcros.bmp", "place ", FontFromStorage(&manager->PromptFont),
+        "s2EDcros.bmp", "place ", FontFromStorage(&this->PromptFont),
         264, 221, -1, 260);
-    manager->PromptItem[2] = reinterpret_cast<ScreenElement *>(prompt);
+    this->PromptItem[2] = reinterpret_cast<ScreenElement *>(prompt);
 
     prompt = new PromptScreenElement(
-        "s2EDtria.bmp", "erase ", FontFromStorage(&manager->PromptFont),
+        "s2EDtria.bmp", "erase ", FontFromStorage(&this->PromptFont),
         358, 221, -1, 260);
-    manager->PromptItem[3] = reinterpret_cast<ScreenElement *>(prompt);
+    this->PromptItem[3] = reinterpret_cast<ScreenElement *>(prompt);
 
-    manager->SetMenuState(true);
-    manager->OldPiecesRemaining = -1;
-    manager->Blink = 1;
+    this->SetMenuState(true);
+    this->OldPiecesRemaining = -1;
+    this->Blink = 1;
 }
 
 /**
@@ -1495,51 +1494,50 @@ SelectManager::~SelectManager()
  */
 void SelectManager::Draw()
 {
-    SelectManager *manager = this;
     typedef void (*DrawAtFunction)(void *, int, int, int);
     typedef void (*DrawPromptFunction)(void *, int, int);
 
     EditorDrawableView *left =
-        (EditorDrawableView *)manager->LeftButton;
+        (EditorDrawableView *)this->LeftButton;
     ((DrawAtFunction)left->vtable[5])(
-        left, manager->LeftX,
-        manager->WindowTop + manager->WindowMidpoint, 0);
+        left, this->LeftX,
+        this->WindowTop + this->WindowMidpoint, 0);
 
-    Font *font = FontFromStorage(&manager->TheFont);
-    font->draw(manager->CatStringX[0],
-               manager->WindowTop + manager->CatStringY[0],
-               manager->CatString[0], 0);
-    font->draw(manager->CatStringX[1],
-               manager->WindowTop + manager->CatStringY[1],
-               manager->CatString[1], 0);
+    Font *font = FontFromStorage(&this->TheFont);
+    font->draw(this->CatStringX[0],
+               this->WindowTop + this->CatStringY[0],
+               this->CatString[0], 0);
+    font->draw(this->CatStringX[1],
+               this->WindowTop + this->CatStringY[1],
+               this->CatString[1], 0);
 
     EditorDrawableView *right =
-        (EditorDrawableView *)manager->RightButton;
+        (EditorDrawableView *)this->RightButton;
     ((DrawAtFunction)right->vtable[5])(
-        right, manager->RightX,
-        manager->WindowTop + manager->WindowMidpoint, 0);
+        right, this->RightX,
+        this->WindowTop + this->WindowMidpoint, 0);
 
-    font->draw(manager->PieceStringX[0],
-               manager->WindowTop + manager->PieceStringY[0],
-               manager->PieceString[0], 0);
-    font->draw(manager->PieceStringX[1],
-               manager->WindowTop + manager->PieceStringY[1],
-               manager->PieceString[1], 0);
-    font->draw(manager->PieceStringX[2],
-               manager->WindowTop + manager->PieceStringY[2],
-               manager->PieceString[2], 0);
+    font->draw(this->PieceStringX[0],
+               this->WindowTop + this->PieceStringY[0],
+               this->PieceString[0], 0);
+    font->draw(this->PieceStringX[1],
+               this->WindowTop + this->PieceStringY[1],
+               this->PieceString[1], 0);
+    font->draw(this->PieceStringX[2],
+               this->WindowTop + this->PieceStringY[2],
+               this->PieceString[2], 0);
 
-    if (manager->Blink > 12 && manager->NotInDemo != 0)
+    if (this->Blink > 12 && this->NotInDemo != 0)
     {
-        font->draw(manager->PieceStringX[3],
-                   manager->WindowTop + manager->PieceStringY[3],
-                   manager->PieceString[3], 0);
+        font->draw(this->PieceStringX[3],
+                   this->WindowTop + this->PieceStringY[3],
+                   this->PieceString[3], 0);
     }
 
-    manager->Blink--;
-    if (manager->Blink == 0)
+    this->Blink--;
+    if (this->Blink == 0)
     {
-        manager->Blink = 48;
+        this->Blink = 48;
     }
 
     POLY_F4 *Poly = (POLY_F4 *)pPoly;
@@ -1547,10 +1545,10 @@ void SelectManager::Draw()
     setPolyF4(Poly);
     setRGB0(Poly, 60, 60, 60);
     setXY4(Poly,
-           0, manager->WindowTop,
-           0x200, manager->WindowTop,
-           0, manager->WindowTop + manager->WindowHeight,
-           0x200, manager->WindowTop + manager->WindowHeight);
+           0, this->WindowTop,
+           0x200, this->WindowTop,
+           0, this->WindowTop + this->WindowHeight,
+           0x200, this->WindowTop + this->WindowHeight);
     setSemiTrans(Poly, 1);
 
     int tpage = GetTPage(2, 2, 0, 0);
@@ -1562,7 +1560,7 @@ void SelectManager::Draw()
     for (int i = 0; i < 4; i++)
     {
         EditorDrawableView *prompt =
-            (EditorDrawableView *)manager->PromptItem[i];
+            (EditorDrawableView *)this->PromptItem[i];
         ((DrawPromptFunction)prompt->vtable[4])(prompt, 0, 0);
     }
 }
@@ -1577,14 +1575,13 @@ void SelectManager::Draw()
  */
 void SelectManager::Update()
 {
-    SelectManager *manager = this;
-    int top = manager->WindowTop;
-    int target = manager->WindowTarget;
+    int top = this->WindowTop;
+    int target = this->WindowTarget;
     int diffY = target - top;
 
     if ((unsigned int)(diffY + 1) < 3)
     {
-        manager->WindowTop = target;
+        this->WindowTop = target;
         top = target;
     }
     int change = diffY >> 2;
@@ -1592,16 +1589,16 @@ void SelectManager::Update()
     {
         change = diffY >> 1;
     }
-    manager->WindowTop = top + change;
+    this->WindowTop = top + change;
 
-    unsigned char count = manager->UnpackCount;
+    unsigned char count = this->UnpackCount;
     if (count != 0)
     {
-        manager->UnpackCount = count - 1;
+        this->UnpackCount = count - 1;
     }
 
     int i = 0;
-    ScreenElement **prompt = manager->PromptItem;
+    ScreenElement **prompt = this->PromptItem;
     do
     {
         EditorDrawableView *item =
@@ -1614,21 +1611,21 @@ void SelectManager::Update()
 
     if (diffY != 0)
     {
-        manager->Blink = 1;
+        this->Blink = 1;
     }
 
     int pieces = PiecesRemaining;
-    if (pieces != manager->OldPiecesRemaining)
+    if (pieces != this->OldPiecesRemaining)
     {
-        char *pieceString = manager->PieceString[2];
-        manager->OldPiecesRemaining = pieces;
-        sprintf(pieceString, (char *)s_demo_pieces_left, pieces);
-        int width = FontFromStorage(&manager->TheFont)->width(pieceString);
-        int x = manager->RightX - width - 6;
-        manager->PieceStringX[2] = x;
-        int height = FontFromStorage(&manager->TheFont)->height(
-            manager->PieceString[1]);
-        manager->PieceStringY[2] = manager->WindowMidpoint + height + 3;
+        char *pieceString = this->PieceString[2];
+        this->OldPiecesRemaining = pieces;
+        sprintf(pieceString, (char *)DAT_800B3C18, pieces);
+        int width = FontFromStorage(&this->TheFont)->width(pieceString);
+        int x = this->RightX - width - 6;
+        this->PieceStringX[2] = x;
+        int height = FontFromStorage(&this->TheFont)->height(
+            this->PieceString[1]);
+        this->PieceStringY[2] = this->WindowMidpoint + height + 3;
     }
 }
 
@@ -1643,62 +1640,61 @@ void SelectManager::Update()
  */
 void SelectManager::SetPiece(int piece)
 {
-    SelectManager *manager = this;
     int pieceReg = piece;
 
-    if (manager->UnpackCount != 0)
+    if (this->UnpackCount != 0)
     {
         return;
     }
 
-    int current = manager->Piece;
+    int current = this->Piece;
     if (current != -1)
     {
-        manager->PieceToUnpack = current;
-        manager->UnpackCount = 2;
+        this->PieceToUnpack = current;
+        this->UnpackCount = 2;
     }
 
-    manager->Piece = pieceReg;
-    CategoryMap[manager->Category].lastUsedPiece =
-        PieceMap[pieceReg].map[manager->Theme];
+    this->Piece = pieceReg;
+    CategoryMap[this->Category].lastUsedPiece =
+        PieceMap[pieceReg].map[this->Theme];
 
-    char *pieceCountString = manager->PieceString[0];
+    char *pieceCountString = this->PieceString[0];
     sprintf(pieceCountString, "Piece %d of %d:",
-            manager->Piece - manager->FirstPieceInCategory + 1,
-            manager->NumPiecesInCategory);
+            this->Piece - this->FirstPieceInCategory + 1,
+            this->NumPiecesInCategory);
 
-    char *pieceNameString = manager->PieceString[1];
+    char *pieceNameString = this->PieceString[1];
     sprintf(pieceNameString, "%s",
-            PieceMap[manager->Piece].name);
+            PieceMap[this->Piece].name);
 
-    Font *font = FontFromStorage(&manager->TheFont);
+    Font *font = FontFromStorage(&this->TheFont);
     int width = font->width(pieceCountString);
-    manager->PieceStringX[0] = manager->RightX - width - 6;
+    this->PieceStringX[0] = this->RightX - width - 6;
 
     width = font->width(pieceNameString);
-    manager->PieceStringX[1] = manager->RightX - width - 6;
+    this->PieceStringX[1] = this->RightX - width - 6;
 
     int height = font->height(pieceCountString);
-    manager->PieceStringY[0] = manager->WindowMidpoint - height - 1;
-    manager->PieceStringY[1] = manager->WindowMidpoint + 1;
+    this->PieceStringY[0] = this->WindowMidpoint - height - 1;
+    this->PieceStringY[1] = this->WindowMidpoint + 1;
 
-    if ((PieceMap[manager->Piece].flags & 0x80) != 0)
+    if ((PieceMap[this->Piece].flags & 0x80) != 0)
     {
-        manager->NotInDemo = (void *)1;
+        this->NotInDemo = (void *)1;
     }
     else
     {
-        manager->NotInDemo = 0;
+        this->NotInDemo = 0;
     }
 
-    char *demoString = manager->PieceString[3];
-    sprintf(demoString, (char *)s_not_available_in_demo);
+    char *demoString = this->PieceString[3];
+    sprintf(demoString, (char *)s_not_available_in_demo_800b3c30);
 
     width = font->width(demoString);
-    manager->PieceStringX[3] = 0x100 - (width >> 1);
+    this->PieceStringX[3] = 0x100 - (width >> 1);
 
     height = font->height(demoString);
-    manager->PieceStringY[3] = 0x78 - (height >> 1);
+    this->PieceStringY[3] = 0x78 - (height >> 1);
 }
 
 /**
@@ -1713,19 +1709,18 @@ void SelectManager::SetPiece(int piece)
  */
 void SelectManager::ChangePiece(int dir)
 {
-    SelectManager *manager = this;
-    int piece = manager->Piece + dir;
-    int diff = piece - manager->FirstPieceInCategory;
+    int piece = this->Piece + dir;
+    int diff = piece - this->FirstPieceInCategory;
     if (diff < 0)
     {
-        piece = manager->FirstPieceInCategory +
-                manager->NumPiecesInCategory - 1;
+        piece = this->FirstPieceInCategory +
+                this->NumPiecesInCategory - 1;
     }
-    if (diff >= manager->NumPiecesInCategory)
+    if (diff >= this->NumPiecesInCategory)
     {
-        piece = manager->FirstPieceInCategory;
+        piece = this->FirstPieceInCategory;
     }
-    manager->SetPiece(piece);
+    this->SetPiece(piece);
 }
 
 /**
@@ -1808,17 +1803,16 @@ void SelectManager::SetCategory(int category)
  */
 void SelectManager::ChangeCategory(int dir)
 {
-    SelectManager *manager = this;
-    int cat = manager->Category + dir;
+    int cat = this->Category + dir;
     if (cat < 0)
     {
-        cat = manager->NumCategories - 1;
+        cat = this->NumCategories - 1;
     }
-    if (cat >= manager->NumCategories)
+    if (cat >= this->NumCategories)
     {
         cat = 0;
     }
-    manager->SetCategory(cat);
+    this->SetCategory(cat);
     return;
 }
 
@@ -1833,13 +1827,12 @@ void SelectManager::ChangeCategory(int dir)
  */
 void SelectManager::SetMenuState(bool turn_on)
 {
-    SelectManager *manager = this;
     if (turn_on)
     {
-        manager->WindowTarget = 0;
+        this->WindowTarget = 0;
         int i = 0;
         int val = 0xD7;
-        ScreenElement **items = manager->PromptItem;
+        ScreenElement **items = this->PromptItem;
         do
         {
             EditorScreenElementView *item =
@@ -1852,9 +1845,9 @@ void SelectManager::SetMenuState(bool turn_on)
     {
         int i = 0;
         int val = 0xFB;
-        int neg = manager->WindowHeight;
-        ScreenElement **items = manager->PromptItem;
-        manager->WindowTarget = -neg;
+        int neg = this->WindowHeight;
+        ScreenElement **items = this->PromptItem;
+        this->WindowTarget = -neg;
         do
         {
             EditorScreenElementView *item =
@@ -1866,14 +1859,14 @@ void SelectManager::SetMenuState(bool turn_on)
 
     if (turn_on)
     {
-        int h = FontFromStorage(&manager->TheFont)->height(
-            manager->PieceString[3]);
+        int h = FontFromStorage(&this->TheFont)->height(
+            this->PieceString[3]);
         int v = 0x78 - (h >> 1);
-        manager->PieceStringY[3] = v;
+        this->PieceStringY[3] = v;
     }
     else
     {
-        manager->PieceStringY[3] = -0x78;
+        this->PieceStringY[3] = -0x78;
     }
 }
 
@@ -1893,9 +1886,8 @@ void SelectManager::SetMenuState(bool turn_on)
  */
 int SelectManager::GetPieceIndex()
 {
-    SelectManager *manager = this;
-    int theme = manager->Theme;
-    int category = manager->Piece;
+    int theme = this->Theme;
+    int category = this->Piece;
     return PieceMap[category].map[theme];
 }
 
@@ -1911,8 +1903,7 @@ int SelectManager::GetPieceIndex()
  */
 void SelectManager::SetTheme(int theme)
 {
-    SelectManager *manager = this;
-    manager->Theme = theme;
+    this->Theme = theme;
 }
 
 /**
@@ -1925,45 +1916,44 @@ void SelectManager::SetTheme(int theme)
  */
 EditorCamera::EditorCamera()
 {
-    EditorCamera *editor_camera = this;
-    editor_camera->vtable = &__vt_12EditorCamera;
+    this->vtable = &__vt_12EditorCamera;
 
     CBody *body1 = static_cast<CBody *>(::CItem::operator new(0x108));
     if (body1 != 0)
     {
         body1 = ::new (body1) CBody();
     }
-    editor_camera->CamTri = body1;
-    ((EditorCameraBodyView *)editor_camera->CamTri)->mPos.vx = 0;
+    this->CamTri = body1;
+    ((EditorCameraBodyView *)this->CamTri)->mPos.vx = 0;
     EditorCameraBodyView *b1 =
-        (EditorCameraBodyView *)editor_camera->CamTri;
+        (EditorCameraBodyView *)this->CamTri;
     b1->mPos.vy = 0;
     EditorCameraBodyView *b1b =
-        (EditorCameraBodyView *)editor_camera->CamTri;
+        (EditorCameraBodyView *)this->CamTri;
     b1b->mPos.vz = 0;
 
     CCamera *cam = static_cast<CCamera *>(::CItem::operator new(0x684));
     if (cam != 0)
     {
-        cam = ::new (cam) CCamera(editor_camera->CamTri, 0);
+        cam = ::new (cam) CCamera(this->CamTri, 0);
     }
-    editor_camera->Camera = cam;
+    this->Camera = cam;
     reinterpret_cast<EditorRuntimeCameraView *>(cam)->mCameraMode = 2;
     register int size2 asm("$4") = 0x108;
     asm volatile("" : "+r"(size2));
     register int yval asm("$2") = 0xff830000;
     EditorRuntimeCameraView *c1 =
-        (EditorRuntimeCameraView *)editor_camera->Camera;
+        (EditorRuntimeCameraView *)this->Camera;
     asm volatile("" : "+r"(c1));
     int one = 1;
     asm volatile("" : "+r"(one));
-    editor_camera->Tripod.vx = 0;
-    editor_camera->Tripod.vy = yval;
-    editor_camera->Tripod.vz = 0;
+    this->Tripod.vx = 0;
+    this->Tripod.vy = yval;
+    this->Tripod.vz = 0;
     c1->mCalcTripod = 0;
-    register int tx asm("$7") = editor_camera->Tripod.vx;
-    register int ty asm("$8") = editor_camera->Tripod.vy;
-    register int tz asm("$9") = editor_camera->Tripod.vz;
+    register int tx asm("$7") = this->Tripod.vx;
+    register int ty asm("$8") = this->Tripod.vy;
+    register int tz asm("$9") = this->Tripod.vz;
     c1->mTripodPos.vx = tx;
     c1->mTripodPos.vy = ty;
     c1->mTripodPos.vz = tz;
@@ -1976,26 +1966,26 @@ EditorCamera::EditorCamera()
     {
         body2 = ::new (body2) CBody();
     }
-    editor_camera->Target = body2;
-    ((EditorCameraBodyView *)editor_camera->Target)->mPos.vx = 0;
+    this->Target = body2;
+    ((EditorCameraBodyView *)this->Target)->mPos.vx = 0;
     EditorCameraBodyView *b2 =
-        (EditorCameraBodyView *)editor_camera->Target;
+        (EditorCameraBodyView *)this->Target;
     b2->mPos.vy = 0;
     EditorCameraBodyView *b2b =
-        (EditorCameraBodyView *)editor_camera->Target;
+        (EditorCameraBodyView *)this->Target;
     b2b->mPos.vz = 0;
 
     EditorRuntimeCameraView *camPtr =
-        (EditorRuntimeCameraView *)editor_camera->Camera;
+        (EditorRuntimeCameraView *)this->Camera;
     EditorCameraBodyView *focus =
-        (EditorCameraBodyView *)editor_camera->Target;
+        (EditorCameraBodyView *)this->Target;
     camPtr->mCalcFocus = one;
     camPtr->mFocus = focus;
     camPtr->newFocus = one;
-    editor_camera->Type = one;
-    editor_camera->Rot = 0xc00;
-    editor_camera->TargetRot = 0xc00;
-    editor_camera->Change = 0;
+    this->Type = one;
+    this->Rot = 0xc00;
+    this->TargetRot = 0xc00;
+    this->Change = 0;
 }
 
 /**
@@ -2056,15 +2046,9 @@ EditorCamera::~EditorCamera()
  */
 void EditorCamera::SetTarget(int x, int y, int z)
 {
-    EditorCamera *editor_camera = this;
-    register EditorCameraBodyView *p asm("$2");
-    register EditorCameraBodyView *q asm("$3");
-    p = (EditorCameraBodyView *)editor_camera->Target;
-    p->mPos.vx = x;
-    q = (EditorCameraBodyView *)editor_camera->Target;
-    q->mPos.vy = y;
-    p = (EditorCameraBodyView *)editor_camera->Target;
-    p->mPos.vz = z;
+    ((EditorCameraBodyView *)this->Target)->mPos.vx = x;
+    ((EditorCameraBodyView *)this->Target)->mPos.vy = y;
+    ((EditorCameraBodyView *)this->Target)->mPos.vz = z;
 }
 
 /**
@@ -2081,14 +2065,13 @@ void EditorCamera::SetTarget(int x, int y, int z)
  */
 void EditorCamera::SwitchType()
 {
-    EditorCamera *editor_camera = this;
-    register int type asm("$2") = editor_camera->Type;
+    register int type asm("$2") = this->Type;
     type = type + 1;
     if (type >= 4)
     {
         type = 0;
     }
-    editor_camera->Type = type;
+    this->Type = type;
 }
 
 /**
@@ -2105,11 +2088,10 @@ void EditorCamera::SwitchType()
  */
 void EditorCamera::Rotate()
 {
-    EditorCamera *editor_camera = this;
-    if (editor_camera->Change == 0)
+    if (this->Change == 0)
     {
-        editor_camera->Change = 0x80;
-        editor_camera->TargetRot = editor_camera->TargetRot + 0x400;
+        this->Change = 0x80;
+        this->TargetRot = this->TargetRot + 0x400;
     }
 }
 
@@ -2126,98 +2108,97 @@ void EditorCamera::Rotate()
  */
 void EditorCamera::Update()
 {
-    EditorCamera *editor = this;
     int wall;
     int diffx;
     int diffz;
 
-    if (editor->Change != 0)
+    if (this->Change != 0)
     {
-        int start_sector = editor->Rot >> 10;
-        editor->Rot += editor->Change;
-        if ((editor->Rot >> 10) != start_sector)
+        int start_sector = this->Rot >> 10;
+        this->Rot += this->Change;
+        if ((this->Rot >> 10) != start_sector)
         {
-            editor->Rot &= 0xc00;
-            if (editor->Rot >= 0x1000)
+            this->Rot &= 0xc00;
+            if (this->Rot >= 0x1000)
             {
-                editor->Rot -= 0x1000;
+                this->Rot -= 0x1000;
             }
-            editor->Change = 0;
+            this->Change = 0;
         }
     }
 
-    switch (editor->Type)
+    switch (this->Type)
     {
     case 0:
-        editor->Tripod.vx =
-            ((EditorCameraBodyView *)editor->Target)->mPos.vx;
-        editor->Tripod.vy =
-            ((EditorCameraBodyView *)editor->Target)->mPos.vy - 0x7d0000;
-        editor->Tripod.vz =
-            ((EditorCameraBodyView *)editor->Target)->mPos.vz;
-        editor->Rot = 0xc00;
+        this->Tripod.vx =
+            ((EditorCameraBodyView *)this->Target)->mPos.vx;
+        this->Tripod.vy =
+            ((EditorCameraBodyView *)this->Target)->mPos.vy - 0x7d0000;
+        this->Tripod.vz =
+            ((EditorCameraBodyView *)this->Target)->mPos.vz;
+        this->Rot = 0xc00;
         break;
 
     case 1:
-        editor->Tripod.vx =
-            ((EditorCameraBodyView *)editor->Target)->mPos.vx +
-            EditorCosine(editor->Rot + 0x154) * 2000;
-        editor->Tripod.vy =
-            ((EditorCameraBodyView *)editor->Target)->mPos.vy - 0x6c4000;
-        editor->Tripod.vz =
-            ((EditorCameraBodyView *)editor->Target)->mPos.vz +
-            EditorSine(editor->Rot + 0x154) * 2000;
+        this->Tripod.vx =
+            ((EditorCameraBodyView *)this->Target)->mPos.vx +
+            EditorCosine(this->Rot + 0x154) * 2000;
+        this->Tripod.vy =
+            ((EditorCameraBodyView *)this->Target)->mPos.vy - 0x6c4000;
+        this->Tripod.vz =
+            ((EditorCameraBodyView *)this->Target)->mPos.vz +
+            EditorSine(this->Rot + 0x154) * 2000;
         break;
 
     case 2:
-        editor->Tripod.vx =
-            ((EditorCameraBodyView *)editor->Target)->mPos.vx +
-            EditorCosine(editor->Rot) * 2000;
-        editor->Tripod.vy =
-            ((EditorCameraBodyView *)editor->Target)->mPos.vy - 0x6c4000;
-        editor->Tripod.vz =
-            ((EditorCameraBodyView *)editor->Target)->mPos.vz +
-            EditorSine(editor->Rot) * 2000;
+        this->Tripod.vx =
+            ((EditorCameraBodyView *)this->Target)->mPos.vx +
+            EditorCosine(this->Rot) * 2000;
+        this->Tripod.vy =
+            ((EditorCameraBodyView *)this->Target)->mPos.vy - 0x6c4000;
+        this->Tripod.vz =
+            ((EditorCameraBodyView *)this->Target)->mPos.vz +
+            EditorSine(this->Rot) * 2000;
         break;
 
     case 3:
-        editor->Tripod.vx =
-            ((EditorCameraBodyView *)editor->Target)->mPos.vx;
-        editor->Tripod.vy =
-            ((EditorCameraBodyView *)editor->Target)->mPos.vy - 0xfa0000;
-        editor->Tripod.vz =
-            ((EditorCameraBodyView *)editor->Target)->mPos.vz;
-        editor->Rot = 0xc00;
+        this->Tripod.vx =
+            ((EditorCameraBodyView *)this->Target)->mPos.vx;
+        this->Tripod.vy =
+            ((EditorCameraBodyView *)this->Target)->mPos.vy - 0xfa0000;
+        this->Tripod.vz =
+            ((EditorCameraBodyView *)this->Target)->mPos.vz;
+        this->Rot = 0xc00;
         break;
     }
 
     wall = (GridSize * _14LevelGenerator_GridCellWidth) >> 1;
-    diffx = wall - (editor->Tripod.vx >> 12);
+    diffx = wall - (this->Tripod.vx >> 12);
     if ((unsigned int)diffx < 30)
     {
-        editor->Tripod.vx = 0xff2000;
+        this->Tripod.vx = 0xff2000;
     }
-    diffx = wall + (editor->Tripod.vx >> 12);
+    diffx = wall + (this->Tripod.vx >> 12);
     if ((unsigned int)diffx < 30)
     {
-        editor->Tripod.vx = (int)0xff00e000;
+        this->Tripod.vx = (int)0xff00e000;
     }
 
-    diffz = wall - (editor->Tripod.vz >> 12);
+    diffz = wall - (this->Tripod.vz >> 12);
     if ((unsigned int)diffz < 30)
     {
-        editor->Tripod.vz = 0xff2000;
+        this->Tripod.vz = 0xff2000;
     }
-    diffz = wall + (editor->Tripod.vz >> 12);
+    diffz = wall + (this->Tripod.vz >> 12);
     if ((unsigned int)diffz < 30)
     {
-        editor->Tripod.vz = (int)0xff00e000;
+        this->Tripod.vz = (int)0xff00e000;
     }
 
-    ((EditorRuntimeCameraView *)editor->Camera)->SetTripodPosition(editor->Tripod);
-    ((EditorRuntimeCameraView *)editor->Camera)->SetFocus(
-        (EditorCameraBodyView *)editor->Target);
-    ((EditorRuntimeCameraView *)editor->Camera)->Update();
+    ((EditorRuntimeCameraView *)this->Camera)->SetTripodPosition(this->Tripod);
+    ((EditorRuntimeCameraView *)this->Camera)->SetFocus(
+        (EditorCameraBodyView *)this->Target);
+    ((EditorRuntimeCameraView *)this->Camera)->Update();
 }
 
 /**
@@ -2233,8 +2214,7 @@ void EditorCamera::Update()
  */
 int EditorCamera::TranslatePress(int press)
 {
-    EditorCamera *editor_camera = this;
-    int angle = editor_camera->Rot;
+    int angle = this->Rot;
     unsigned int a = (unsigned int)(angle - 0x200);
     if (a >= 0xC00u)
     {
@@ -2264,17 +2244,16 @@ int EditorCamera::TranslatePress(int press)
  */
 SVector EditorCamera::GetCameraTargetVector()
 {
-    EditorCamera *cameraReg = this;
     Vector temp;
     EditorCameraBodyView *target;
     SVector vect;
-    int type = cameraReg->Type;
+    int type = this->Type;
 
     if (type == 1)
     {
         goto type_one;
     }
-    register int defaultYOffset asm("$4");
+    int defaultYOffset;
     defaultYOffset = (int)0xFF060000;
     if (type == 2)
         goto type_two;
@@ -2282,14 +2261,12 @@ SVector EditorCamera::GetCameraTargetVector()
 
 type_one:
     {
+        int tableBase = (int)&rcossin_tbl;
         register int yOffset asm("$8") = (int)0xFF930000;
         asm volatile("" : "+r"(yOffset));
-        int tableBase = (int)0x800D0000;
-        asm volatile("" : "+r"(tableBase));
-        tableBase += 0x43C;
         yOffset |= 0xC000;
-        int angle = cameraReg->TargetRot;
-        target = reinterpret_cast<EditorCameraBodyView *>(cameraReg->Target);
+        int angle = this->TargetRot;
+        target = reinterpret_cast<EditorCameraBodyView *>(this->Target);
         angle += 0x154;
         angle &= 0xFFF;
         angle <<= 2;
@@ -2311,14 +2288,12 @@ type_one:
 
 type_two:
     {
+        int tableBase = (int)&rcossin_tbl;
         register int yOffset asm("$8") = (int)0xFF930000;
         asm volatile("" : "+r"(yOffset));
-        int tableBase = (int)0x800D0000;
-        asm volatile("" : "+r"(tableBase));
-        tableBase += 0x43C;
         yOffset |= 0xC000;
-        int angle = cameraReg->TargetRot;
-        target = reinterpret_cast<EditorCameraBodyView *>(cameraReg->Target);
+        int angle = this->TargetRot;
+        target = reinterpret_cast<EditorCameraBodyView *>(this->Target);
         angle &= 0xFFF;
         angle <<= 2;
         angle += tableBase;
@@ -2340,7 +2315,7 @@ type_two:
 type_default:
     {
         register EditorCameraBodyView *defaultTarget asm("$5") =
-            reinterpret_cast<EditorCameraBodyView *>(cameraReg->Target);
+            reinterpret_cast<EditorCameraBodyView *>(this->Target);
         temp.vx = defaultTarget->mPos.vx;
         register int defaultY asm("$2") = defaultTarget->mPos.vy;
         defaultY += defaultYOffset;
@@ -2352,7 +2327,7 @@ type_default:
 make_vector:
     {
         EditorCameraBodyView *targetReg =
-            reinterpret_cast<EditorCameraBodyView *>(cameraReg->Target);
+            reinterpret_cast<EditorCameraBodyView *>(this->Target);
         vect.vx = (short)((targetReg->mPos.vx - temp.vx) >> 12);
         vect.vy = (short)((targetReg->mPos.vy - temp.vy) >> 12);
         {
@@ -2402,8 +2377,6 @@ Cursor::Cursor(struct LevelGenerator &ed)
  * Demangled: Cursor::~Cursor()
  *
  */
-extern "C" int __vt_base_6Cursor;
-
 Cursor::~Cursor()
 {
     vtable = &__vt_base_6Cursor;
@@ -3541,8 +3514,9 @@ void Cursor::SetCameraTargetVector(SVector camera)
 // GCC 2.x emits a private copy of CClass::~CClass at the end of every owner
 // containing a CClass-derived hierarchy. MAIN.SYM records this copy at the
 // byte immediately after Cursor::SetCameraTargetVector.
-static void LevelEditor_ClassDestructor(CClass *base, int flags)
-    asm("__DOT__6CClass_800875D0");
+extern "C" {
+static void __DOT__6CClass_800875D0(CClass *base, int flags);
+}
 
 /**
  * Destroy the private CClass base emitted at the end of LevelEditor.obj.
@@ -3550,7 +3524,7 @@ static void LevelEditor_ClassDestructor(CClass *base, int flags)
  * @param base Base-subobject address.
  * @param flags GCC 2.x in-charge flags; bit zero also deletes the object.
  */
-static void LevelEditor_ClassDestructor(CClass *base, int flags)
+static void __DOT__6CClass_800875D0(CClass *base, int flags)
 {
     base->vtable = &__vt_11LevelEditor_base;
     if (flags & 1)

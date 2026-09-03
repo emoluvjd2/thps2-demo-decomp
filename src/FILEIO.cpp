@@ -16,19 +16,17 @@
 #include <LIBETC.H>
 #include <LIBGPU.H>
 
-// === SDK declarations (C linkage) ===
-extern "C" {
+// === SDK declarations and owner-local address views ===
 /** First-byte view that preserves the original GP-relative buffer accesses. */
-extern char FileIO_SubDir asm("FileSubDirName");
+extern char FileSubDirName;
 
 // Called external functions
 #include <STDIO.H>
 #include <STRINGS.H>
-}
 
-// Source-owned WAD directory and absolute-addressed externs
+// Source-owned WAD directory and absolute-addressed views
 /** In-memory copy of the WAD directory, populated during FileIO_Init. */
-extern "C" char Directory[22528]
+char Directory[22528]
     __attribute__((section(".data"))) = {0};
 #include "PREMGR.h"
 #define REDBOOKSTATE_DECLARE_VSYNC_SECTOR_CHECK
@@ -38,17 +36,14 @@ extern "C" char Directory[22528]
 // These two eight-byte objects need incomplete absolute-addressed use views:
 // exposing their owner sizes before the functions would make GCC select GP
 // addressing under `-G8`.
-extern "C" RECT FileIO_CdModeRect[];
-extern "C" int FileIO_OpenDbgStr[];
+extern RECT FileIO_CdModeRect[];
+extern int FileIO_OpenDbgStr[];
 
 // MEM diagnostic globals.  MAIN.SYM names the containing arrays HeapDefs and
 // Used; these scalar aliases preserve the original interleaved heap stride
 // while exposing the individual fields used by this diagnostic hot path.
-extern "C" unsigned int MemBottom __attribute__((section(".data"))); // HeapDefs[0][0]
-extern "C" unsigned int MemTop __attribute__((section(".data")));    // HeapDefs[0][1]
-extern "C" int MemUsed __attribute__((section(".data")));            // Used[0]
-
-extern "C" {
+#define MEM_HEAP_SCALARS_ABSOLUTE_DECLARATION
+#include "MEM.h"
 
 /** Original host-path template retained by the debug file loader. */
 static char FilePathPattern[28] __attribute__((section(".rdata"))) =
@@ -80,18 +75,22 @@ static char FileIO_WadName2[12]
     __attribute__((section(".sdata"))) = "\\CD.WAD;1";
 static char FileIO_DebugFmt[12]
     __attribute__((section(".sdata"))) = "fileio.cpp";
-static RECT FileIO_CdModeRect_owner[1] asm("FileIO_CdModeRect")
+namespace FileIOAddressViewOwners
+{
+extern "C"
+{
+static RECT FileIO_CdModeRect[1]
     __attribute__((section(".sdata"))) = {
         {485, 18, 10, 10},
     };
-static char FileIO_OpenDbgStr_owner[8] asm("FileIO_OpenDbgStr")
+static char FileIO_OpenDbgStr[8]
     __attribute__((section(".sdata"))) = "(%d) ";
+}
+}
 
 int FileIO_Size = 0;
 char *Opening = 0;
 int LastLoading = 0;
-
-}
 
 /**
  * Zero-initialized FILEIO request state in its complete target `.sbss` order.
@@ -100,9 +99,14 @@ int LastLoading = 0;
  * storage view separate from the scalar declaration above because GCC's
  * `-G8` decision depends on the declared object size.
  */
-extern "C" {
-static char FileIO_SubDirStorage[16] asm("FileSubDirName")
+namespace FileIOAddressViewOwners
+{
+extern "C"
+{
+static char FileSubDirName[16]
     __attribute__((section(".sbss")));
+}
+}
 static int FirstChar
     __attribute__((section(".sbss")));
 static unsigned int FileID
@@ -123,14 +127,12 @@ static int NumSectors
     __attribute__((section(".sbss")));
 static int Start
     __attribute__((section(".sbss")));
-}
 
-// Public owner interface and owner-local helper declaration.  Keep this
-// encounter point aligned with the original forward-declaration block.
+// Public owner interface. Keep this encounter point aligned with the
+// original forward-declaration block.
 #define FILEIO_OWNER_DECLARATIONS
 #include "FILEIO.h"
 #undef FILEIO_OWNER_DECLARATIONS
-int CD_There(char *filename);
 
 // === Function implementations (address order) ===
 
@@ -148,7 +150,7 @@ char *FileIO_OpenLoad(char *pName) {
         Mem_New((unsigned int)size, 1, 1));
     FileIO_Load(pMemory);
     FileIO_Sync();
-    register unsigned int mask asm("$2") = 0x00FFFFFC;
+    unsigned int mask = 0x00FFFFFC;
     int fileSize = FileIO_Size;
     Mem_Shrink(
         pMemory,
@@ -330,19 +332,10 @@ int FileIO_Open(const char *filename) {
     // WAD directory search
     Debug_String(const_cast<char *>(filename), 0x174, FileIO_DebugFmt);
     {
-        // Match scaffolding: the entry test must load into $v1 (lbu $v1) with
-        // %hi(Directory) in $v0 and `scan = filename` in the beqz delay slot.
-        // The empty asms (no code emitted) keep $3 occupied across the
-        // Directory address split so its lui temp allocates to $v0, and block
-        // the delay-slot filler's backward scan so the `move $s1,$s3` (nearest
-        // eligible insn) fills the slot instead of the %lo addiu.
-        register unsigned int first asm("$3");
-        asm volatile("" : "=r"(first));
+        unsigned int first;
         header = Directory;
         Opening = (char *)filename;
-        asm volatile("" : : "r"(first));
         first = *(unsigned char *)filename;
-        asm volatile("" : "+r"(first));
         scan = (char *)filename;
         if (first != 0) {
         next_character:
@@ -530,7 +523,7 @@ case3:
                     ReadError = 1;
                     if (ReadSyncFailures < 5) goto do_retry;
                     {
-                        register int busyOne asm("$2") = 1;
+                        int busyOne = 1;
                         asm volatile("" : "+r"(busyOne));
                         ReadSyncFailures = 0;
                         Loading = busyOne;
@@ -583,7 +576,7 @@ void FileIO_Sync(void) {
  *
  */
 char *FileIO_GetSubDir(void) {
-    return &FileIO_SubDir;
+    return &FileSubDirName;
 }
 
 
@@ -595,5 +588,5 @@ char *FileIO_GetSubDir(void) {
  * @param subDir  Subdirectory prefix used for subsequent file operations.
  */
 void FileIO_SetSubDir(char *subDir) {
-    strcpy(&FileIO_SubDir, subDir);
+    strcpy(&FileSubDirName, subDir);
 }

@@ -22,20 +22,16 @@ inline void *operator new(unsigned int, void *address)
     return address;
 }
 
-struct CBody;
 struct CSuper;
 struct EditorOutModel;
 struct EditorInModel;
 struct LevelGenerator;
-struct CBruce;
 struct CBaddy;
 struct SModel;
 struct SHook;
 struct CPowerUp;
 struct CNonRenderedBit;
 struct SVideoInfo;
-struct SCommandPoint;
-struct SGapTrick;
 
 /** Runtime trigger-command point stored in checksum and owner lists. */
 struct SCommandPoint {
@@ -54,7 +50,6 @@ struct SCommandPoint {
 #define TRIGSTATE_OWNER_DECLARATION
 #define TRIGSTATE_DECLARE_NUM_NODES
 #include "TRIGSTATE.h"
-extern "C" int NumTrigMenuEntries;
 #define TRIGSTATE_OWNER_DECLARATION
 #define TRIGSTATE_DECLARE_OFFSET_LIST
 #include "TRIGSTATE.h"
@@ -63,7 +58,9 @@ extern "C" int NumTrigMenuEntries;
 #define TRIGSTATE_OWNER_DECLARATION
 #define TRIGSTATE_DECLARE_TRIG_FILE
 #include "TRIGSTATE.h"
-extern "C" int TrigFileSize;
+#define TRIGSTATE_OWNER_DECLARATION
+#define TRIGSTATE_DECLARE_FILE_SIZE
+#include "TRIGSTATE.h"
 #define CURRENTOBJFILE_OWNER_DECLARATION
 #include "CURRENTOBJFILE.h"
 
@@ -73,14 +70,12 @@ extern "C" int TrigFileSize;
 #include "BODYLISTS.h"
 #define VIDEOINFO_DECLARE_GVINFO1
 #include "VIDEOINFO.h"
-extern "C" SGapTrick GapTricks[304];
 #define M3DCOLOURSTATE_DECLARE_FADE_COLOUR
 #include "M3DCOLOURSTATE.h"
 #include "MECHLIST.h"
 #define BITSTATE_DECLARE_NON_RENDERED_BIT_LIST
 #include "BITSTATE.h"
-extern "C" unsigned int SuspendDistance
-    __attribute__((section(".data")));
+#include "SUSPENDDISTANCE.h"
 #define BODYLISTS_DECLARE_SUSPENDED_LIST
 #include "BODYLISTS.h"
 #define BITSTATE_DECLARE_USE_CACHE_FOR_BITS
@@ -258,6 +253,8 @@ struct CCamera
     void SetCamYOffset(s16 offset, u16 frames);
     /** Set the depth camera offset over the requested frame count. */
     void SetCamZOffset(s16 offset, u16 frames);
+    /** Set the projection zoom over the requested frame count. */
+    void SetZoom(u16 zoom, u16 frames);
 };
 
 /** Linked effect base used by non-rendered trigger lights. */
@@ -280,6 +277,8 @@ struct CBit
 
     /** Mark this bit for removal. */
     void Die();
+    /** Allocate zero-initialized storage from the transient-bit heap. */
+    static void *operator new(unsigned int size);
     static void operator delete(void *p);
 };
 
@@ -810,6 +809,8 @@ SGapTrick GapTricks[304] __attribute__((section(".data"))) = {
 };
 
 /** Restart and trigger-menu name tables populated while parsing TRG files. */
+#define RESTARTNAMETABLES_OWNER_DECLARATION
+#include "RESTARTNAMETABLES.h"
 char *CheatRestarts[20] __attribute__((section(".data"))) = {0};
 char *HorseRestarts[20] __attribute__((section(".data"))) = {0};
 char *MenuFilenamePointers[40] __attribute__((section(".data"))) = {0};
@@ -855,7 +856,7 @@ struct CBodyKillView : CItemKillView
 typedef char Trig_CItemKillView_size_must_be_76[
     (sizeof(CItemKillView) == 76) ? 1 : -1];
 
-// === Extern "C" absolute-addressed globals ===
+// === Owner-local absolute-addressed globals ===
 // MAIN_STRUCTS identifies this as TRIG's file-local command-point hash table.
 static SCommandPoint *HashTable[256]
     __attribute__((section(".bss")));
@@ -863,24 +864,15 @@ static SCommandPoint *HashTable[256]
 // === External function declarations ===
 #include "MEM.h"
 #include "FILEIO.h"
-CVector operator*(const CVector &, const int &);
+#include "CVECTOROPS.h"
 // Trig_SendPulse is defined later in this TU
 
-// ExecuteCommandList extern functions
-extern "C" void Camera_SetZoom(CCamera *, int, int)
-    asm("SetZoom__7CCameraUsUs");
+// ExecuteCommandList external functions
 #include "FRONT.h"
 #include <STDIO.H>
 #include "DB.h"
 
-// === Owner-local free function declarations ===
-static void CreateCommandPoint(
-    unsigned int checksum, unsigned short node, unsigned short *pCommands);
-static SCommandPoint *GetCommandPoint(int Node);
-static void KillInList(int Node, CBody *pList, int How);
-static void SendVisibleFromNode(int node, int visible);
-static void SendKillFromNode(int Node, int How);
-static unsigned short *SkipCommand(unsigned short *pCommand);
+// === Required owner-local forward declaration ===
 static void ExecuteCommandList(
     unsigned short *pCommands, int Node, int WaitForSpooling);
 // === Function implementations (address order) ===
@@ -1588,7 +1580,7 @@ light: // case 0x1F5
             (STriggerLightWords *)Trig_GetPosition(Pos, NodeIndex);
         UseCacheForBits = 0;
         CLight *lightObj = static_cast<CLight *>(
-            Bit_AllocateStorage(TRIG_LIGHT_STORAGE_SIZE));
+            CBit::operator new(TRIG_LIGHT_STORAGE_SIZE));
         if (lightObj != 0)
         {
             ::new (lightObj) CLight(
@@ -2275,9 +2267,9 @@ static void ExecuteCommandList(unsigned short *pCommands, int Node, int WaitForS
     SCommandPoint *pCommandPoint = GetCommandPoint(Node);
 
     /* Read-only traces retained from the disabled fake-TRG diagnostic path. */
-    static const char fakeTrgEnter[] asm("s_Enter_Trig_FakeTRG_800B2510") =
+    static const char fakeTrgEnter[] =
         "\nEnter Trig_FakeTRG\n";
-    static const char fakeTrgExit[] asm("s_Exit_Trig_FakeTRG_800B2528") =
+    static const char fakeTrgExit[] =
         "Exit Trig_FakeTRG\n";
 
     while (*pCommands != 0xFFFF)
@@ -2834,7 +2826,7 @@ static void ExecuteCommandList(unsigned short *pCommands, int Node, int WaitForS
                 pCommands += 2;
                 break;
             }
-            Camera_SetZoom(pCamera, pCommands[0], pCommands[1]);
+            pCamera->SetZoom(pCommands[0], pCommands[1]);
             pCommands += 2;
             break;
         }
@@ -3247,7 +3239,7 @@ void Trig_ParseTRGFile(void)
                 (STriggerLightBytes *)Trig_GetPosition(Pos, i);
             UseCacheForBits = 0;
             CLight *pLight = static_cast<CLight *>(
-                Bit_AllocateStorage(TRIG_LIGHT_STORAGE_SIZE));
+                CBit::operator new(TRIG_LIGHT_STORAGE_SIZE));
             if (pLight != 0)
             {
                 ::new (pLight) CLight(
@@ -3266,7 +3258,7 @@ void Trig_ParseTRGFile(void)
             CTrickOb *pTrickOb =
                 (CTrickOb *)CClass::operator new(sizeof(CTrickOb));
             if (pTrickOb != 0)
-                CTrickOb_Construct(pTrickOb, i & 0xFFFF, 0);
+                ::new (pTrickOb) CTrickOb(i & 0xFFFF, 0);
         }
         goto next;
     camPt: // case 0xd
@@ -3370,7 +3362,6 @@ unsigned short *Trig_GetPosition(CVector &pos, int node)
         pNode += pNode[3] + 4;
         pFlags = (unsigned char *)pNode;
         register uint flag asm("$4") = *pFlags;
-        asm volatile("" : "+r"(flag));
         mask = 0xFF;
         if (flag != mask)
         {

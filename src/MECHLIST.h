@@ -14,7 +14,9 @@ struct CBody;
 #define MECHLIST_DECL_ATTR __attribute__((section(".data")))
 #endif
 
-extern "C" CBody *MechList MECHLIST_DECL_ATTR;
+extern CBody *MechList MECHLIST_DECL_ATTR;
+/** Number of objects currently linked through MechList. */
+extern int NumMechs;
 
 #undef MECHLIST_DECL_ATTR
 

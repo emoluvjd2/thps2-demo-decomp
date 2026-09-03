@@ -22,31 +22,17 @@ struct SCardHead
     char Icon[3][128];
 };
 
-/** Directory record returned by the Psy-Q memory-card API. */
-struct DIRENTRY
-{
-    char name[20];
-    long attr;
-    long size;
-    DIRENTRY *next;
-    long head;
-    char system[4];
-};
+/* Psy-Q owns the directory record returned by the memory-card API. */
+#include <KERNEL.H>
 
 typedef char Card_DIRENTRY_size_must_be_40[
     (sizeof(DIRENTRY) == 40) ? 1 : -1];
 
-extern "C" {
 /** CARD-owned file classifications and directory records. */
 extern EFileType FileType[15];
 extern DIRENTRY SLOT_DIR[15];
-}
 
 void Card_SetSelectedFile(char *pPName);
-void SetSJISChecksum(char *SJISName, char *FName);
-short CalcChecksum(unsigned long *pDataBuf, unsigned long DataSize);
-void Card_SetHeader(SCardHead *Head, int NumBlocks, char *pClut, char *pIcon);
-int SyncToGoodState(void);
 int Card_FileExists(EFileType FileType);
 int Card_Write(EFileType FileType, int NumBlocks);
 int Card_WriteReplayToDisk(EFileType FileType, char *save_name);
@@ -54,14 +40,21 @@ int Card_Load(EFileType FileType, unsigned long *pBuf, unsigned long *pBuf2);
 int Card_LoadReplayFromCD(
     unsigned long *pBuf, unsigned long *pBuf2, char *file_name);
 void Card_Init(long val);
-int _card_event(void);
-void _clear_event(void);
-int _card_event_x(void);
-void _clear_event_x(void);
 int Card_ReadFileHeader(char *FName, SCardHead *pHeader);
 int Card_GetDirAndFreeBlocks(int cnct, int slot);
 int Card_CheckStatus(int cnct, int slot);
 int Card_FormatCard(int cnct, int slot);
-void Card_GetNextTimeStamp(void);
 
 #endif // CARD_H
+
+#ifdef CARD_DECLARE_READ_PATH_ADDRESS_VIEW
+/** Absolute address view of CARD's GP-sized named-save path format. */
+extern char DAT_800d8ba4[];
+#undef CARD_DECLARE_READ_PATH_ADDRESS_VIEW
+#endif
+
+#ifdef CARD_DECLARE_DIRECTORY_FILE_TYPE_VIEW
+/** Independent address view used while scanning memory-card directory rows. */
+extern EFileType CardDirectoryFileType[] asm("FileType");
+#undef CARD_DECLARE_DIRECTORY_FILE_TYPE_VIEW
+#endif

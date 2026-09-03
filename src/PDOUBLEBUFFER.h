@@ -15,8 +15,21 @@ struct SDoubleBuffer;
 #define PDOUBLEBUFFER_DECL_ATTR __attribute__((section(".data")))
 #endif
 
-extern "C" SDoubleBuffer *pDoubleBuffer PDOUBLEBUFFER_DECL_ATTR;
+extern SDoubleBuffer *pDoubleBuffer PDOUBLEBUFFER_DECL_ATTR;
 
 #undef PDOUBLEBUFFER_DECL_ATTR
 
 #endif // PDOUBLEBUFFER_INC_H
+
+#ifdef PDOUBLEBUFFER_DECLARE_OWNER_ADDRESS_VIEWS
+/**
+ * Display-buffer cursors imported through DB.cpp's GP-relative owner view.
+ *
+ * The selector keeps these declarations at their target-proven encounter and
+ * prevents unrelated consumers from acquiring unused external records.
+ */
+extern SDoubleBuffer *pOtherBuffer;
+extern SDoubleBuffer *pVB;
+
+#undef PDOUBLEBUFFER_DECLARE_OWNER_ADDRESS_VIEWS
+#endif

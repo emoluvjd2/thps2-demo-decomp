@@ -18,8 +18,6 @@ typedef unsigned long ulong;
 #include "MAIN.h"
 #include "DB.h"
 
-struct Message;
-
 /** Runtime glyph placement and texture metadata. */
 struct Character {
     int w;
@@ -51,16 +49,11 @@ struct FontInfo {
     int mSpace_width;
 };
 
-extern "C" u16 Clut;
-extern "C" int Current_font;
-extern "C" u8 NewFont;
-extern "C" int Num_fonts;
-extern "C" Message *pMessages;
-extern "C" unsigned char BigFont_Mapping[];
-
+#define MESS_DECLARE_OWNER_STATE_VIEW
 #define MESS_OWNER_DECLARATIONS
 #include "MESS.h"
 #undef MESS_OWNER_DECLARATIONS
+#include "BIGFONTMAPPING.h"
 
 struct Texture;
 
@@ -189,8 +182,15 @@ static char MessMemoryError[] __attribute__((section(".sdata"))) =
  * GP-relative instruction form.  The distinct owner storage declaration emits
  * the local LNK identity recorded by MAIN.SYM without publishing a false XDEF.
  */
-extern "C" u32 LastFlagsBGR __attribute__((section(".sbss")));
-static u32 Mess_LastFlagsBGRStorage asm("LastFlagsBGR");
+#define MESS_DECLARE_SAVED_COLOR_STATE_VIEW
+#include "MESS.h"
+namespace MessSavedColorOwner
+{
+extern "C"
+{
+static u32 LastFlagsBGR;
+}
+}
 
 // === Function implementations (address order) ===
 

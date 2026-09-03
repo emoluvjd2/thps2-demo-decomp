@@ -10,40 +10,31 @@ struct CBody;
 
 #include "globals.h"
 
-#ifdef __cplusplus
-extern "C"
-{
-#endif
+// Primitive types
+typedef unsigned char u8;
+typedef unsigned short u16;
+typedef unsigned int u32;
+typedef signed char s8;
+typedef signed short s16;
+typedef signed int s32;
+typedef unsigned char uchar;
+typedef unsigned short ushort;
+typedef unsigned int uint;
+typedef unsigned char byte;
+typedef int undefined;
+typedef char undefined1;
+typedef short undefined2;
+typedef int undefined4;
+typedef unsigned long ulong;
+typedef unsigned char undefined3[3];
 
-    // Primitive types
-    typedef unsigned char u8;
-    typedef unsigned short u16;
-    typedef unsigned int u32;
-    typedef signed char s8;
-    typedef signed short s16;
-    typedef signed int s32;
-    typedef unsigned char uchar;
-    typedef unsigned short ushort;
-    typedef unsigned int uint;
-    typedef unsigned char byte;
-    typedef int undefined;
-    typedef char undefined1;
-    typedef short undefined2;
-    typedef int undefined4;
-    typedef unsigned long ulong;
-    typedef unsigned char undefined3[3];
-
-    struct CBruce;
-    struct SVideoInfo;
+struct CBruce;
+struct SVideoInfo;
 
 struct SRainEntry {
     struct CVector vel;
     struct CGPolyLine *p_line;
 };
-
-#ifdef __cplusplus
-}
-#endif
 
 #endif // BADDY_OWNER_DECLARATIONS
 
@@ -54,14 +45,11 @@ struct SRainEntry {
 #endif
 
 /** Head of the active scripted-baddy object list. */
-extern "C" CBody *BaddyList BADDY_SHARED_STATE_DECL_ATTR; // 0x800D9B04
+extern CBody *BaddyList BADDY_SHARED_STATE_DECL_ATTR; // 0x800D9B04
 
 #undef BADDY_SHARED_STATE_DECL_ATTR
 
 #ifdef BADDY_OWNER_DECLARATIONS
-
-// === Variables (gp-relative in this TU) ===
-extern "C" int NumBaddies;   // 0x800D9AF4
 
 // === Variables (absolute in this TU) ===
 #define BITSTATE_DECLARE_BIT_COUNT
@@ -69,7 +57,9 @@ extern "C" int NumBaddies;   // 0x800D9AF4
 #include "CAMERALIST.h"
 #define VIDEOINFO_DECLARE_GVINFO1
 #include "VIDEOINFO.h"
-extern "C" int GameFMV_CurrentFrame[];                            // 0x800DBD90
+#define GAMEFMVSTATE_ABSOLUTE_DECLARATION
+#define GAMEFMVSTATE_DECLARE_CURRENT_FRAME
+#include "GAMEFMVSTATE.h"
 #define TRIGSTATE_ABSOLUTE_DECLARATION
 #define TRIGSTATE_DECLARE_OFFSET_LIST
 #include "TRIGSTATE.h"
@@ -151,12 +141,22 @@ struct CBaddy {
     CBaddy();
     /** Consume and resolve the next unsigned script value. */
     unsigned short GetScriptValue();
+#ifdef BADDY_OWNER_DECLARATIONS
     /** Send this baddy's configured death pulse once. */
     void SendDeathPulse();
     /** Advance the script cursor to the matching endif token. */
     void SkipToEndif();
+#endif // BADDY_OWNER_DECLARATIONS
     /** Executes script commands from the supplied command stream. */
     void ParseScript(unsigned short *pScript);
+    /** Enter the scripted baddy's dead state. */
+    void Die();
+    /** Execute one scripted baddy command. */
+    int ExecuteCommand(unsigned short command);
+    /** Store one script-visible baddy variable. */
+    void SetVariable(unsigned short variable);
+    /** Read one script-visible baddy variable. */
+    short GetVariable(unsigned short variable);
     ~CBaddy();
     /** Release baddy storage through CItem's original allocator. */
     static void operator delete(void *p) { ::CItem::operator delete(p); }
@@ -174,6 +174,12 @@ struct CScriptOnlyBaddy : CBaddy {
 
     /** Initialize a script-only actor from one trigger record. */
     CScriptOnlyBaddy(short *pInfo, int nodeIndex);
+    /** Advance script-only actor state and effects. */
+    void AI();
+    /** Execute one script-only command. */
+    int ExecuteCommand(unsigned short command);
+    /** Assign one script-only variable. */
+    void SetVariable(unsigned short variable);
     ~CScriptOnlyBaddy();
     /** Release script-only storage through CItem's original allocator. */
     static void operator delete(void *p) { ::CItem::operator delete(p); }

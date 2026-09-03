@@ -26,7 +26,8 @@ struct SSinCos {
 #define Sine(angle) \
     (reinterpret_cast<SSinCos *>( \
         &rcossin_tbl + ((angle) & 0xFFF))->Sin)
-extern int __vt_5CQuat;  // gp+0x3D6C
+#define QUAT_DECLARE_VTABLE_ABI
+#include "QUAT.h"
 
 /** Prepare uninitialized quaternion storage for a named return value. */
 inline CQuat::CQuat() {
@@ -60,10 +61,10 @@ inline void CQuat::Unit() {
 }
 
 // === Free function declarations ===
-static void Quat_DestroyQuat(CQuat *, int)
-    asm("__DOT__5CQuat_80079050");
-static void Quat_DestroyClass(CClass *, int)
-    asm("__DOT__6CClass_80079080");
+extern "C" {
+static void __DOT__5CQuat_80079050(CQuat *, int);
+static void __DOT__6CClass_80079080(CClass *, int);
+}
 
 // GCC 2.x passes these structure-return results through a hidden first pointer.
 // The named trigonometry-table base and entry cursors in their bodies are also
@@ -384,7 +385,7 @@ void Quat_Slerp(CQuat p, CQuat q, int t, CQuat & qt) {
  * @param _this Quaternion being destroyed.
  * @param __in_chrg GCC 2.x in-charge flag; bit 0 releases the object.
  */
-static void Quat_DestroyQuat(CQuat *_this, int __in_chrg) {
+static void __DOT__5CQuat_80079050(CQuat *_this, int __in_chrg) {
     _this->CClass.vtable = &__vt_5CQuat + 4;
     if (__in_chrg & 1) {
         CClass::operator delete(_this);
@@ -398,7 +399,7 @@ static void Quat_DestroyQuat(CQuat *_this, int __in_chrg) {
  * @param _this Base object being destroyed.
  * @param __in_chrg GCC 2.x in-charge flag; bit 0 releases the object.
  */
-static void Quat_DestroyClass(CClass *_this, int __in_chrg) {
+static void __DOT__6CClass_80079080(CClass *_this, int __in_chrg) {
     _this->vtable = &__vt_5CQuat + 4;
     if (__in_chrg & 1) {
         CClass::operator delete(_this);

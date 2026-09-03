@@ -13,18 +13,9 @@
 #error "Select the TotalPaletteUsage owner or absolute declaration view"
 #endif
 
-#ifdef TOTALPALETTEUSAGE_WITHIN_C_LINKAGE
-#define TOTALPALETTEUSAGE_DECL_LINKAGE extern
-#else
-#define TOTALPALETTEUSAGE_DECL_LINKAGE extern "C"
-#endif
-
 /** Bytes currently consumed by palette records and their allocations. */
-TOTALPALETTEUSAGE_DECL_LINKAGE int TotalPaletteUsage
-    TOTALPALETTEUSAGE_DECL_ATTR;
+extern int TotalPaletteUsage TOTALPALETTEUSAGE_DECL_ATTR;
 
-#undef TOTALPALETTEUSAGE_DECL_LINKAGE
 #undef TOTALPALETTEUSAGE_DECL_ATTR
 #undef TOTALPALETTEUSAGE_ABSOLUTE_DECLARATION
 #undef TOTALPALETTEUSAGE_OWNER_DECLARATION
-#undef TOTALPALETTEUSAGE_WITHIN_C_LINKAGE

@@ -33,3 +33,9 @@ struct CLight : CNonRenderedBit {
 };
 
 #endif // CLIGHT_INC_H
+
+#ifdef CLIGHT_DECLARE_VTABLE_ABI
+/** One-word GP-relative address view of CLight's virtual table. */
+extern int __vt_6CLight;
+#undef CLIGHT_DECLARE_VTABLE_ABI
+#endif

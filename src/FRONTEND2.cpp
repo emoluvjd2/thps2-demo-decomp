@@ -39,18 +39,22 @@ struct EditorCamera_alt_definition_0004 {
 
 #define FRONTEND2STATE_DECLARE_GAME_MODE
 #include "FRONTEND2STATE.h"
-extern "C" int FrontEnd2_MusicLoopCurrentVol;
-extern "C" int FrontEnd2_MusicLoopDesiredVol;
+#define FRONTEND2STATE_DECLARE_MUSIC_LOOP_CURRENT_VOL
+#define FRONTEND2STATE_DECLARE_MUSIC_LOOP_DESIRED_VOL
+#include "FRONTEND2STATE.h"
 #define FRONTEND2STATE_DECLARE_MUSIC_LOOP_VOICE
 #include "FRONTEND2STATE.h"
-extern "C" int FrontEnd2_SelectedLevel;
+#define FRONTEND2STATE_DECLARE_SELECTED_LEVEL
+#include "FRONTEND2STATE.h"
 #define FRONTEND2STATE_DECLARE_TWO_PLAYER
 #include "FRONTEND2STATE.h"
-extern "C" int LastScreen;
-extern "C" int WhichScreen;
+#define FRONTEND2STATE_DECLARE_LAST_SCREEN
+#define FRONTEND2STATE_DECLARE_WHICH_SCREEN
+#include "FRONTEND2STATE.h"
 #define DEMOTIMER_ABSOLUTE_DECLARATION
 #include "DEMOTIMER.h"
-extern "C" int HiresMode __attribute__((section(".data")));
+#define HIRESMODE_ABSOLUTE_DECLARATION
+#include "HIRESMODE.h"
 
 #include "SFX.h"
 #include "CAREER.h"
@@ -58,19 +62,13 @@ extern "C" int HiresMode __attribute__((section(".data")));
 #include "INIT.h"
 #include "LEVELEDITOR.h"
 #include "FRONT.h"
+#include "SPOOLER.h"
 
 /** Static generated-level lifetime interface used by the front end. */
 struct LevelGenerator
 {
     /** Releases the shared generated-level output. */
     static void UnloadOutPSX(bool kill_buffers);
-};
-
-// === External function declarations ===
-/** Static lifetime interface for the shared asynchronous file manager. */
-struct Spooler {
-    static void Cleanup();
-    static void Init();
 };
 
 #include "PREAPI.h"

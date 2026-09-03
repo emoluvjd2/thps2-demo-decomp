@@ -248,25 +248,17 @@ enum TapeConstant
 #include "ZEROVECTOR.h"
 
 // === External function declarations ===
-extern "C" void Tape_DestroyBody(CTapeBodyLayout *, int)
-    asm("_._5CBody");
-extern "C" void Tape_InitItem(CTapeItemLayout *, const char *)
-    asm("InitItem__5CItemPc");
-
-CVector operator+(const CVector &, const CVector &);
-CVector operator-(const CVector &, const CVector &);
-CVector operator*(const CVector &, const int &);
-CVector operator/(const CVector &, const int &);
+#define CBODY_ABI_ONLY
+#define CBODY_DECLARE_DESTRUCTOR
+#define CBODY_DESTRUCTOR_NAME Tape_DestroyBody
+#define CBODY_DESTRUCTOR_RECEIVER CTapeBodyLayout
+#include "CBODY.h"
+#undef CBODY_ABI_ONLY
+#include "CVECTOROPS.h"
 #include "MESS.h"
 
-extern "C" void Tape_BodyDie(CBody *) asm("Die__5CBody");
-extern "C" void Tape_BodyAI(CBody *) asm("AI__5CBody");
-extern "C" void Tape_BodyLighting(CBody *) asm("DoLightingSetup__5CBody");
-extern "C" int Tape_BodyHit(CBody *, int, const CVector &, int)
-    asm("Hit__5CBodyiRC7CVectori");
-
 // === External globals (vtable, linked list) ===
-extern "C" CTape *GTape[5] __attribute__((section(".data")));
+#include "GTAPE.h"
 #define BITSTATE_DECLARE_USE_CACHE_FOR_BITS
 #include "BITSTATE.h"
 
@@ -274,9 +266,8 @@ extern "C" CTape *GTape[5] __attribute__((section(".data")));
 #include "RCOSSIN.h"
 
 
-// === Extern "C" forward declarations ===
-extern "C" void Tape_DestructorAbi(CTape *, int) asm("_._5CTape");
-extern "C" void Tape_DeleteStuffAbi(CTape *) asm("DeleteStuff__5CTape");
+// === ABI-labelled forward declarations ===
+void Tape_DestructorAbi(CTape *, int) asm("_._5CTape");
 
 /**
  * Career-progression messages displayed after collecting level tapes.
@@ -284,7 +275,7 @@ extern "C" void Tape_DeleteStuffAbi(CTape *) asm("DeleteStuff__5CTape");
  * Repeated lines deliberately share their literals, matching the original
  * compiler's constant pooling and the pointer relationships in MAIN.SYM.
  */
-extern "C" STapeMessage TapeMessage[30] = {
+STapeMessage TapeMessage[30] = {
     {0, "Great run! Earn more tapes", "by completing the five",
      "challenges in each level."},
     {1, "New level! You've unlocked", "the SCHOOL. ", 0},
@@ -324,17 +315,17 @@ extern "C" STapeMessage TapeMessage[30] = {
 /**
  * Tape virtual dispatch table in its original read-only owner section.
  */
-extern "C" CTapeVTable __vt_5CTape
+CTapeVTable __vt_5CTape
     __attribute__((section(".rdata"), aligned(8))) = {
         0,
         0,
         Tape_DestructorAbi,
-        Tape_BodyDie,
-        Tape_BodyAI,
-        CBody_EveryFrame,
-        Tape_BodyLighting,
-        Tape_BodyHit,
-        Tape_DeleteStuffAbi,
+        (void (*)(CBody *))&CBody::Die,
+        (void (*)(CBody *))&CBody::AI,
+        (void (*)(CBody *))&CBody::EveryFrame,
+        (void (*)(CBody *))&CBody::DoLightingSetup,
+        (int (*)(CBody *, int, const CVector &, int))&CBody::Hit,
+        (void (*)(CTape *))&CTape::DeleteStuff,
 };
 
 // === Function implementations (address order) ===
@@ -376,76 +367,75 @@ CTape::CTape(
     int Size1, int Size2, const CVector &Vel, unsigned int Flags,
     int Lifetime)
 {
-    CTape *self = this;
     (void)Flags;
 
-    ::new (reinterpret_cast< ::CBody *>(&self->CBody)) ::CBody;
-    self->CBody.CItem._vf = &__vt_5CTape;
+    ::new (reinterpret_cast< ::CBody *>(&CBody)) ::CBody;
+    CBody.CItem._vf = &__vt_5CTape;
 
-    self->mSize = Size1;
-    self->mSize1 = Size1;
+    mSize = Size1;
+    mSize1 = Size1;
     short Scale = static_cast<short>(Size1);
-    self->mSize2 = Size2;
-    self->mVec1 = Pos;
-    self->mVec2 = Pos2;
-    CSVector *scale = &self->CBody.CItem.mScale;
+    mSize2 = Size2;
+    mVec1 = Pos;
+    mVec2 = Pos2;
+    CSVector *scale = &CBody.CItem.mScale;
     scale->vx = Scale;
     scale->vy = Scale;
     scale->vz = Scale;
-    self->mTimer = 0;
-    self->CBody.CItem.mType = PowerupType;
-    self->mLifetime = Lifetime;
-    self->mTapeNum = 0;
-    self->mSessionTapeNum = 0;
-    self->mOrgPos = Pos;
-    self->CBody.CItem.mPos = Pos;
-    self->CBody.mVel = Vel;
-    self->CBody.mFric.Set(5, 5, 5);
-    self->CBody.mAngVel.vy = 100;
-    self->CBody.mAcc.vy = 8 << TapeFixedFractionBits;
-    self->mWobbleSpeed = Rnd(20) + 90;
-    self->mMaxWobbleAmplitude = 50;
-    self->mWobbleAmplitude = 50;
-    self->CBody.mRMinor = 300;
+    mTimer = 0;
+    CBody.CItem.mType = PowerupType;
+    mLifetime = Lifetime;
+    mTapeNum = 0;
+    mSessionTapeNum = 0;
+    mOrgPos = Pos;
+    CBody.CItem.mPos = Pos;
+    CBody.mVel = Vel;
+    CBody.mFric.Set(5, 5, 5);
+    CBody.mAngVel.vy = 100;
+    CBody.mAcc.vy = 8 << TapeFixedFractionBits;
+    mWobbleSpeed = Rnd(20) + 90;
+    mMaxWobbleAmplitude = 50;
+    mWobbleAmplitude = 50;
+    CBody.mRMinor = 300;
 
-    Tape_InitItem(&self->CBody.CItem, "items");
+    reinterpret_cast<CItem *>(&CBody.CItem)->InitItem("items");
 
-    switch (self->CBody.CItem.mType)
+    switch (CBody.CItem.mType)
     {
     case TapePowerUpMedalA:
-        Tape_InitItem(&self->CBody.CItem, "skmedals");
-        self->mIs3d = 1;
-        self->CBody.CItem.mModel =
+        reinterpret_cast<CItem *>(&CBody.CItem)->InitItem("skmedals");
+        mIs3d = 1;
+        CBody.CItem.mModel =
             Spool_GetModel(0x54636518, CurrentMedalsFileRegion);
         break;
 
     case TapePowerUpMedalB:
-        Tape_InitItem(&self->CBody.CItem, "skmedals");
-        self->mIs3d = 1;
-        self->CBody.CItem.mModel =
+        reinterpret_cast<CItem *>(&CBody.CItem)->InitItem("skmedals");
+        mIs3d = 1;
+        CBody.CItem.mModel =
             Spool_GetModel(0xba6d0434, CurrentMedalsFileRegion);
         break;
 
     case TapePowerUpMedalC:
-        Tape_InitItem(&self->CBody.CItem, "skmedals");
-        self->mIs3d = 1;
-        self->CBody.CItem.mModel =
+        reinterpret_cast<CItem *>(&CBody.CItem)->InitItem("skmedals");
+        mIs3d = 1;
+        CBody.CItem.mModel =
             Spool_GetModel(0x2364558e, CurrentMedalsFileRegion);
         break;
 
     case TapePowerUpSecretTape:
     case TapePowerUpSpecial18:
-        self->mMessageTable = TapeMessage;
-        self->CBody.mAngVel.vy = 150;
-        self->mIs3d = 1;
-        self->CBody.CItem.mModel =
+        mMessageTable = TapeMessage;
+        CBody.mAngVel.vy = 150;
+        mIs3d = 1;
+        CBody.CItem.mModel =
             Spool_GetModel(0x7c1b2c4a, CurrentItemsFileRegion);
         break;
     }
 
     if (GGame != 1)
     {
-        switch (self->CBody.CItem.mType)
+        switch (CBody.CItem.mType)
         {
         case TapePowerUpLetterK:
         case TapePowerUpLetterS:
@@ -453,13 +443,13 @@ CTape::CTape(
         case TapePowerUpLetterE:
         case TapePowerUpLetterT:
         case TapePowerUpSecretTape:
-            self->mLifetime = 1;
+            mLifetime = 1;
             break;
         }
     }
     else
     {
-        switch (self->CBody.CItem.mType)
+        switch (CBody.CItem.mType)
         {
         case TapePowerUpLetterK:
         case TapePowerUpLetterS:
@@ -467,19 +457,19 @@ CTape::CTape(
         case TapePowerUpLetterE:
         case TapePowerUpLetterT:
             if (Career_Got(2) != 0)
-                self->mLifetime = 1;
+                mLifetime = 1;
             break;
 
         case TapePowerUpSecretTape:
             if (Career_Got(3) != 0)
-                self->mLifetime = 1;
+                mLifetime = 1;
             break;
         }
     }
 
-    reinterpret_cast< ::CBody *>(&self->CBody)->AttachTo(&PowerUpList);
-    if (self->mIs3d == 0)
-        self->DontDisplay();
+    reinterpret_cast< ::CBody *>(&CBody)->AttachTo(&PowerUpList);
+    if (mIs3d == 0)
+        DontDisplay();
 }
 
 /**
@@ -488,11 +478,10 @@ CTape::CTape(
  */
 CTape::~CTape()
 {
-    CTape *self = this;
-    self->CBody.CItem._vf = &__vt_5CTape;
-    reinterpret_cast< ::CBody *>(&self->CBody)->DeleteFrom(&PowerUpList);
-    self->DeleteStuff();
-    Tape_DestroyBody(&self->CBody, 0);
+    CBody.CItem._vf = &__vt_5CTape;
+    reinterpret_cast< ::CBody *>(&CBody)->DeleteFrom(&PowerUpList);
+    DeleteStuff();
+    Tape_DestroyBody(&CBody, 0);
 }
 
 /**
@@ -501,11 +490,10 @@ CTape::~CTape()
  */
 void CTape::DontDisplay()
 {
-    CTape *self = this;
-    u16 flags = self->CBody.CItem.mFlags;
+    u16 flags = CBody.CItem.mFlags;
     flags |= TapeUnavailableToEveryone;
-    self->CBody.CItem.mFlags = flags;
-    self->CBody.CItem._vf->DeleteStuff(self);
+    CBody.CItem.mFlags = flags;
+    CBody.CItem._vf->DeleteStuff(this);
 }
 
 /**
@@ -514,8 +502,6 @@ void CTape::DontDisplay()
  */
 void CTape::CreateBit()
 {
-    CTape *self = this;
-    (void)self;
     UseCacheForBits = 1;
 }
 
@@ -525,12 +511,11 @@ void CTape::CreateBit()
  */
 void CTape::DeleteStuff()
 {
-    CTape *self = this;
-    if (self->mpGlow != 0)
+    if (mpGlow != 0)
     {
-        self->mpGlow->CBit._vf->Destroy(self->mpGlow, 3);
+        mpGlow->CBit._vf->Destroy(mpGlow, 3);
     }
-    self->mpGlow = 0;
+    mpGlow = 0;
 }
 
 /**
@@ -539,14 +524,12 @@ void CTape::DeleteStuff()
  */
 void CTape::DoPhysics()
 {
-    CTape *self = this;
-    CTape *tape = self;
-    tape->CBody.CItem.mAngles += tape->CBody.mAngVel;
-    tape->CBody.CItem.mAngles.Mask();
+    CBody.CItem.mAngles += CBody.mAngVel;
+    CBody.CItem.mAngles.Mask();
     short *table = rcossin_tbl;
-    self->CBody.CItem.mPos = self->mOrgPos;
-    u16 angle = self->mT;
-    u16 speed = self->mWobbleAmplitude;
+    CBody.CItem.mPos = mOrgPos;
+    u16 angle = mT;
+    u16 speed = mWobbleAmplitude;
     short sinVal =
         table[(angle & TapeTrigAngleMask) * TapeTrigEntryStride];
     int product = speed * sinVal;
@@ -554,10 +537,10 @@ void CTape::DoPhysics()
         product += TapeTrigAngleMask;
     int yDelta =
         (product >> TapeFixedFractionBits) << TapeFixedFractionBits;
-    int curY = self->CBody.CItem.mPos.vy;
-    u16 angleStep = self->mWobbleSpeed;
-    self->CBody.CItem.mPos.vy = curY + yDelta;
-    self->mT = angle + angleStep;
+    int curY = CBody.CItem.mPos.vy;
+    u16 angleStep = mWobbleSpeed;
+    CBody.CItem.mPos.vy = curY + yDelta;
+    mT = angle + angleStep;
 }
 
 /**
@@ -567,40 +550,39 @@ void CTape::DoPhysics()
  */
 void CTape::AI(int tape_no)
 {
-    CTape *tape = this;
     (void)tape_no;
 
-    tape->mTimer++;
-    if (tape->mTimer < 60)
+    mTimer++;
+    if (mTimer < 60)
         CTape::mOkayToDisplayTitle = 1;
     else
         CTape::mOkayToDisplayTitle = 0;
 
-    if (tape->mSessionTapeNum * 20 + 80 < tape->mTimer)
+    if (mSessionTapeNum * 20 + 80 < mTimer)
         CTape::mOkayToDisplayContinueButton = 1;
     else
         CTape::mOkayToDisplayContinueButton = 0;
 
-    if (tape->mTimer > 60)
+    if (mTimer > 60)
     {
-        int temptime = tape->mTimer - 60;
+        int temptime = mTimer - 60;
         CVector pos_offset =
-            ((tape->mVec2 - tape->mVec1) * temptime) / 20;
+            ((mVec2 - mVec1) * temptime) / 20;
 
-        int size_offset = (tape->mSize2 - tape->mSize1) * temptime / 20;
+        int size_offset = (mSize2 - mSize1) * temptime / 20;
         if (temptime < 20)
         {
-            tape->mOrgPos = pos_offset + tape->mVec1;
-            tape->mSize = size_offset + tape->mSize1;
-            tape->mWobbleAmplitude =
-                tape->mMaxWobbleAmplitude -
-                (tape->mMaxWobbleAmplitude * temptime / 20);
+            mOrgPos = pos_offset + mVec1;
+            mSize = size_offset + mSize1;
+            mWobbleAmplitude =
+                mMaxWobbleAmplitude -
+                (mMaxWobbleAmplitude * temptime / 20);
         }
         else
         {
-            tape->mOrgPos = tape->mVec2;
-            tape->mWobbleAmplitude = 0;
-            tape->mSize = tape->mSize2;
+            mOrgPos = mVec2;
+            mWobbleAmplitude = 0;
+            mSize = mSize2;
         }
     }
 
@@ -612,8 +594,8 @@ void CTape::AI(int tape_no)
     messages[3] = 0;
     messages[4] = 0;
 
-    short Scale = static_cast<short>(tape->mSize);
-    CSVector &scale = tape->CBody.CItem.mScale;
+    short Scale = static_cast<short>(mSize);
+    CSVector &scale = CBody.CItem.mScale;
     scale.vx = Scale;
     scale.vy = Scale;
     scale.vz = Scale;
@@ -624,16 +606,16 @@ void CTape::AI(int tape_no)
         {
             if (i == 4)
             {
-                messages[4] = &tape->mMessageTable[GTape[4]->mTapeNum];
+                messages[4] = &mMessageTable[GTape[4]->mTapeNum];
             }
-            else if (tape->mMessageTable[GTape[i]->mTapeNum].essential == 1)
+            else if (mMessageTable[GTape[i]->mTapeNum].essential == 1)
             {
-                messages[i] = &tape->mMessageTable[GTape[i]->mTapeNum];
+                messages[i] = &mMessageTable[GTape[i]->mTapeNum];
             }
         }
         else
         {
-            messages[i - 1] = &tape->mMessageTable[GTape[i - 1]->mTapeNum];
+            messages[i - 1] = &mMessageTable[GTape[i - 1]->mTapeNum];
             break;
         }
     }
@@ -645,32 +627,32 @@ void CTape::AI(int tape_no)
     }
 
     int message_no = 0;
-    for (int i = 0; i < tape->mSessionTapeNum; i++)
+    for (int i = 0; i < mSessionTapeNum; i++)
     {
         if (messages[i] != 0)
             message_no++;
     }
 
-    if (message_no * 20 + 80 < tape->mTimer &&
-        messages[tape->mSessionTapeNum] != 0)
+    if (message_no * 20 + 80 < mTimer &&
+        messages[mSessionTapeNum] != 0)
     {
         switch (message_count)
         {
         case 1:
-            tape->mTextX = 130;
-            tape->mTextY = 120;
+            mTextX = 130;
+            mTextY = 120;
             break;
 
         case 2:
             switch (message_no)
             {
             case 0:
-                tape->mTextX = 130;
-                tape->mTextY = 85;
+                mTextX = 130;
+                mTextY = 85;
                 break;
             case 1:
-                tape->mTextX = 130;
-                tape->mTextY = 155;
+                mTextX = 130;
+                mTextY = 155;
                 break;
             }
             break;
@@ -679,16 +661,16 @@ void CTape::AI(int tape_no)
             switch (message_no)
             {
             case 0:
-                tape->mTextX = 130;
-                tape->mTextY = 64;
+                mTextX = 130;
+                mTextY = 64;
                 break;
             case 1:
-                tape->mTextX = 130;
-                tape->mTextY = 120;
+                mTextX = 130;
+                mTextY = 120;
                 break;
             case 2:
-                tape->mTextX = 130;
-                tape->mTextY = 176;
+                mTextX = 130;
+                mTextY = 176;
                 break;
             }
             break;
@@ -697,20 +679,20 @@ void CTape::AI(int tape_no)
             switch (message_no)
             {
             case 0:
-                tape->mTextX = 130;
-                tape->mTextY = 50;
+                mTextX = 130;
+                mTextY = 50;
                 break;
             case 1:
-                tape->mTextX = 150;
-                tape->mTextY = 92;
+                mTextX = 150;
+                mTextY = 92;
                 break;
             case 2:
-                tape->mTextX = 130;
-                tape->mTextY = 134;
+                mTextX = 130;
+                mTextY = 134;
                 break;
             case 3:
-                tape->mTextX = 150;
-                tape->mTextY = 176;
+                mTextX = 150;
+                mTextY = 176;
                 break;
             }
             break;
@@ -719,24 +701,24 @@ void CTape::AI(int tape_no)
             switch (message_no)
             {
             case 0:
-                tape->mTextX = 130;
-                tape->mTextY = 50;
+                mTextX = 130;
+                mTextY = 50;
                 break;
             case 1:
-                tape->mTextX = 150;
-                tape->mTextY = 85;
+                mTextX = 150;
+                mTextY = 85;
                 break;
             case 2:
-                tape->mTextX = 130;
-                tape->mTextY = 120;
+                mTextX = 130;
+                mTextY = 120;
                 break;
             case 3:
-                tape->mTextX = 150;
-                tape->mTextY = 155;
+                mTextX = 150;
+                mTextY = 155;
                 break;
             case 4:
-                tape->mTextX = 130;
-                tape->mTextY = 190;
+                mTextX = 130;
+                mTextY = 190;
                 break;
             }
             break;
@@ -746,44 +728,44 @@ void CTape::AI(int tape_no)
         Mess_SetScale(0xe0);
         Mess_SetRGB(0x7a, 0x7a, 0x7a, 0);
 
-        if (messages[tape->mSessionTapeNum]->Line2 == 0)
+        if (messages[mSessionTapeNum]->Line2 == 0)
         {
             Mess_DrawText(
-                tape->mTextX, tape->mTextY,
-                messages[tape->mSessionTapeNum]->Line1,
+                mTextX, mTextY,
+                messages[mSessionTapeNum]->Line1,
                 0, 0, 0x100, 0);
         }
-        else if (messages[tape->mSessionTapeNum]->Line3 == 0)
+        else if (messages[mSessionTapeNum]->Line3 == 0)
         {
             Mess_DrawText(
-                tape->mTextX, tape->mTextY - 8,
-                messages[tape->mSessionTapeNum]->Line1,
+                mTextX, mTextY - 8,
+                messages[mSessionTapeNum]->Line1,
                 0, 0, 0x100, 0);
             Mess_DrawText(
-                tape->mTextX, tape->mTextY + 8,
-                messages[tape->mSessionTapeNum]->Line2,
+                mTextX, mTextY + 8,
+                messages[mSessionTapeNum]->Line2,
                 0, 0, 0x100, 0);
         }
         else
         {
             Mess_DrawText(
-                tape->mTextX, tape->mTextY - 16,
-                messages[tape->mSessionTapeNum]->Line1,
+                mTextX, mTextY - 16,
+                messages[mSessionTapeNum]->Line1,
                 0, 0, 0x100, 0);
             Mess_DrawText(
-                tape->mTextX, tape->mTextY,
-                messages[tape->mSessionTapeNum]->Line2,
+                mTextX, mTextY,
+                messages[mSessionTapeNum]->Line2,
                 0, 0, 0x100, 0);
             Mess_DrawText(
-                tape->mTextX, tape->mTextY + 16,
-                messages[tape->mSessionTapeNum]->Line3,
+                mTextX, mTextY + 16,
+                messages[mSessionTapeNum]->Line3,
                 0, 0, 0x100, 0);
         }
     }
 
-    tape->DoPhysics();
-    if (tape->mIs3d == 0)
-        tape->CreateBit();
+    DoPhysics();
+    if (mIs3d == 0)
+        CreateBit();
 }
 
 /**

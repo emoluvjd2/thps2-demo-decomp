@@ -70,9 +70,6 @@ SCommandPoint *Trig_TriggerCommandPoint(
 /** Select the named restart node. */
 void Trig_SetRestart(char *name);
 
-/** Align one skater with the selected restart node. */
-void FudgeAngles(CBruce *skater);
-
 /** Move mechanics to the selected restart and execute its commands. */
 void Trig_ExecuteRestart(void);
 
@@ -81,12 +78,6 @@ void Trig_DeleteTrigFile(void);
 
 /** Load one compiled trigger stream from disc. */
 void Trig_LoadTRG(char *filename);
-
-/** Read one encoded flag from a trigger flag stream. */
-unsigned char GetFlag(unsigned char flag, unsigned char *flags);
-
-/** Skip the encoded flags at the head of a trigger payload. */
-char *SkipFlags(unsigned char *flags);
 
 /**
  * Read a trigger node's position and return the unsigned word payload that
@@ -97,9 +88,6 @@ unsigned short *Trig_GetPosition(CVector &position, int node);
 /** Delivers a pulse directly to one trigger node. */
 void Trig_SendPulseToNode(int node);
 
-/** Create the object described by one trigger node. */
-CBody *Trig_CreateObject(int node);
-
 /** Delivers a pulse to each trigger node referenced by a link list. */
 void Trig_SendPulse(unsigned short *pLinkInfo);
 
@@ -109,23 +97,8 @@ void SendSignalToNode(CBody *body, int node);
 /** Deliver one signal through every node in a trigger link list. */
 void SendSignalToLinks(unsigned short *pLinkInfo);
 
-/** Suspend matching bodies from one owner list. */
-void SendSuspend(CBody **list, int node);
-
-/** Restore suspended bodies associated with one trigger node. */
-void SendUnSuspend(int node);
-
-/** Suspend, restore, or activate every node in one link list. */
-void SendSuspendOrActivate(unsigned short *pLinkInfo, int signalType);
-
 /** Returns the trigger-link list associated with a node. */
 unsigned short *Trig_GetLinksPointer(int node);
-
-/** Skip one zero-terminated string in a trigger command stream. */
-unsigned short *SkipString(char *text);
-
-/** Allocate the temporary dual-buffer command stream. */
-void Trig_AllocateDualBuffer(unsigned int size);
 
 /** Release the temporary dual-buffer command stream. */
 void Trig_RemoveDualBuffer(void);

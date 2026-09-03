@@ -19,6 +19,11 @@ struct VerticalMenu2;
 struct VMenuItem;
 struct MultiSelectScreen;
 
+/** Menu base interface used for the highlighted-item query. */
+struct BasicMenu {
+    int getHighlighted();
+};
+
 /** Virtual interface used by the multiplayer selector's outer screen. */
 struct MultiSelectScreenVtable {
     void (*Reserved0)(MultiSelectScreen *screen);
@@ -156,6 +161,10 @@ struct MultiSelectScreen {
 
     /** Handle multiplayer-selection confirmation or cancellation input. */
     int handlePress();
+    /** Draw the selector and its background. */
+    void draw(int x, int y);
+    /** Advance menu input and child screen elements. */
+    void update();
     /** Return the currently highlighted multiplayer game mode. */
     int GetGameMode();
     /** Begin the preload phase for a completed selection. */
@@ -192,113 +201,114 @@ inline void *operator new(unsigned int, void *address)
 
 // === External function declarations ===
 #include "MENUINPUT.h"
-extern "C" ScreenElementList *ScreenElementList_ctor(
-    ScreenElementList *, int, int, int, int) asm("__17ScreenElementListiiii");
-extern "C" void ScreenElementList_update(ScreenElementList *)
-    asm("update__17ScreenElementList");
-extern "C" void ScreenElementList_draw(ScreenElementList *, int, int)
-    asm("draw__17ScreenElementListii");
-extern "C" void ScreenElementList_dtor(ScreenElementList *, int)
-    asm("_._17ScreenElementList");
-extern "C" ScreenElement *TextScreenElement_ctor(
+#define SCREENTOOLS_DECLARE_SCREEN_ELEMENT_LIST_CONSTRUCTOR
+#include "SCREENTOOLS.h"
+#define SCREENTOOLS_DECLARE_SCREEN_ELEMENT_LIST_DESTRUCTOR
+#include "SCREENTOOLS.h"
+// MULTISELECT intentionally keeps its target-proven base-storage return view;
+// it is not type-compatible with the shared TextScreenElement constructor view.
+extern "C" ScreenElement *__17TextScreenElementPcP4Fontiiii(
     ScreenElement *, char *, Font *,
-    int, int, int, int) asm("__17TextScreenElementPcP4Fontiiii");
-extern "C" TextMenuProperties *TextMenuProperties_ctor(
-    TextMenuProperties *) asm("__18TextMenuProperties");
-extern "C" VMenuItem *TextMenuItem_ctor(
-    VMenuItem *, int, char *, TextMenuProperties *)
-    asm("__12TextMenuItemiPCcR18TextMenuProperties");
-extern "C" VerticalMenu2 *VerticalMenu2_ctor(
-    VerticalMenu2 *, int, int, int, int, int, int, int)
-    asm("__13VerticalMenu2iiiiiii");
-extern "C" int BasicMenu_GetHighlighted(VerticalMenu2 *)
-    asm("getHighlighted__9BasicMenu");
+    int, int, int, int);
+#define SCREENTOOLS_DECLARE_TEXT_MENU_PROPERTIES_CONSTRUCTOR
+#define SCREENTOOLS_DECLARE_TEXT_MENU_ITEM_CONSTRUCTOR
+#include "SCREENTOOLS.h"
+#define TextMenuProperties_ctor \
+    TextMenuPropertiesConstructorABI::__18TextMenuProperties
+#define TextMenuItem_ctor \
+    TextMenuItemConstructorABI::__12TextMenuItemiPCcR18TextMenuProperties
+#define SCREENTOOLS_DECLARE_VERTICAL_MENU2_CONSTRUCTOR
+#include "SCREENTOOLS.h"
+#define VerticalMenu2_ctor \
+    VerticalMenu2ConstructorABI::__13VerticalMenu2iiiiiii
 #include "DB.h"
 #include "FRONTEND2.h"
 
 /**
- * Read-only multiplayer heading strings in their original object order.
+ * MULTISELECT's target-owned menu text and resource names in object order.
+ *
+ * The six small owners use namespace-scoped C linkage so they remain
+ * lexically distinct from the incomplete address views required below.
  */
-static char MultiSelectSplitScreenHeading[20]
-    asm("s_splitscreen_modes_800b3fa8")
+static char s_splitscreen_modes_800b3fa8[20]
     __attribute__((section(".rdata"), aligned(4))) = "splitscreen modes";
-static char MultiSelectMultiplayerHeading[20]
-    asm("s_multiplayer_modes_800b3fbc")
+static char s_multiplayer_modes_800b3fbc[20]
     __attribute__((section(".rdata"), aligned(4))) = "multiplayer modes";
-
-/**
- * MULTISELECT's target-owned menu resource names and labels.
- */
-static char MultiSelectBackgroundName[12]
-    asm("s_s2bgd4_bmp_800dc214")
+static char s_s2bgd4_bmp_800dc214[12]
     __attribute__((section(".sdata"), aligned(4))) = "s2bgd4.bmp";
-static char MultiSelectMainFontName[12]
-    asm("s_mainf_fnt_800dc220")
+static char s_mainf_fnt_800dc220[12]
     __attribute__((section(".sdata"), aligned(4))) = "mainf.fnt";
-static char MultiSelectSecondFontName[12]
-    asm("s_s2font2_fnt_800dc22c")
+static char s_s2font2_fnt_800dc22c[12]
     __attribute__((section(".sdata"), aligned(4))) = "s2font2.fnt";
-static char MultiSelectTrickAttackLabel[16]
-    asm("s_trick_attack_800dc238")
+static char s_trick_attack_800dc238[16]
     __attribute__((section(".sdata"), aligned(4))) = "trick attack";
-static char MultiSelectGraffitiLabel[12]
-    asm("s_graffiti_800dc248")
+static char s_graffiti_800dc248[12]
     __attribute__((section(".sdata"), aligned(4))) = "graffiti";
-static char MultiSelectTagLabel[4] asm("DAT_800dc254")
+
+namespace MultiSelectAddressViewOwners
+{
+extern "C"
+{
+static char DAT_800dc254[4]
     __attribute__((section(".sdata"), aligned(4))) = "tag";
-static char MultiSelectContestLabel[8] asm("s_contest_800dc258")
+static char s_contest_800dc258[8]
     __attribute__((section(".sdata"), aligned(4))) = "contest";
-static char MultiSelectHorseLabel[8] asm("s_horse_800dc260")
+static char s_horse_800dc260[8]
     __attribute__((section(".sdata"), aligned(4))) = "horse";
-static char MultiSelectLeftArrowName[16]
-    asm("s_s2arrow2_bmp_800dc268")
+}
+}
+
+static char s_s2arrow2_bmp_800dc268[16]
     __attribute__((section(".sdata"), aligned(4))) = "s2arrow2.bmp";
-static char MultiSelectRightArrowName[16]
-    asm("s_s2arrow1_bmp_800dc278")
+static char s_s2arrow1_bmp_800dc278[16]
     __attribute__((section(".sdata"), aligned(4))) = "s2arrow1.bmp";
-static char MultiSelectSelectPromptImageName[16]
-    asm("s_s2prmpt4_bmp_800dc288")
+static char s_s2prmpt4_bmp_800dc288[16]
     __attribute__((section(".sdata"), aligned(4))) = "s2prmpt4.bmp";
-static char MultiSelectSelectPromptText[8] asm("s_select_800dc298")
+
+namespace MultiSelectAddressViewOwners
+{
+extern "C"
+{
+static char s_select_800dc298[8]
     __attribute__((section(".sdata"), aligned(4))) = "select";
-static char MultiSelectAcceptPromptImageName[16]
-    asm("s_s2prmpt1_bmp_800dc2a0")
+}
+}
+
+static char s_s2prmpt1_bmp_800dc2a0[16]
     __attribute__((section(".sdata"), aligned(4))) = "s2prmpt1.bmp";
-static char MultiSelectAcceptPromptText[8] asm("s_accept_800dc2b0")
+
+namespace MultiSelectAddressViewOwners
+{
+extern "C"
+{
+static char s_accept_800dc2b0[8]
     __attribute__((section(".sdata"), aligned(4))) = "accept";
-static char MultiSelectBackPromptImageName[16]
-    asm("s_s2prmpt2_bmp_800dc2b8")
+}
+}
+
+static char s_s2prmpt2_bmp_800dc2b8[16]
     __attribute__((section(".sdata"), aligned(4))) = "s2prmpt2.bmp";
-static char MultiSelectBackPromptText[8] asm("DAT_800dc2c8")
+
+namespace MultiSelectAddressViewOwners
+{
+extern "C"
+{
+static char DAT_800dc2c8[8]
     __attribute__((section(".sdata"), aligned(4))) = "back";
+}
+}
 
 /*
- * Keep the source-facing declarations incomplete. GCC 2 then retains the
- * target's absolute lui/addiu address formation while the semantic owner
- * objects above provide the actual storage and linker exports.
+ * These incomplete address views retain the target's absolute lui/addiu
+ * materialization while the internal definitions above own the storage.
  */
-extern "C" char SplitScreenHeadingText[]
-    asm("s_splitscreen_modes_800b3fa8");
-extern "C" char MultiplayerHeadingText[]
-    asm("s_multiplayer_modes_800b3fbc");
-extern "C" char MultiSelectBackgroundResource[]
-    asm("s_s2bgd4_bmp_800dc214");
-extern "C" char MultiSelectMainFontResource[] asm("s_mainf_fnt_800dc220");
-extern "C" char MultiSelectSecondFontResource[]
-    asm("s_s2font2_fnt_800dc22c");
-extern "C" char TrickAttackText[] asm("s_trick_attack_800dc238");
-extern "C" char GraffitiText[] asm("s_graffiti_800dc248");
-extern "C" char TagText[] asm("DAT_800dc254");
-extern "C" char ContestText[] asm("s_contest_800dc258");
-extern "C" char HorseText[] asm("s_horse_800dc260");
-extern "C" char LeftArrowResource[] asm("s_s2arrow2_bmp_800dc268");
-extern "C" char RightArrowResource[] asm("s_s2arrow1_bmp_800dc278");
-extern "C" char SelectPromptImage[] asm("s_s2prmpt4_bmp_800dc288");
-extern "C" char SelectPromptText[] asm("s_select_800dc298");
-extern "C" char AcceptPromptImage[] asm("s_s2prmpt1_bmp_800dc2a0");
-extern "C" char AcceptPromptText[] asm("s_accept_800dc2b0");
-extern "C" char BackPromptImage[] asm("s_s2prmpt2_bmp_800dc2b8");
-extern "C" char BackPromptText[] asm("DAT_800dc2c8");
+/** Absolute address views of MULTISELECT's GP-sized resource strings. */
+extern char DAT_800dc254[];
+extern char s_contest_800dc258[];
+extern char s_horse_800dc260[];
+extern char s_select_800dc298[];
+extern char s_accept_800dc2b0[];
+extern char DAT_800dc2c8[];
 
 /** Allocation extent of a text-menu item beyond its proven public prefix. */
 struct MultiSelectTextMenuItemStorage {
@@ -346,33 +356,30 @@ static inline void ActivateMultiSelectMenu(VerticalMenu2 *menu) {
     menu->vtable->activate(menu);
 }
 
-// === Extern "C" forward declarations ===
-extern "C" MultiSelectScreen *MultiSelectScreen_ctor(MultiSelectScreen *)
-    asm("__17MultiSelectScreen");
-extern "C" void MultiSelectScreen_dtor(MultiSelectScreen *, int)
-    asm("_._17MultiSelectScreen");
-extern "C" void MultiSelectScreen_draw(MultiSelectScreen *, int, int)
-    asm("draw__17MultiSelectScreenii");
-extern "C" void MultiSelectScreen_update(MultiSelectScreen *)
-    asm("update__17MultiSelectScreen");
-
+// === ABI-labelled forward declarations ===
+#define FRONTSCREENS_DECLARE_MULTISELECT_CONSTRUCTOR_ABI
+#include "FRONTSCREENS.h"
+#define MultiSelectScreen_ctor \
+    MultiSelectScreenConstructorABI::__17MultiSelectScreen
+#define FRONTSCREENS_DECLARE_MULTISELECT_DESTRUCTOR_ABI
+#include "FRONTSCREENS.h"
 typedef void (*MultiSelectVirtualFunction)(void);
 
-extern "C" int MultiSelectV_Width(void)
-    asm("width__13ScreenElement");
+#define FRONTSCREENS_DECLARE_MULTISELECT_OWNER_VTABLE
+#include "FRONTSCREENS.h"
 
 /**
  * MultiSelectScreen's original virtual dispatch table.
  */
-extern "C" MultiSelectVirtualFunction const __vt_17MultiSelectScreen[7]
+MultiSelectVirtualFunction const __vt_17MultiSelectScreen[7]
     __attribute__((section(".rdata"), aligned(4))) = {
         0,
         0,
         (MultiSelectVirtualFunction)&MultiSelectScreen_dtor,
-        (MultiSelectVirtualFunction)&MultiSelectScreen_update,
-        (MultiSelectVirtualFunction)&MultiSelectScreen_draw,
-        (MultiSelectVirtualFunction)&MultiSelectV_Width,
-        (MultiSelectVirtualFunction)&ScreenElement_Refresh,
+        (MultiSelectVirtualFunction)&MultiSelectScreen::update,
+        (MultiSelectVirtualFunction)&MultiSelectScreen::draw,
+        (MultiSelectVirtualFunction)&ScreenElement::width,
+        (MultiSelectVirtualFunction)&ScreenElement::refresh,
     };
 // === Function implementations (address order) ===
 
@@ -395,7 +402,8 @@ MultiSelectScreen *MultiSelectScreen_ctor(
     MultiSelectFontAssignmentView *font1;
     MultiSelectFontAssignmentView *font2;
 
-    ScreenElementList_ctor(&screen->ScreenElementList, 0, 0, -1, -1);
+    __17ScreenElementListiiii(
+        &screen->ScreenElementList, 0, 0, -1, -1);
     screen->ScreenElementList.ScreenElement.CClass.vtable =
         reinterpret_cast<int *>(__vt_17MultiSelectScreen);
     font1 = &screen->mFont1;
@@ -406,14 +414,16 @@ MultiSelectScreen *MultiSelectScreen_ctor(
 
     {
         Sprite2 *sprite = new Sprite2(
-            MultiSelectBackgroundResource, 1, 0x40, 0x40);
+            s_s2bgd4_bmp_800dc214,
+            1, 0x40, 0x40);
         screen->mBackground = sprite;
     }
 
     screen->mFinishUp = 0;
 
     screen->mFont1 = *reinterpret_cast<MultiSelectFontAssignmentView *>(
-        FontManager::GetFont(MultiSelectMainFontResource));
+        FontManager::GetFont(
+            s_mainf_fnt_800dc220));
 
     screen->mFont1.JustX = 1;
     screen->mFont1.JustY = 3;
@@ -426,7 +436,8 @@ MultiSelectScreen *MultiSelectScreen_ctor(
     screen->mFont1.Scale = 0xC00;
 
     screen->mFont2 = *reinterpret_cast<MultiSelectFontAssignmentView *>(
-        FontManager::GetFont(MultiSelectSecondFontResource));
+        FontManager::GetFont(
+            s_s2font2_fnt_800dc22c));
 
     screen->mFont2.JustX = 0;
     screen->mFont2.JustY = 3;
@@ -452,8 +463,9 @@ MultiSelectScreen *MultiSelectScreen_ctor(
         ScreenElement *pElement =
             (ScreenElement *)::CClass::operator new(sizeof(TextScreenElement));
         if (pElement != 0) {
-            pElement = TextScreenElement_ctor(
-                pElement, SplitScreenHeadingText,
+            pElement = __17TextScreenElementPcP4Fontiiii(
+                pElement,
+                s_splitscreen_modes_800b3fa8,
                 reinterpret_cast<Font *>(font1),
                 0x100, 0x3A, -0x40, 0x3A);
         }
@@ -465,8 +477,9 @@ MultiSelectScreen *MultiSelectScreen_ctor(
         ScreenElement *pElement =
             (ScreenElement *)::CClass::operator new(sizeof(TextScreenElement));
         if (pElement != 0) {
-            pElement = TextScreenElement_ctor(
-                pElement, MultiplayerHeadingText,
+            pElement = __17TextScreenElementPcP4Fontiiii(
+                pElement,
+                s_multiplayer_modes_800b3fbc,
                 reinterpret_cast<Font *>(font1),
                 0x100, 0x97, 0x240, 0x97);
         }
@@ -500,7 +513,9 @@ MultiSelectScreen *MultiSelectScreen_ctor(
             sizeof(MultiSelectTextMenuItemStorage));
         if (menuItem != 0) {
             menuItem = TextMenuItem_ctor(
-                menuItem, 5, TrickAttackText, screen->mProps);
+                menuItem, 5,
+                s_trick_attack_800dc238,
+                screen->mProps);
         }
         screen->mItem[0] = menuItem;
     }
@@ -510,7 +525,9 @@ MultiSelectScreen *MultiSelectScreen_ctor(
             sizeof(MultiSelectTextMenuItemStorage));
         if (menuItem != 0) {
             menuItem = TextMenuItem_ctor(
-                menuItem, 8, GraffitiText, screen->mProps);
+                menuItem, 8,
+                s_graffiti_800dc248,
+                screen->mProps);
         }
         screen->mItem[1] = menuItem;
     }
@@ -520,7 +537,7 @@ MultiSelectScreen *MultiSelectScreen_ctor(
             sizeof(MultiSelectTextMenuItemStorage));
         if (menuItem != 0) {
             menuItem = TextMenuItem_ctor(
-                menuItem, 9, TagText, screen->mProps);
+                menuItem, 9, DAT_800dc254, screen->mProps);
         }
         screen->mItem[2] = menuItem;
         menuItem->Selectable = 0;
@@ -531,7 +548,7 @@ MultiSelectScreen *MultiSelectScreen_ctor(
             sizeof(MultiSelectTextMenuItemStorage));
         if (menuItem != 0) {
             menuItem = TextMenuItem_ctor(
-                menuItem, 10, ContestText, screen->mProps);
+                menuItem, 10, s_contest_800dc258, screen->mProps);
         }
         screen->mItem[3] = menuItem;
     }
@@ -541,7 +558,7 @@ MultiSelectScreen *MultiSelectScreen_ctor(
             sizeof(MultiSelectTextMenuItemStorage));
         if (menuItem != 0) {
             menuItem = TextMenuItem_ctor(
-                menuItem, 7, HorseText, screen->mProps);
+                menuItem, 7, s_horse_800dc260, screen->mProps);
         }
         screen->mItem[4] = menuItem;
     }
@@ -563,12 +580,16 @@ MultiSelectScreen *MultiSelectScreen_ctor(
     }
 
     {
-        Sprite2 *sprite = new Sprite2(LeftArrowResource, 1, 0, 0);
+        Sprite2 *sprite = new Sprite2(
+            s_s2arrow2_bmp_800dc268,
+            1, 0, 0);
         screen->mpLeftArrow = sprite;
     }
 
     {
-        Sprite2 *sprite = new Sprite2(RightArrowResource, 1, 0, 0);
+        Sprite2 *sprite = new Sprite2(
+            s_s2arrow1_bmp_800dc278,
+            1, 0, 0);
         screen->mpRightArrow = sprite;
     }
 
@@ -589,7 +610,8 @@ MultiSelectScreen *MultiSelectScreen_ctor(
     {
         ScreenElement *prompt = reinterpret_cast<ScreenElement *>(
             new PromptScreenElement(
-                SelectPromptImage, SelectPromptText,
+                s_s2prmpt4_bmp_800dc288,
+                s_select_800dc298,
                 reinterpret_cast<Font *>(font2), 0x73, 0xDC, -1, 0x104));
         screen->ScreenElementList.addItem(prompt);
     }
@@ -597,7 +619,8 @@ MultiSelectScreen *MultiSelectScreen_ctor(
     {
         ScreenElement *prompt = reinterpret_cast<ScreenElement *>(
             new PromptScreenElement(
-                AcceptPromptImage, AcceptPromptText,
+                s_s2prmpt1_bmp_800dc2a0,
+                s_accept_800dc2b0,
                 reinterpret_cast<Font *>(font2), 0xE4, 0xDC, -1, 0x104));
         screen->ScreenElementList.addItem(prompt);
     }
@@ -605,7 +628,8 @@ MultiSelectScreen *MultiSelectScreen_ctor(
     {
         ScreenElement *prompt = reinterpret_cast<ScreenElement *>(
             new PromptScreenElement(
-                BackPromptImage, BackPromptText,
+                s_s2prmpt2_bmp_800dc2b8,
+                DAT_800dc2c8,
                 reinterpret_cast<Font *>(font2), 0x14D, 0xDC, -1, 0x104));
         screen->ScreenElementList.addItem(prompt);
     }
@@ -685,7 +709,7 @@ void MultiSelectScreen_dtor(
     self->mFrontPreLoader.~FrontPreLoader();
     reinterpret_cast<Font *>(&self->mFont2)->~Font();
     reinterpret_cast<Font *>(&self->mFont1)->~Font();
-    ScreenElementList_dtor(&self->ScreenElementList, 0);
+    ScreenElementList_DestroyAbi(&self->ScreenElementList, 0);
     if (__in_chrg & 1) {
         ::CClass::operator delete(self);
     }
@@ -699,14 +723,12 @@ void MultiSelectScreen_dtor(
  * Mangled:   draw__17MultiSelectScreenii
  * Demangled: MultiSelectScreen::draw(int, int)
  *
- * @param self  Object being operated on.
  * @param x  X coordinate.
  * @param y  Y coordinate.
  */
-void MultiSelectScreen_draw(
-    MultiSelectScreen *self, int x, int y) {
-    ScreenElementList_draw(&self->ScreenElementList, x, y);
-    Sprite2 *background = self->mBackground;
+void MultiSelectScreen::draw(int x, int y) {
+    ScreenElementList.draw(x, y);
+    Sprite2 *background = mBackground;
     MultiSelectObjectVtable *vtable = background->vtable;
     vtable->drawSprite(background, 0, 0, 1);
 }
@@ -720,17 +742,16 @@ void MultiSelectScreen_draw(
  * Demangled: MultiSelectScreen::update(void)
  *            Calls menu->update(), Menu_GetPress(), menu->processPress(press), menu->draw(), then ScreenElementList update
  *
- * @param self  Object being operated on.
  */
-void MultiSelectScreen_update(MultiSelectScreen *self) {
-    VerticalMenu2 *menu = self->mMenu;
+void MultiSelectScreen::update() {
+    VerticalMenu2 *menu = mMenu;
     menu->vtable->draw(menu);
     int press = Menu_GetPress();
-    menu = self->mMenu;
+    menu = mMenu;
     menu->vtable->processPress(menu, press);
-    menu = self->mMenu;
+    menu = mMenu;
     menu->vtable->update(menu);
-    ScreenElementList_update(&self->ScreenElementList);
+    ScreenElementList.update();
 }
 
 
@@ -771,8 +792,7 @@ int MultiSelectScreen::handlePress() {
  * @return Identifier of the currently highlighted game mode.
  */
 int MultiSelectScreen::GetGameMode() {
-    MultiSelectScreen *self = this;
-    return BasicMenu_GetHighlighted(self->mMenu);
+    return reinterpret_cast<BasicMenu *>(mMenu)->getHighlighted();
 }
 
 
@@ -787,12 +807,11 @@ int MultiSelectScreen::GetGameMode() {
  * @param press  Button press code.
  */
 void MultiSelectScreen::InitEndProcess(int press) {
-    MultiSelectScreen *self = this;
     int one = 1;
     if (press == one) {
-        self->mFrontPreLoader.BeginLoad(1);
+        mFrontPreLoader.BeginLoad(1);
     }
-    self->mFinishUp = one;
+    mFinishUp = one;
 }
 
 
@@ -807,9 +826,8 @@ void MultiSelectScreen::InitEndProcess(int press) {
  * @return 0
  */
 int MultiSelectScreen::EndProcess() {
-    MultiSelectScreen *self = this;
-    if (self->mFinishUp == 0) return 0;
-    return self->mFrontPreLoader.DoneLoading();
+    if (mFinishUp == 0) return 0;
+    return mFrontPreLoader.DoneLoading();
 }
 
 
@@ -835,8 +853,10 @@ int MultiSelect_Main(int *pGameMode) {
     Db_UpdateSky();
 
     // Load the two selector fonts (%hi addresses are CSE'd into saved regs).
-    FontManager::LoadFont(MultiSelectMainFontResource);
-    FontManager::LoadFont(MultiSelectSecondFontResource);
+    FontManager::LoadFont(
+        s_mainf_fnt_800dc220);
+    FontManager::LoadFont(
+        s_s2font2_fnt_800dc22c);
 
     // Allocate and construct MultiSelectScreen
     pMultiSelectScreen =
@@ -921,8 +941,10 @@ int MultiSelect_Main(int *pGameMode) {
     }
 
     // Unload fonts
-    FontManager::UnloadFont(MultiSelectMainFontResource);
-    FontManager::UnloadFont(MultiSelectSecondFontResource);
+    FontManager::UnloadFont(
+        s_mainf_fnt_800dc220);
+    FontManager::UnloadFont(
+        s_s2font2_fnt_800dc22c);
 
     // Return -1 if the player backed out, else 0.
     if (exitPress == 2) return -1;

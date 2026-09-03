@@ -6,6 +6,6 @@
  * FILEIO.cpp. Consumers keep an absolute-address view of the small-data word
  * so their target code uses ordinary `lui`/`lw` addressing.
  */
-extern "C" int FileIO_Size __attribute__((section(".data")));
+extern int FileIO_Size __attribute__((section(".data")));
 
 #endif // FILEIOSIZE_INC_H

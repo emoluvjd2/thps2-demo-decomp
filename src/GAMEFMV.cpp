@@ -5,9 +5,11 @@
 //
 // Compiled with cc1plus (GCC 2.91.66-psx). Compiler auto-mangles symbol names.
 
+#define GAMEFMV_DEFINE_OWNER_LOCAL_DECODER_STATE
 #define GAMEFMV_OWNER_DECLARATIONS
 #include "GAMEFMV.h"
 #undef GAMEFMV_OWNER_DECLARATIONS
+#undef GAMEFMV_DEFINE_OWNER_LOCAL_DECODER_STATE
 #include "MAIN.h"
 
 typedef char GameFMV_StHEADER_size_must_be_32[
@@ -17,30 +19,13 @@ typedef char GameFMV_movie_details_size_must_be_32[
 typedef char GameFMV_cd_file_size_must_be_24[
     (sizeof(CdlFILE) == 24) ? 1 : -1];
 
-extern "C" {
-void DecDCTReset(int mode);
-void DecDCToutCallback(void (*callback)(void));
-void DecDCTin(unsigned long *data, int mode);
-void DecDCTout(unsigned long *data, int wordCount);
+#include <LIBPRESS.H>
+#include "STCDINTRFLAG.h"
 
-extern int StCdIntrFlag __attribute__((section(".data")));
-/** Distinct write view retaining the target's read/write declaration identity. */
-extern int GameFMV_StCdIntrFlagWrite asm("StCdIntrFlag")
-    __attribute__((section(".data")));
+#define GAMEFMV_DECLARE_DECODER_ADDRESS_VIEWS
+#include "GAMEFMV.h"
 
-extern unsigned int *GameFMV_VlcBuffers[2] asm("vlcBuffer");
-extern unsigned long *GameFMV_RingBuffer asm("pRingBuffer");
-}
-
-/**
- * Typed views of the generated scalar declarations used by async playback.
- * Replacing these two views with the otherwise equivalent pointer aliases
- * keeps every instruction exact but changes the original PSYQ `.extern`
- * record order. Keeping the casts here preserves a byte-identical sidecar and
- * removes the repeated integer/pointer conversions from the implementation.
- */
-#define GameFMV_AsyncRingBuffer \
-    (*reinterpret_cast<unsigned long **>(&pRingBuffer))
+/** Typed view of the generated decoder-buffer prefix. */
 #define GameFMV_AsyncVlcBuffers \
     (reinterpret_cast<unsigned int **>(&vlcBuffer))
 
@@ -133,23 +118,21 @@ static u8 indices[30] __attribute__((section(".data"))) = {
 };
 
 /** Decoder output slices allocated for the active movie. */
-extern "C" unsigned short *decodeSliceBuffer[11]
+unsigned short *decodeSliceBuffer[11]
     __attribute__((section(".data"))) = {};
 
 /**
  * Complete owner-local decoder state recorded as class-static globals by
  * MAIN.SYM.
  *
- * The public-looking declarations in the generated TU header are access views
- * used by the recovered functions.  These private definitions retain the
- * original assembly labels so GCC emits local common records and the
- * assembler resolves every same-TU reference without creating false XDEFs.
+ * Natural owner-local definitions let GCC emit the original local common
+ * records without exposing false public definitions.
  */
-static int GameFMV_CurrentDecodeBufferStorage asm("currentDecodeBuffer");
-static int GameFMV_CurrentVlcBufferStorage asm("currentVlcBuffer");
-static int GameFMV_SendVlcStorage asm("sendVLC");
-static int GameFMV_AlreadyHandledPauseStorage asm("alreadyHandledPause");
-static unsigned long *GameFMV_RingBufferStorage asm("pRingBuffer");
+static int currentDecodeBuffer;
+static int currentVlcBuffer;
+static int sendVLC;
+static int alreadyHandledPause;
+static unsigned long *pRingBuffer;
 
 // === Owner-local callback declarations ===
 static void handleLidOpen(void);
@@ -236,9 +219,9 @@ void GameFMV_PlayMovie(int track) {
         } while (i < 2);
     }
 
-    GameFMV_RingBuffer = static_cast<unsigned long *>(Mem_New(
+    pRingBuffer = static_cast<unsigned long *>(Mem_New(
         GameFMV_RingBufferSectors << 11, 1, 0));
-    if (GameFMV_RingBuffer == 0) {
+    if (pRingBuffer == 0) {
         goto FreeVlcBuffers;
     }
 
@@ -380,9 +363,9 @@ StopMovie:
     CdControlB(9, 0, 0);
 
 InsufficientMemory:
-    if (GameFMV_RingBuffer) {
-        Mem_Delete(GameFMV_RingBuffer);
-        GameFMV_RingBuffer = 0;
+    if (pRingBuffer) {
+        Mem_Delete(pRingBuffer);
+        pRingBuffer = 0;
     }
 
 FreeVlcBuffers:
@@ -497,7 +480,7 @@ void GameFMV_StartFMV(int Decoding) {
         } while (i < 2);
     }
 
-    GameFMV_AsyncRingBuffer = static_cast<unsigned long *>(
+    pRingBuffer = static_cast<unsigned long *>(
         Mem_New(GameFMV_RingBufferSectors << 11, 1, 1));
     {
         unsigned int slice_count = GameFMV_Width;
@@ -558,9 +541,9 @@ void GameFMV_StopFMV(void) {
     CdIntToPos(GameFMV_StartSector, &pos);
     CdControl(0x16, reinterpret_cast<u_char *>(&pos), 0);
 
-    if (GameFMV_AsyncRingBuffer) {
-        Mem_Delete(GameFMV_AsyncRingBuffer);
-        GameFMV_AsyncRingBuffer = 0;
+    if (pRingBuffer) {
+        Mem_Delete(pRingBuffer);
+        pRingBuffer = 0;
     }
 
     {
@@ -710,7 +693,7 @@ do_control:
 static void strInit(void) {
     DecDCTReset(0);
     DecDCToutCallback(strCallback);
-    StSetRing(GameFMV_AsyncRingBuffer, GameFMV_RingBufferSectors);
+    StSetRing(pRingBuffer, GameFMV_RingBufferSectors);
     StSetStream(GameFMV_Is24Bit, 0, -1, 0, 0);
     Redbook_XACheckSectorOnVSync = 0;
     Redbook_XAModeSet = 0;
@@ -732,9 +715,7 @@ static void strCallback(void) {
     if (GameFMV_Is24Bit) {
         if (StCdIntrFlag) {
             StCdInterrupt();
-            // The second view preserves the target object's distinct read and
-            // write symbol records for this interrupt-owned SDK flag.
-            GameFMV_StCdIntrFlagWrite = 0;
+            StCdIntrFlag = 0;
         }
     }
 

@@ -22,8 +22,7 @@ struct TextMenuWrapper;
 #include "IMAGEBASE.h"
 
 /** Packed/sliced image storage shared by front-end sprites. */
-struct MainMenuSlicedImage {
-    struct Image Image;
+struct SlicedImage2 : Image {
     void *SliceTab;
     short W;
     short H;
@@ -38,9 +37,7 @@ struct MainMenuSlicedImage {
 };
 
 /** Complete Sprite2 storage allocated by the menu owner. */
-struct Sprite2 {
-    struct MainMenuSlicedImage SlicedImage2;
-
+struct Sprite2 : SlicedImage2 {
     static void *operator new(unsigned int size) throw()
     {
         return ::CClass::operator new(size);
@@ -50,9 +47,11 @@ struct Sprite2 {
 };
 
 /** Rotatable sprite whose final byte selects its aspect behavior. */
-struct RotateSprite {
-    struct Sprite2 Sprite2;
+struct RotateSprite : Sprite2 {
     unsigned char AspectType;
+
+    /** Build a rotatable sprite from a bitmap file. */
+    RotateSprite(char *filename, int pack, int sliceWidth, int sliceHeight);
 };
 
 #include "PROMPTSCREENELEMENT.h"
@@ -82,7 +81,7 @@ struct MainMenuSpriteDispatchTable {
 static inline MainMenuSpriteDispatchTable *GetSpriteDispatch(Sprite2 *sprite)
 {
     return (MainMenuSpriteDispatchTable *)
-        sprite->SlicedImage2.Image.CClass.vtable;
+        sprite->CClass.vtable;
 }
 
 /** Read the shared sprite dispatch prefix from a RotateSprite object. */
@@ -90,7 +89,7 @@ static inline MainMenuSpriteDispatchTable *GetSpriteDispatch(
     RotateSprite *sprite)
 {
     return (MainMenuSpriteDispatchTable *)
-        sprite->Sprite2.SlicedImage2.Image.CClass.vtable;
+        sprite->CClass.vtable;
 }
 
 /** Rotating menu-wheel element and selection state. */
@@ -106,6 +105,10 @@ struct WheelElementList {
         unsigned char SlotByte;
     };
 
+    /** Advance wheel input and child screen elements. */
+    void update();
+    /** Draw the wheel and its child screen elements. */
+    void draw(int x, int y);
     ~WheelElementList();
     /** Releases wheel-list storage through the original CClass allocator. */
     static void operator delete(void *p) { ::CClass::operator delete(p); }
@@ -128,6 +131,10 @@ struct MainMenuScreen {
     int EndProcess();
     /** Accept the current wheel selection when input is triggered. */
     int isDone(int *returnValue);
+    /** Draw the menu elements and their full-screen background. */
+    void draw();
+    /** Update every child element in the main-menu screen. */
+    void update();
     ~MainMenuScreen();
     /** Releases main-menu storage through the original CClass allocator. */
     static void operator delete(void *p) { ::CClass::operator delete(p); }
@@ -170,7 +177,7 @@ typedef char mainmenu_screen_size_must_be_332[
 typedef char mainmenu_image_size_must_be_28[
     (sizeof(Image) == 28) ? 1 : -1];
 typedef char mainmenu_sliced_image_size_must_be_60[
-    (sizeof(MainMenuSlicedImage) == 60) ? 1 : -1];
+    (sizeof(SlicedImage2) == 60) ? 1 : -1];
 typedef char mainmenu_sprite_size_must_be_60[
     (sizeof(Sprite2) == 60) ? 1 : -1];
 typedef char mainmenu_rotate_sprite_size_must_be_64[
@@ -238,48 +245,27 @@ static inline T *AllocateCClass()
     return (T *)::CClass::operator new(sizeof(T));
 }
 
-extern "C" ScreenElementList *ScreenElementList_ctor(
-    ScreenElementList *, int, int, int, int)
-    asm("__17ScreenElementListiiii");
-extern "C" void ScreenElementList_Update(ScreenElementList *)
-    asm("update__17ScreenElementList");
-extern "C" void ScreenElementList_Draw(ScreenElementList *, int, int)
-    asm("draw__17ScreenElementListii");
-extern "C" void ScreenElementList_Destroy(ScreenElementList *, int)
-    asm("_._17ScreenElementList");
-extern "C" int ScreenElement_Width(ScreenElement *)
-    asm("width__13ScreenElement");
-
-extern "C" SpriteScreenElement *SpriteScreenElement_ctor(
-    SpriteScreenElement *, char *, int, int, int, int, int, int)
-    asm("__19SpriteScreenElementPciiiiii");
-extern "C" RotateSprite *RotateSprite_ctor(
-    RotateSprite *, char *, int, int, int)
-    asm("__12RotateSpritePciii");
+#define SCREENTOOLS_DECLARE_SCREEN_ELEMENT_LIST_CONSTRUCTOR
+#include "SCREENTOOLS.h"
+#define SCREENTOOLS_DECLARE_SCREEN_ELEMENT_LIST_DESTRUCTOR
+#include "SCREENTOOLS.h"
+#define SCREENTOOLS_DECLARE_SPRITE_SCREEN_ELEMENT_CONSTRUCTOR
+#include "SCREENTOOLS.h"
+#include "IMAGE.h"
 
 #include "DB.h"
 #include "SPOOL.h"
 #include "PAL.h"
 #include "FRONTEND2.h"
 
-extern "C" MainMenuScreen *MainMenuScreen_ctor(MainMenuScreen *)
-    asm("__14MainMenuScreen");
-extern "C" void MainMenuScreen_Draw(MainMenuScreen *)
-    asm("draw__14MainMenuScreen");
-extern "C" void MainMenuScreen_Update(MainMenuScreen *)
-    asm("update__14MainMenuScreen");
-extern "C" WheelElementList *WheelElementList_ctor(
-    WheelElementList *, int, int, int, int)
-    asm("__16WheelElementListiiii");
-extern "C" void WheelElementList_Update(WheelElementList *)
-    asm("update__16WheelElementList");
-extern "C" void WheelElementList_Draw(WheelElementList *, int, int)
-    asm("draw__16WheelElementListii");
+#define FRONTSCREENS_DECLARE_MAIN_MENU_CONSTRUCTOR_ABI
+#include "FRONTSCREENS.h"
+#define MainMenuScreen_ctor MainMenuConstructorABI::__14MainMenuScreen
+extern "C" WheelElementList *__16WheelElementListiiii(
+    WheelElementList *, int, int, int, int);
 
-extern "C" void MainMenuScreen_destructor_slot(MainMenuScreen *, int)
-    asm("_._14MainMenuScreen");
-extern "C" void WheelElementList_destructor_slot(WheelElementList *, int)
-    asm("_._16WheelElementList");
+#define FRONTSCREENS_DECLARE_MAIN_MENU_DESTRUCTOR_ABI
+#include "FRONTSCREENS.h"
 
 /**
  * MAINMENU's screen-element dispatch tables in original read-only order.
@@ -287,16 +273,15 @@ extern "C" void WheelElementList_destructor_slot(WheelElementList *, int)
  * Both classes override destruction and update. WheelElementList also
  * overrides draw, while MainMenuScreen retains ScreenElementList::draw.
  */
-extern "C" {
 WheelElementListVtable __vt_16WheelElementList
     __attribute__((section(".rdata"), aligned(8))) = {
         0,
         0,
         &WheelElementList_destructor_slot,
-        &WheelElementList_Update,
-        &WheelElementList_Draw,
-        &ScreenElement_Width,
-        &ScreenElement_Refresh,
+        (void (*)(WheelElementList *))&WheelElementList::update,
+        (void (*)(WheelElementList *, int, int))&WheelElementList::draw,
+        (int (*)(ScreenElement *))&ScreenElement::width,
+        (void (*)(ScreenElement *))&ScreenElement::refresh,
 };
 
 MainMenuScreenVtable __vt_14MainMenuScreen
@@ -304,15 +289,13 @@ MainMenuScreenVtable __vt_14MainMenuScreen
         0,
         0,
         &MainMenuScreen_destructor_slot,
-        &MainMenuScreen_Update,
-        &ScreenElementList_Draw,
-        &ScreenElement_Width,
-        &ScreenElement_Refresh,
+        (void (*)(MainMenuScreen *))&MainMenuScreen::update,
+        (void (*)(ScreenElementList *, int, int))&ScreenElementList::draw,
+        (int (*)(ScreenElement *))&ScreenElement::width,
+        (void (*)(ScreenElement *))&ScreenElement::refresh,
 };
-}
 
 /** MAINMENU's initialized small-data contribution in original order. */
-extern "C" {
 u8 MainMenu_LastSelection
     __attribute__((section(".sdata"), aligned(4))) = 2;
 static char EndProcess_str[]
@@ -335,10 +318,9 @@ static char WheelBmpName[]
     __attribute__((section(".sdata"), aligned(4))) = "s2wheel.bmp";
 static char WheelItemNames[]
     __attribute__((section(".sdata"), aligned(4))) = "s2arrow3.bmp";
-}
 
 /** Menu-wheel angle and result mapping at its target `.data` address. */
-extern "C" int RotMap[7][2]
+int RotMap[7][2]
     __attribute__((section(".data"), aligned(4))) = {
         {0x0000, 0x27},
         {0x0D6D, -1},
@@ -406,7 +388,7 @@ int MainMenu_Main(void)
             break;
         }
 
-        MainMenuScreen_Draw(pScreen);
+        pScreen->draw();
         DrawSync(0);
         Pause(1);
 
@@ -439,10 +421,9 @@ int MainMenu_Main(void)
  */
 void MainMenuScreen::InitEndProcess(int return_value)
 {
-    MainMenuScreen *self = this;
     if ((unsigned int)(return_value - 0x20) < 2 || return_value == 0x28)
     {
-        FrontPreLoaderFromStorage(&self->mFrontPreLoader)->BeginLoad(1);
+        FrontPreLoaderFromStorage(&mFrontPreLoader)->BeginLoad(1);
     }
 }
 
@@ -455,18 +436,17 @@ void MainMenuScreen::InitEndProcess(int return_value)
  */
 int MainMenuScreen::EndProcess()
 {
-    MainMenuScreen *self = this;
     int result;
-    if (self->FinishUp == 0)
+    if (FinishUp == 0)
     {
         result = 0;
     }
     else
     {
-        FontFromStorage(&self->TheFont)->draw(
+        FontFromStorage(&TheFont)->draw(
             256, 129, EndProcess_str, 0);
         result = FrontPreLoaderFromStorage(
-            &self->mFrontPreLoader)->DoneLoading();
+            &mFrontPreLoader)->DoneLoading();
     }
     return result;
 }
@@ -481,7 +461,7 @@ int MainMenuScreen::EndProcess()
  */
 MainMenuScreen *MainMenuScreen_ctor(MainMenuScreen *self)
 {
-    ScreenElementList_ctor(&self->ScreenElementList, 0, 0, -1, -1);
+    __17ScreenElementListiiii(&self->ScreenElementList, 0, 0, -1, -1);
     self->ScreenElementList.ScreenElement.CClass.vtable =
         (int *)&__vt_14MainMenuScreen;
 
@@ -499,7 +479,7 @@ MainMenuScreen *MainMenuScreen_ctor(MainMenuScreen *self)
     WheelElementList *wheel = AllocateCClass<WheelElementList>();
     if (wheel != 0)
     {
-        wheel = WheelElementList_ctor(wheel, 255, 129, -110, 128);
+        wheel = __16WheelElementListiiii(wheel, 255, 129, -110, 128);
     }
     self->mWheel = wheel;
     self->ScreenElementList.addItem(
@@ -566,7 +546,7 @@ MainMenuScreen::~MainMenuScreen()
     FontFromStorage(&mFont1)->~Font();
     FontFromStorage(&TheFont)->~Font();
     FrontPreLoaderFromStorage(&mFrontPreLoader)->~FrontPreLoader();
-    ScreenElementList_Destroy(&ScreenElementList, 0);
+    ScreenElementList_DestroyAbi(&ScreenElementList, 0);
 }
 
 /**
@@ -574,12 +554,11 @@ MainMenuScreen::~MainMenuScreen()
  *
  * Original symbol: `draw__14MainMenuScreen` at 0x800825A0.
  *
- * @param self Main-menu screen to draw.
  */
-void MainMenuScreen_Draw(MainMenuScreen *self)
+void MainMenuScreen::draw()
 {
-    ScreenElementList_Draw(&self->ScreenElementList, 0, 0);
-    Sprite2 *background = self->mBackground;
+    ScreenElementList.draw(0, 0);
+    Sprite2 *background = mBackground;
     GetSpriteDispatch(background)->Draw(background, 0, 0, 1);
 }
 
@@ -588,11 +567,10 @@ void MainMenuScreen_Draw(MainMenuScreen *self)
  *
  * Original symbol: `update__14MainMenuScreen` at 0x800825EC.
  *
- * @param self Main-menu screen to update.
  */
-void MainMenuScreen_Update(MainMenuScreen *self)
+void MainMenuScreen::update()
 {
-    ScreenElementList_Update(&self->ScreenElementList);
+    ScreenElementList.update();
 }
 
 /**
@@ -605,7 +583,6 @@ void MainMenuScreen_Update(MainMenuScreen *self)
  */
 int MainMenuScreen::isDone(int *return_value)
 {
-    MainMenuScreen *self = this;
     SControl *pad = Pad;
     if (pad->X.Triggered == 0)
     {
@@ -617,7 +594,7 @@ int MainMenuScreen::isDone(int *return_value)
     pad->X.Triggered = 0;
     pad->Start.Triggered = 0;
 
-    WheelElementList *wheel = self->mWheel;
+    WheelElementList *wheel = mWheel;
     int sel = wheel->Slot;
     int key = RotMap[sel][1];
     *return_value = key;
@@ -628,7 +605,7 @@ int MainMenuScreen::isDone(int *return_value)
         return 0;
     }
 
-    self->FinishUp = (void *)1;
+    FinishUp = (void *)1;
     SFX_PlayX(0x91, 0x2000, 0);
     return 1;
 }
@@ -645,10 +622,10 @@ int MainMenuScreen::isDone(int *return_value)
  * @param screenY  Screen-space Y coordinate.
  * @return The constructed wheel element list.
  */
-extern "C" WheelElementList *WheelElementList_ctor(
+WheelElementList *__16WheelElementListiiii(
     WheelElementList *self, int homeX, int homeY, int screenX, int screenY)
 {
-    ScreenElementList_ctor(
+    __17ScreenElementListiiii(
         &self->ScreenElementList, homeX, homeY, screenX, screenY);
     self->ScreenElementList.ScreenElement.CClass.vtable =
         (int *)&__vt_16WheelElementList;
@@ -657,17 +634,18 @@ extern "C" WheelElementList *WheelElementList_ctor(
     RotateSprite *wheelElem = AllocateCClass<RotateSprite>();
     if (wheelElem != 0)
     {
-        wheelElem = RotateSprite_ctor(wheelElem, WheelBmpName, 1, 0, 0);
+        wheelElem = ::new (wheelElem) RotateSprite(
+            WheelBmpName, 1, 0, 0);
     }
     self->Wheel = wheelElem;
-    wheelElem->Sprite2.SlicedImage2.Image.JustX = 1;
-    self->Wheel->Sprite2.SlicedImage2.Image.JustY = 1;
+    wheelElem->JustX = 1;
+    self->Wheel->JustY = 1;
 
     // Create the fixed arrow overlay.
     SpriteScreenElement *item = AllocateCClass<SpriteScreenElement>();
     if (item != 0)
     {
-        item = SpriteScreenElement_ctor(
+        item = __19SpriteScreenElementPciiiiii(
             item, WheelItemNames, 1, -81, 0, 0, 1, 1);
     }
     self->ScreenElementList.addItem(&item->ScreenElement);
@@ -698,7 +676,7 @@ WheelElementList::~WheelElementList()
     {
         GetSpriteDispatch(wheel)->Destroy(wheel, 3);
     }
-    ScreenElementList_Destroy(&ScreenElementList, 0);
+    ScreenElementList_DestroyAbi(&ScreenElementList, 0);
 }
 
 /**
@@ -706,9 +684,8 @@ WheelElementList::~WheelElementList()
  *
  * Original symbol: `update__16WheelElementList` at 0x8008281C.
  *
- * @param self Wheel element list to update.
  */
-extern "C" void WheelElementList_Update(WheelElementList *self)
+void WheelElementList::update()
 {
     SControl *pad = Pad;
 
@@ -718,23 +695,23 @@ extern "C" void WheelElementList_Update(WheelElementList *self)
         SFX_PlayX(0xE9, 0x2000, 0);
         pad->Left.Triggered = 0;
 
-        int idx = self->Slot;
-        int maxItems = self->NumSlots;
+        int idx = Slot;
+        int maxItems = NumSlots;
         idx = idx + 1;
-        self->Slot = idx;
+        Slot = idx;
         if (idx >= maxItems)
         {
-            self->Slot = 0;
+            Slot = 0;
         }
 
-        int newIdx = self->Slot;
+        int newIdx = Slot;
         int targetRot = RotMap[newIdx][0];
-        int curRot = self->CurrentRot;
+        int curRot = CurrentRot;
         int diff = targetRot - curRot;
-        self->TargetRot = targetRot;
+        TargetRot = targetRot;
         if (diff > 0)
         {
-            self->TargetRot = targetRot - 0x1000;
+            TargetRot = targetRot - 0x1000;
         }
     }
 
@@ -747,72 +724,72 @@ extern "C" void WheelElementList_Update(WheelElementList *self)
         SFX_PlayX(0xE9, 0x2000, 0);
         pad->Right.Triggered = 0;
 
-        int idx = self->Slot;
+        int idx = Slot;
         idx = idx - 1;
-        self->Slot = idx;
+        Slot = idx;
         if (idx < 0)
         {
-            int maxItems = self->NumSlots;
-            self->Slot = maxItems - 1;
+            int maxItems = NumSlots;
+            Slot = maxItems - 1;
         }
 
-        int newIdx = self->Slot;
+        int newIdx = Slot;
         int targetRot = RotMap[newIdx][0];
-        int curRot = self->CurrentRot;
+        int curRot = CurrentRot;
         int diff = targetRot - curRot;
-        self->TargetRot = targetRot;
+        TargetRot = targetRot;
         if (diff < 0)
         {
-            self->TargetRot = targetRot + 0x1000;
+            TargetRot = targetRot + 0x1000;
         }
     }
 
     // Smooth scroll towards target
-    int target = self->TargetRot;
-    int current = self->CurrentRot;
+    int target = TargetRot;
+    int current = CurrentRot;
     int diff = target - current;
 
     if (diff < -0x258)
     {
-        self->CurrentRot = current - 0x80;
+        CurrentRot = current - 0x80;
     }
     else if (diff >= 0x259)
     {
-        self->CurrentRot = current + 0x80;
+        CurrentRot = current + 0x80;
     }
     else if (diff < -0x40)
     {
-        self->CurrentRot = current - 0x40;
+        CurrentRot = current - 0x40;
     }
     else if (diff >= 0x41)
     {
-        self->CurrentRot = current + 0x40;
+        CurrentRot = current + 0x40;
     }
     else
     {
-        self->CurrentRot = target;
+        CurrentRot = target;
     }
 
     // Wrap around
-    current = self->CurrentRot;
+    current = CurrentRot;
     if (current >= 0x1000)
     {
         int wrapped = current - 0x1000;
-        self->CurrentRot = wrapped;
-        int t = self->TargetRot;
-        self->TargetRot = t - 0x1000;
+        CurrentRot = wrapped;
+        int t = TargetRot;
+        TargetRot = t - 0x1000;
     }
 
-    current = self->CurrentRot;
+    current = CurrentRot;
     if (current < 0)
     {
         int wrapped = current + 0x1000;
-        self->CurrentRot = wrapped;
-        int t = self->TargetRot;
-        self->TargetRot = t + 0x1000;
+        CurrentRot = wrapped;
+        int t = TargetRot;
+        TargetRot = t + 0x1000;
     }
 
-    ScreenElementList_Update(&self->ScreenElementList);
+    ScreenElementList.update();
 }
 
 /**
@@ -820,18 +797,16 @@ extern "C" void WheelElementList_Update(WheelElementList *self)
  *
  * Original symbol: `draw__16WheelElementListii` at 0x800829E8.
  *
- * @param self Wheel element list to draw.
  * @param x  X coordinate.
  * @param y  Y coordinate.
  */
-extern "C" void WheelElementList_Draw(
-    WheelElementList *self, int x, int y)
+void WheelElementList::draw(int x, int y)
 {
-    ScreenElementList_Draw(&self->ScreenElementList, x, y);
-    RotateSprite *wheel = self->Wheel;
-    int screenX = self->ScreenElementList.ScreenElement.mScreenX;
-    int screenY = self->ScreenElementList.ScreenElement.mScreenY;
-    int rotation = self->CurrentRot;
+    ScreenElementList.draw(x, y);
+    RotateSprite *wheel = Wheel;
+    int screenX = ScreenElementList.ScreenElement.mScreenX;
+    int screenY = ScreenElementList.ScreenElement.mScreenY;
+    int rotation = CurrentRot;
     GetSpriteDispatch(wheel)->Draw(
         wheel, screenX + x, screenY + y, rotation);
 }

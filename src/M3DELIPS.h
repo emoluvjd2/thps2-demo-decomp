@@ -19,3 +19,9 @@ void M3dElips_RenderEllipsoid(
     int OTPushback, Texture *pTex);
 
 #endif // M3DELIPS_INC_H
+
+#ifdef M3DELIPS_DECLARE_MIN_DOT_PROD_VIEW
+/** Four-byte external-common view used by the shadow-lighting threshold. */
+extern int M3dElips_MinDotProd;
+#undef M3DELIPS_DECLARE_MIN_DOT_PROD_VIEW
+#endif

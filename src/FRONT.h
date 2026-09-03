@@ -25,6 +25,12 @@ enum ELoadAction
     LOAD_GAME = 2,
 };
 
+/** Memory-card payload currently selected by the front end. */
+extern "C" ELoadAction GLoadAction;
+
+/** Whether the active replay is being streamed to disk. */
+extern "C" int VideoToDisk;
+
 /** Memory-card operation selected by the front end. */
 enum ESaveAction
 {
@@ -44,20 +50,11 @@ void Front_ClearScreen(void);
 /** Wait for the front-end display buffers to reach a synchronized state. */
 void FlickerSync(void);
 
-/** Copy the active preferences into one save-game preference record. */
-void Front_SavePreferences(SPreferences &preferences);
-
 /** Apply one saved preference record to the active front end. */
 void Front_SetPreferences(const SPreferences &preferences);
 
 /** Initialize the front-end menu and display state. */
 void Front_Init(void);
-
-/** Draw the standard go-back prompt. */
-void Front_PrintGoBack(void);
-
-/** Draw the standard select prompt. */
-void Front_PrintSelect(void);
 
 /** Draw the standard go-back and select prompts. */
 void Front_PrintGoBackSelect(void);
@@ -86,14 +83,8 @@ void Front_SwitchOnVideoScreen(void);
 /** Advance the active front-end state by one frame. */
 void Front_Update(void);
 
-/** Find a level entry by its trigger filename. */
-SLevel *Front_FindLevel(char *triggerName);
-
 /** Snapshot the current gameplay and preference state. */
 void Front_SaveGameState(void);
-
-/** Calculate the checksum stored with one saved game. */
-unsigned int Front_CalculateGameChecksum(SSaveGame &game);
 
 /** Restore gameplay and preference state from one saved game. */
 void Front_LoadGame(SSaveGame *game);
@@ -137,3 +128,31 @@ void Front_InitMemCardMenus(int resolution, EMemCardState startState,
 void Front_MemCardDisplay(void);
 
 #endif // FRONT_MEMCARD_API && !FRONT_MEMCARD_API_EMITTED
+
+#ifdef FRONT_DECLARE_DEFAULT_GAME_STATE_VIEW
+/** Read-only owner view of FRONT's target-proven default save payload. */
+extern SSaveGame DefaultGameState;
+
+#undef FRONT_DECLARE_DEFAULT_GAME_STATE_VIEW
+#endif
+
+#ifdef FRONT_DECLARE_CMENU_VTABLE_ADDRESS_VIEWS
+#ifndef FRONT_CMENU_VTABLE_ABI_TYPE
+#error FRONT_DECLARE_CMENU_VTABLE_ADDRESS_VIEWS requires a vtable type
+#endif
+
+/** Typed owner view of FRONT's CMenu virtual table. */
+namespace FrontCMenuVTableOwner
+{
+extern "C" FRONT_CMENU_VTABLE_ABI_TYPE __vt_5CMenu;
+}
+
+/** Integer owner view preserving FRONT's constructor/destructor arithmetic. */
+namespace FrontCMenuVTableAddressView
+{
+extern "C" int __vt_5CMenu;
+}
+
+#undef FRONT_CMENU_VTABLE_ABI_TYPE
+#undef FRONT_DECLARE_CMENU_VTABLE_ADDRESS_VIEWS
+#endif

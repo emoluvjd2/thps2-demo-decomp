@@ -78,10 +78,6 @@ void TrickTips_Update(void);
 /** Draw the current trick-tip text. */
 void TrickTips_Display(void);
 
-// === Variables (gp-relative in this TU) ===
-extern "C" char *TEXT_REMEMBER;       // 0x800DB588
-extern "C" char *TEXT_TIP;       // 0x800DB578
-
 // === Variables (absolute in this TU) ===
 #define DEMOTIMER_ABSOLUTE_DECLARATION
 #include "DEMOTIMER.h"
@@ -90,3 +86,11 @@ extern "C" char *TEXT_TIP;       // 0x800DB578
 #define VIDEOINFO_DECLARE_GVINFO2
 #include "VIDEOINFO.h"
 #endif // TRICKTIPS_INC_H
+
+#ifdef TRICKTIPS_DECLARE_MONITOR_VTABLE_ADDRESSES
+/** Scalar address view of the monitor's destruction-phase vtable. */
+extern int __vt_16CTrickTipMonitor;
+/** Scalar address view of the monitor's complete-object vtable. */
+extern int __vt_16CTrickTipMonitor_complete;
+#undef TRICKTIPS_DECLARE_MONITOR_VTABLE_ADDRESSES
+#endif

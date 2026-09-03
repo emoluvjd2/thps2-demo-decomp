@@ -74,12 +74,6 @@ static inline int *M3dInit_GetPixelAspectYStorage()
 #include "M3D.h"
 #undef M3D_VERTEX_WIBBLE_LAYOUTS
 
-/** The shared vertex scratch buffer is interpreted in either 8-byte form. */
-union M3dInitVertexBufferEntry {
-    SProjectedVertex Projected;
-    SRotatedVertex Rotated;
-};
-
 // The target advances a cursor based at vAmpPhase, so the U phase is the
 // preceding byte.  Direct STexWibVertInfo fields regress this function by 76
 // real instructions and one relocation; keep the proven interior-base shape
@@ -105,12 +99,14 @@ static inline STexWibItemInfo *M3dInit_GetNextWibItem(
     return reinterpret_cast<STexWibItemInfo *>(pTexWibVertInfo);
 }
 
-extern M3dInitVertexBufferEntry Vertices[];
+#define VERTICES_CONSUMER_DECLARATION
+#include "VERTICES.h"
 /** Shared 1024-entry depth-scaled sine table. */
 #define WIBBLETABLES_CONSUMER_DECLARATION
 #include "WIBBLETABLES.h"
 #include "RCOSSIN.h"
-extern int GBoardPart, GWheel1Part, GWheel2Part;
+#define M3DINIT_DECLARE_BOARD_WHEEL_PARTS
+#include "M3DINIT.h"
 /**
  * Absolute-address views of globals physically owned by M3D's small-data
  * contribution.  Without these per-TU addressing attributes, InitAtStart,
@@ -122,7 +118,6 @@ extern int GBoardPart, GWheel1Part, GWheel2Part;
 #define M3DINITSTATE_ABSOLUTE_DECLARATION
 #define M3DINITSTATE_DECLARE_DEFAULT_LOD_DISTANCE
 #include "M3DINITSTATE.h"
-#define M3DCOLOURSTATE_PLAIN_LINKAGE
 #define M3DCOLOURSTATE_DECLARE_FADE_COLOUR
 #include "M3DCOLOURSTATE.h"
 #include "PROJECTEDVERTICES.h"
@@ -208,7 +203,7 @@ typedef char M3dInit_Texture_size_must_be_40[(sizeof(Texture) == 40) ? 1 : -1];
 typedef char M3dInit_Face_size_must_be_32[
     (sizeof(M3dInitFace) == 32) ? 1 : -1];
 typedef char M3dInit_VertexBufferEntry_size_must_be_8[
-    (sizeof(M3dInitVertexBufferEntry) == 8) ? 1 : -1];
+    (sizeof(SVertex) == 8) ? 1 : -1];
 
 /** Previous fog maximum retained while camera interpolation is active. */
 int LastDpqMax __attribute__((section(".sdata"))) = 0;
@@ -229,8 +224,8 @@ int LastDpqShift __attribute__((section(".sdata"))) = 0;
  * WibbleTables receives 16 amplitude rows of 64 sine samples each.
  */
 void M3dInit_InitAtStart(void) {
-    ProjectedVertices = &Vertices[0].Projected;
-    RotatedVertices = &Vertices[400].Rotated;
+    ProjectedVertices = reinterpret_cast<SProjectedVertex *>(&Vertices[0]);
+    RotatedVertices = reinterpret_cast<SRotatedVertex *>(&Vertices[400]);
     M3dInit_SetResolution(512, 240);
     M3dInit_SetFoggingParams(0, 6000, 2048);
 

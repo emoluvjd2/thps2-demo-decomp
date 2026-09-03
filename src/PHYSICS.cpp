@@ -8,11 +8,6 @@
 #include "PHYSICS.h"
 #undef PHYSICS_OWNER_DECLARATIONS
 
-#ifdef __cplusplus
-extern "C"
-{
-#endif
-
 // Primitive types
 typedef unsigned char u8;
 typedef unsigned short u16;
@@ -30,6 +25,9 @@ typedef short undefined2;
 typedef int undefined4;
 typedef unsigned long ulong;
 typedef unsigned char undefined3[3];
+
+/** Return caller-owned storage for an ordinary placement construction. */
+inline void *operator new(unsigned int, void *storage) { return storage; }
 
 // Game vector types
 struct CBruce;
@@ -60,7 +58,12 @@ struct CSVector
 #include "CFRICTION.h"
 
 // Additional shared forward declarations
-struct CBit;
+/** Narrow natural interface to the transient-bit allocator owned by BIT. */
+struct CBit
+{
+    /** Allocate zero-initialized storage from the transient-bit heap. */
+    static void *operator new(unsigned int size);
+};
 struct CGlow;
 struct CSpecialDisplay;
 struct CFlatBit;
@@ -95,10 +98,6 @@ struct STrickQueue
 };
 
 struct SGapTrick;
-
-#ifdef __cplusplus
-}
-#endif
 
 #include "M3D.h"
 #include "PANEL.h"
@@ -184,10 +183,25 @@ struct CBitVelocityPhysicsOwner {
 typedef char CBitVelocityPhysicsOwner_size_must_be_48[
     (sizeof(CBitVelocityPhysicsOwner) == 48) ? 1 : -1];
 
+/** Exact spark layout through the velocity field used by terrain effects. */
+struct CSpark {
+    unsigned char _padToVelocity[36];
+    CVector mVel;
+    unsigned char _opaqueTail[92 - 48];
+
+    /** Construct one transient spark. */
+    CSpark(CVector &position, int velocity, int gravity, int life);
+};
+
+typedef char Physics_CSpark_size_must_be_92[
+    (sizeof(CSpark) == 92) ? 1 : -1];
+
 #include "CTRICK.h"
 
 /** Owner-local panel slice containing the fields read when a trick lands. */
 struct CPanelData {
+    /** Rebuild the three-line message for the current trick chain. */
+    void TrickMessageRefresh();
     /** Queue a trick and update its spin, stance, and lock state. */
     void Trick(char *name, int points, int lock, int depreciate);
     /** Calculate the current trick-chain score and combo multiplier. */
@@ -648,26 +662,162 @@ struct CBruce : CSuperPhysicsNatural {
     int Get180s();
     /** Finalize the current trick sequence after landing. */
     void Trick_Land();
+    /** Clear this skater's recent-event history. */
+    void History_Reset();
+    /** Hide this skater's board and wheel subobjects. */
+    void BoardOff();
+    /** Show this skater's board and wheel subobjects. */
+    void BoardOn();
+    /** Advance all per-frame skater physics state. */
+    void DoPhysics();
+    /** Save and temporarily adjust this skater's render transform. */
+    void TempTransform();
+    /** Restore this skater's saved render transform. */
+    void TempRestore();
+    /** Drive one controller vibration actuator for this skater. */
+    void Vibrate(int time, int motor, int value);
+    /** Apply deferred orientation flips before starting a new animation. */
+    void MaybeFlipAnimationTransition();
+    /** Start one animation from its first frame. */
+    void Debug_RunAnim(int x, int line);
+    /** Start one animation from a selected frame. */
+    void Debug_RunAnim1(int x, int y, int line);
+    /** Play one animation over a selected frame range. */
+    void Debug_RunAnim2(int x, int y, int z, int line);
+    /** Play one animation with an explicit final control argument. */
+    void Debug_RunAnim3(int x, int y, int z, int zz, int line);
     void Bail(int bailNumber, ELimitBailVel limitVelocity);
+    /** Darken the last trick object according to the active combo score. */
+    void FrigDarkenObject();
+    /** Preserve the empty rail-trick hook and its compiler-emitted frame. */
+    void TrickObRail();
+    /** Begin a hand-plant on the pending rail contact. */
+    void StartHandPlant();
+    /** Begin grinding on the pending rail contact. */
+    void StartGrind();
+    /** Resolve pending rail adhesion, hand-plants, grinds, and bail state. */
+    void HandleStickToRail();
+    /** Bail when a landing cannot complete the current trick safely. */
+    void HandleBailOnLanding(int line);
+    /** Resolve a nearly sideways landing against the surface plane. */
+    void HandleBailPerpendicular(SVECTOR normal);
+    /** Record a transition in the button-event ring. */
+    void ButtonRecord(unsigned char button, unsigned char pressed);
+    /** Find the previous pressed event in a time window. */
     int GetPreviousPressedEvent(int event, int skip, int time, int top);
+    /** Resolve the current digital and analog direction. */
     int GetDirection();
+    /** Clear the latest matching transition from the button-event ring. */
     void ButtonRemoveLast(unsigned char button, unsigned char pressed);
+    /** Record the current state of every gameplay button. */
+    void UpdateButtons();
+    /** Add a trick request to the pending trick queue. */
     void QueueTrick(short *trick, int button, int eventTime);
+    /** Process the oldest pending trick request. */
+    void UpdateQueue();
+    /** Start the trick script addressed by one trick-table entry. */
+    void TriggerTrick(short *pTrick);
+    /** Start the grind trick selected by its table index. */
+    void TriggerTrick(int Trick);
+    /** Report whether the queued action button remains held. */
+    int ActionButtonHeld();
+    /** Resolve one relative or absolute script animation frame. */
+    short GetScriptFrame(int frame);
+    /** Advance the active animation script until it requests a wait. */
+    void UpdateScript();
+    /** Update button history, trick queues, and the active trick script. */
+    void HandleTricksNew();
     void MaybeTriggerTrick();
     /** Apply bail-state velocity constraints and heavy friction. */
     void HandleBailStates();
+    /** Resolve collisions against the other active skater. */
+    void HandlePlayerCollisions();
+    /** Clamp and damp the final per-frame velocity. */
+    void LimitFinalSpeed();
+    /** Probe the frame's movement segment for trigger zones. */
+    void CheckForTriggers();
+    /** Dispatch movement for the current physics state. */
+    void HandlePhysicsStates();
+    /** Apply braking input and braking-state transitions. */
+    void HandleBraking();
     /** Update the skater while a hand-plant animation is active. */
     void DoHandPlantPhysics();
     /** Apply grounded movement, collision, and friction behavior. */
     void DoOnGroundPhysics();
     /** Advance the skater along the active grind rail. */
     void DoOnRailPhysics();
+    /** Bail when leaning too far into a surface normal. */
+    void HandleLeaningBail(SVECTOR normal);
+    /** Resolve an airborne collision against an air polygon. */
+    void HitAirPoly(SLineInfo &lineInfo);
+    /** Start a manual when the recent input sequence permits it. */
+    void MaybeManual(int time, int fromGround);
+    /** Advance airborne movement and collision behavior. */
+    void DoInAirPhysics();
+    /** Apply the launch velocity and force for a foot plant. */
+    void DoFootPlantPhysics();
+    /** Advance movement along the current wall-ride face. */
+    void DoWallRidePhysics();
     /** Apply kick input and the kick-animation impulse. */
     void HandleKick();
+    /** Leave the current ground contact and enter airborne physics. */
+    void SkateOffGround();
     /** Process jump charging, release, and airborne launch behavior. */
     void HandleJump();
+    /** Select and interpolate the current lean-animation frame. */
+    void CalcAnimLeanFrame();
+    /** Update steering, spins, lean, and grind pitch for this frame. */
+    void HandleSpin();
+    /** End the current run when its play timer expires. */
+    void HandleTimer();
+    /** Update the active flip angle and remaining half-turn count. */
+    void HandleFlips();
+    /** Maintain the skater's looping movement sounds. */
+    void HandleContinuousSounds();
+    /** Play the one-shot truck squeak at the end of a lean animation. */
+    void HandleTruckSqueakSound();
+    /** Play the one-shot sound for leaving the current rail material. */
+    void HandleGrindOffSound();
+    /** Rebuild the rail-aligned right and up basis vectors. */
+    void AlignHeadingOnRail();
+    /** Emit the active rail's grind-spark burst. */
+    void CreateRailSparks();
+    /** Add held-trick score after sufficient grind movement. */
+    void TweakRailScore();
+    /** Leave the active rail and enter airborne physics. */
+    void LeaveRail();
     /** Continue scoring a held trick. */
     void Trick_HoldTrick(int points);
+    /** Emit one blood burst from a skater body hook. */
+    void BloodSplat(int bodyPart, int maxBloodBits);
+    /** Apply dynamic lighting from one collision face. */
+    void CalculateDynamicLighting(unsigned int *face, Item *item);
+    /** Refresh the orientation basis vectors from the skater matrix. */
+    void FRUVectorsFromRotMatrix();
+    /** Rebuild the skater rotation matrix from its orientation basis. */
+    void RotMatrixFromFRUVectors();
+    /** Copy the current heading matrix into the skater angle vector. */
+    void SetAnglesFromHeading();
+    /** Correct the skater's sideways lean toward world-up. */
+    void UprightSideways();
+    /** Flip the skater's orientation to follow current velocity. */
+    int FlipToVelocity();
+    /** Steer the skater toward the current terrain fall line. */
+    void AlignToFallLine(int amount);
+    /** Probe and resolve a collision along one side of the skater. */
+    int CheckSide(int side, int sideCol, int bounceOff);
+    /** Emit speed-dependent terrain sparks and vibration. */
+    void DoTerrainEffects();
+    /** Update manual balance and bail state. */
+    void DoManualPhysics();
+    /** Move the skater origin through collision-safe axis fallbacks. */
+    void MoveOriginTo(int x, int y, int z);
+    /** Rotate the heading and optionally the current velocity. */
+    void RotateHeadingAndVelocity(int turnAngle, int rotateVelocity, int slipAngle);
+    /** Reflect heading and velocity away from one collision plane. */
+    void ReflectHeadingVelocityInPlane(SVECTOR normal, int angle);
+    /** Smooth the riding normal and rebuild the orientation basis. */
+    void OrientToNormal();
 };
 
 typedef char CItemPhysicsNatural_size_must_be_76[
@@ -794,7 +944,6 @@ struct Blood {
 struct CBrucePhysicsSlice;
 struct CBody;
 struct CPanelData;
-struct CSpark;
 struct CSuperPhysicsNatural;
 struct CSVector;
 struct CSVectorPhysicsOwner;
@@ -807,42 +956,18 @@ struct Dust {
 struct Item;
 
 /** Lowered aggregate-return ABI for unary CVector negation. */
-extern "C" void Physics_VectorNegate(
-    CVector *result, const CVector *vector) asm("__mi__C7CVector");
+extern "C" void __mi__C7CVector(
+    CVector *result, const CVector *vector);
 /** Lowered aggregate-return ABI for fixed-point CVector scaling. */
-extern "C" void Physics_VectorMultiply(
-    CVector *result, const CVector *vector,
-    const int *scale) asm("__ml__FRC7CVectorRCi");
+namespace PhysicsVectorAbi
+{
+extern "C" void __ml__FRC7CVectorRCi(
+    CVector *result, const CVector *vector, const int *scale);
+}
+#define Physics_VectorMultiply PhysicsVectorAbi::__ml__FRC7CVectorRCi
 #include "M3DMATHS.h"
 
-/** Orient the skater to its current velocity. */
-extern "C" int Physics_FlipToVelocity(CBrucePhysicsSlice *bruce)
-    asm("FlipToVelocity__6CBruce");
-/** Reset the skater's input history. */
-extern "C" void Physics_HistoryReset(CBrucePhysicsSlice *bruce)
-    asm("History_Reset__6CBruce");
-/** Enable or disable the skater board. */
-extern "C" void Physics_BoardOn(CBrucePhysicsSlice *bruce)
-    asm("BoardOn__6CBruce");
-extern "C" void Physics_BoardOff(CBrucePhysicsSlice *bruce)
-    asm("BoardOff__6CBruce");
-/** Spawn skater blood at the requested frame and amount. */
-extern "C" void Physics_BloodSplat(
-    CBrucePhysicsSlice *bruce, int frame, int amount)
-    asm("BloodSplat__6CBruceii");
-/** Panel method retained as an ABI bridge until its natural member spelling
- * reproduces the target register allocation. */
-extern "C" void Physics_PanelRefreshTrickMessage(CPanelData *panel)
-    asm("TrickMessageRefresh__10CPanelData");
-
-/** Apply dynamic lighting from one collision face. */
-extern "C" void Physics_CalculateDynamicLighting(
-    CBrucePhysicsSlice *bruce, unsigned int *face, Item *item)
-    asm("CalculateDynamicLighting__6CBrucePUiP4Item");
-/** Construct one ordinary terrain spark. */
-extern "C" CSpark *Physics_ConstructSpark(
-    CSpark *spark, CVector &position, int size, int speed, int life)
-    asm("__6CSparkR7CVectoriii");
+#include "BIT.h"
 
 #include "SFX.h"
 #include "MEM.h"
@@ -858,11 +983,7 @@ void GetFaceFlags(SLineInfo *line_info);
 int PingPong(int a, int b, int fps);
 void ProjectCVectorToPlane(CVector *vec, SVECTOR normal);
 void CVectorRotateToPlane(CVector *InVector, SVECTOR *Normal, CVector *OutVector);
-CVector operator*(const CVector &vector, const int &scale);
-CVector operator+(const CVector &left, const CVector &right);
-CVector operator-(const CVector &left, const CVector &right);
-CVector operator/(const CVector &vector, const int &scale);
-CVector operator>>(const CVector &vector, const int &shift);
+#include "CVECTOROPS.h"
 void UberFrig(CBruce *pSkater, CVector Pos, char *text);
 short *Trick_Skip(short *pTrick);
 int EnsureGTricksLoaded(void);
@@ -917,22 +1038,24 @@ s16 DefaultAnimations[362] = {
 /**
  * Maps the four digital/analog direction bits to the skater direction enum.
  */
-extern "C" int DirectionTable[16];
-static int PhysicsDirectionTableOwner[16]
-    asm("DirectionTable")
+namespace PhysicsDirectionTableOwner
+{
+extern "C"
+{
+static int DirectionTable[16]
     __attribute__((section(".data"))) = {
     0, 1, 2, 2,
     3, 5, 7, 7,
     4, 6, 8, 8,
     4, 6, 8, 8,
 };
+}
+}
 
-extern "C" {
 /** Physics stat override, shared up axis, and active control scheme. */
 int Cheat_StatsOverride __attribute__((section(".sdata"))) = 0;
 CVector WorldUp __attribute__((section(".sdata"))) = {0, 0, 0};
 int SelectedControlScheme __attribute__((section(".sdata"))) = 1;
-}
 
 /**
  * Owner-local construction type for the global gravity vector.  The original
@@ -950,9 +1073,7 @@ struct PhysicsWorldGravity : CVector
     }
 };
 
-extern "C" {
 PhysicsWorldGravity WorldGravity(0, 0x8000, 0);
-}
 
 /** Compact transition-trick names stored ahead of the loadable trick table. */
 struct PhysicsTransitionNames
@@ -965,7 +1086,6 @@ struct PhysicsTransitionNames
 typedef char PhysicsTransitionNames_size_must_be_40[
     (sizeof(PhysicsTransitionNames) == 40) ? 1 : -1];
 
-extern "C" {
 /** Physics normal and compact trick-name table. */
 CVector UpNormal __attribute__((section(".sdata"))) = {0, 0, 0};
 static PhysicsTransitionNames PhysicsTrickNames
@@ -1014,154 +1134,18 @@ int Face_WallRide __attribute__((section(".sdata"))) = 0;
 int Face_Visible __attribute__((section(".sdata"))) = 0;
 int Face_Terrain __attribute__((section(".sdata"))) = 0;
 int NumExtraAnims __attribute__((section(".sdata"))) = 0;
-}
 
-extern "C" int last_valid_401_gp asm("last_valid.401");
+extern int last_valid_401_gp asm("last_valid.401");
 #include "ZEROVECTOR.h"
 struct Vec3 { int a, b, c; };
 // === Readable owner-local names with MAIN.SYM-proven ABI labels ===
-extern "C" void Physics_TempTransform(CBrucePhysicsSlice *)
-    asm("TempTransform__6CBruce");
-extern "C" void Physics_TempRestore(CBrucePhysicsSlice *)
-    asm("TempRestore__6CBruce");
-extern "C" void Physics_Vibrate(CBrucePhysicsSlice *, int, int, int)
-    asm("Vibrate__6CBruceiii");
-extern "C" void Physics_StateTransition(CBrucePhysicsSlice *, int, int)
-    asm("StateTransition__6CBruce13EPhysicsStatei");
-extern "C" void Physics_MaybeFlipAnimationTransition(CBrucePhysicsSlice *)
-    asm("MaybeFlipAnimationTransition__6CBruce");
-extern "C" void Physics_DebugRunAnim(CBrucePhysicsSlice *, int, int)
-    asm("Debug_RunAnim__6CBruceii");
-extern "C" void Physics_DebugRunAnim1(CBrucePhysicsSlice *, int, int, int)
-    asm("Debug_RunAnim1__6CBruceiii");
-extern "C" void Physics_DebugRunAnim2(CBrucePhysicsSlice *, int, int, int, int)
-    asm("Debug_RunAnim2__6CBruceiiii");
-extern "C" void Physics_DebugRunAnim3(
-    CBrucePhysicsSlice *, int, int, int, int, int)
-    asm("Debug_RunAnim3__6CBruceiiiii");
-extern "C" void Physics_Bail(
-    CBrucePhysicsSlice *, int, ELimitBailVel)
-    asm("Bail__6CBrucei13ELimitBailVel");
-extern "C" void Physics_FrigDarkenObject(CBrucePhysicsSlice *)
-    asm("FrigDarkenObject__6CBruce");
-extern "C" void Physics_TrickObRail(CBrucePhysicsSlice *)
-    asm("TrickObRail__6CBruce");
-extern "C" void Physics_StartHandPlant(CBrucePhysicsSlice *)
-    asm("StartHandPlant__6CBruce");
-extern "C" void Physics_StartGrind(CBrucePhysicsSlice *)
-    asm("StartGrind__6CBruce");
-extern "C" void Physics_HandleStickToRail(CBrucePhysicsSlice *)
-    asm("HandleStickToRail__6CBruce");
-extern "C" void Physics_HandleBailOnLanding(CBrucePhysicsSlice *, int)
-    asm("HandleBailOnLanding__6CBrucei");
-extern "C" void Physics_HandleBailPerpendicular(
-    CBrucePhysicsSlice *, SVECTOR)
-    asm("HandleBailPerpendicular__6CBruceG7SVECTOR");
-extern "C" void Physics_TriggerTrickScript(CBrucePhysicsSlice *, short *)
-    asm("TriggerTrick__6CBrucePs");
-extern "C" void Physics_TriggerTrickIndex(CBrucePhysicsSlice *, int)
-    asm("TriggerTrick__6CBrucei");
-extern "C" void Physics_ButtonRecord(
-    CBrucePhysicsSlice *, unsigned char, unsigned char)
-    asm("ButtonRecord__6CBruceUcUc");
-extern "C" void Physics_ButtonRemoveLast(
-    CBrucePhysicsSlice *, unsigned char, unsigned char)
-    asm("ButtonRemoveLast__6CBruceUcUc");
-extern "C" int Physics_GetDirection(CBrucePhysicsSlice *)
-    asm("GetDirection__6CBruce");
-extern "C" void Physics_UpdateButtons(CBrucePhysicsSlice *)
-    asm("UpdateButtons__6CBruce");
-extern "C" void Physics_QueueTrick(CBrucePhysicsSlice *, short *, int, int)
-    asm("QueueTrick__6CBrucePsii");
-extern "C" void Physics_UpdateQueue(CBrucePhysicsSlice *)
-    asm("UpdateQueue__6CBruce");
-extern "C" int Physics_ActionButtonHeld(CBrucePhysicsSlice *)
-    asm("ActionButtonHeld__6CBruce");
-extern "C" int Physics_GetPreviousPressedEvent(
-    CBrucePhysicsSlice *, int, int, int, int)
-    asm("GetPreviousPressedEvent__6CBruceiiii");
-extern "C" short Physics_GetScriptFrame(CBrucePhysicsSlice *, int)
-    asm("GetScriptFrame__6CBrucei");
-extern "C" void Physics_UpdateScript(CBrucePhysicsSlice *)
-    asm("UpdateScript__6CBruce");
-extern "C" void Physics_HandleTricks(CBrucePhysicsSlice *)
-    asm("HandleTricksNew__6CBruce");
-extern "C" void Physics_CalcAnimLeanFrame(CBrucePhysicsSlice *)
-    asm("CalcAnimLeanFrame__6CBruce");
-extern "C" void Physics_HandleSpin(CBrucePhysicsSlice *)
-    asm("HandleSpin__6CBruce");
-extern "C" void Physics_AlignHeadingOnRail(CBrucePhysicsSlice *)
-    asm("AlignHeadingOnRail__6CBruce");
-extern "C" void Physics_CreateRailSparks(CBrucePhysicsSlice *)
-    asm("CreateRailSparks__6CBruce");
-extern "C" void Physics_TweakRailScore(CBrucePhysicsSlice *)
-    asm("TweakRailScore__6CBruce");
-extern "C" void Physics_HandleGrindOffSound(CBrucePhysicsSlice *)
-    asm("HandleGrindOffSound__6CBruce");
-extern "C" void Physics_LeaveRail(CBrucePhysicsSlice *)
-    asm("LeaveRail__6CBruce");
-extern "C" void Physics_SkateOffGround(CBrucePhysicsSlice *)
-    asm("SkateOffGround__6CBruce");
-extern "C" int Physics_CheckSide(CBrucePhysicsSlice *, int, int, int)
-    asm("CheckSide__6CBruceiii");
-extern "C" void Physics_DoTerrainEffects(CBrucePhysicsSlice *)
-    asm("DoTerrainEffects__6CBruce");
-extern "C" void Physics_DoManual(CBrucePhysicsSlice *)
-    asm("DoManualPhysics__6CBruce");
-extern "C" void Physics_MoveOriginTo(CBrucePhysicsSlice *, int, int, int)
-    asm("MoveOriginTo__6CBruceiii");
-extern "C" void Physics_HandleTruckSqueak(CBrucePhysicsSlice *)
-    asm("HandleTruckSqueakSound__6CBruce");
-extern "C" void Physics_HandleLeaningBail(CBrucePhysicsSlice *, SVECTOR)
-    asm("HandleLeaningBail__6CBruceG7SVECTOR");
-extern "C" void Physics_HitAirPoly(CBrucePhysicsSlice *, SLineInfo *)
-    asm("HitAirPoly__6CBruceR9SLineInfo");
-extern "C" void Physics_MaybeManual(CBrucePhysicsSlice *, int, int)
-    asm("MaybeManual__6CBruceii");
-extern "C" void Physics_DoInAir(CBrucePhysicsSlice *)
-    asm("DoInAirPhysics__6CBruce");
-extern "C" void Physics_DoFootPlant(CBrucePhysicsSlice *)
-    asm("DoFootPlantPhysics__6CBruce");
-extern "C" void Physics_DoWallRide(CBrucePhysicsSlice *)
-    asm("DoWallRidePhysics__6CBruce");
-extern "C" void Physics_RotateHeadingAndVelocity(
-    CBrucePhysicsSlice *, int, int, int)
-    asm("RotateHeadingAndVelocity__6CBruceiii");
-extern "C" void Physics_ReflectHeadingVelocityInPlane(
-    CBrucePhysicsSlice *, SVECTOR, int)
-    asm("ReflectHeadingVelocityInPlane__6CBruceG7SVECTORi");
-extern "C" void Physics_AlignToFallLine(CBrucePhysicsSlice *, int)
-    asm("AlignToFallLine__6CBrucei");
-extern "C" void Physics_UprightSideways(CBrucePhysicsSlice *)
-    asm("UprightSideways__6CBruce");
-extern "C" void Physics_FRUVectorsFromRotMatrix(CBrucePhysicsSlice *)
-    asm("FRUVectorsFromRotMatrix__6CBruce");
-extern "C" void Physics_RotMatrixFromFRUVectors(CBrucePhysicsSlice *)
-    asm("RotMatrixFromFRUVectors__6CBruce");
-extern "C" void Physics_SetAnglesFromHeading(CBrucePhysicsSlice *)
-    asm("SetAnglesFromHeading__6CBruce");
-extern "C" void Physics_HandleContinuousSounds(CBrucePhysicsSlice *)
-    asm("HandleContinuousSounds__6CBruce");
-extern "C" void Physics_OrientToNormal(CBrucePhysicsSlice *)
-    asm("OrientToNormal__6CBruce");
-extern "C" void Physics_HandlePlayerCollisions(CBrucePhysicsSlice *)
-    asm("HandlePlayerCollisions__6CBruce");
-extern "C" void Physics_LimitFinalSpeed(CBrucePhysicsSlice *)
-    asm("LimitFinalSpeed__6CBruce");
-extern "C" void Physics_CheckForTriggers(CBrucePhysicsSlice *)
-    asm("CheckForTriggers__6CBruce");
-extern "C" void Physics_CheckSideCollisions(CBrucePhysicsSlice *)
-    asm("CheckSideCollisions__6CBruce");
-extern "C" void Physics_HandlePhysicsStates(CBrucePhysicsSlice *)
-    asm("HandlePhysicsStates__6CBruce");
-extern "C" void Physics_HandleBraking(CBrucePhysicsSlice *)
-    asm("HandleBraking__6CBruce");
-extern "C" void Physics_HandleFlips(CBrucePhysicsSlice *)
-    asm("HandleFlips__6CBruce");
-extern "C" void Physics_HandleTimer(CBrucePhysicsSlice *)
-    asm("HandleTimer__6CBruce");
-extern "C" void Physics_DoPhysics(CBrucePhysicsSlice *)
-    asm("DoPhysics__6CBruce");
+#define MECH_DECLARE_PHYSICS_OWNER_ABI
+#define MECH_PHYSICS_OWNER_RECEIVER CBrucePhysicsSlice
+#include "MECH.h"
+#define Physics_StateTransition \
+    PhysicsOwnerAbi::StateTransition__6CBruce13EPhysicsStatei
+#define Physics_CheckSideCollisions \
+    PhysicsOwnerAbi::CheckSideCollisions__6CBruce
 
 /**
  * PHYSICS.CPP diagnostic strings in their original owner-local order.
@@ -1185,7 +1169,10 @@ struct PhysicsDiagnostics {
 typedef char PhysicsDiagnostics_size_must_be_0x110[
     (sizeof(PhysicsDiagnostics) == 0x110) ? 1 : -1];
 
-extern "C" const PhysicsDiagnostics PhysicsDiagnosticPool = {
+#define PHYSICS_DECLARE_DIAGNOSTIC_POOL
+#include "PHYSICS.h"
+
+const PhysicsDiagnostics PhysicsDiagnosticPool = {
     "%d: Collision (%d,%d,%d)\n",
     "%d %d %d %d (%d) %d %d %d\n",
     "Script Error %d\n",
@@ -1264,10 +1251,11 @@ int PingPong(int a, int b, int fps)
  * Saves the current position and rotation matrix, applies pending flip/spin or
  * rail-lean rotations around the skater, then rebuilds the world transform.
  *
- * @param bruce  Owner-local view of the implicit `this` pointer.
  */
-void Physics_TempTransform(CBrucePhysicsSlice *bruce)
+void CBruce::TempTransform()
 {
+    CBrucePhysicsSlice *bruce =
+        reinterpret_cast<CBrucePhysicsSlice *>(this);
     MATRIX SurfaceRotMatrix;
     SVECTOR RotAngle;
 
@@ -1321,7 +1309,7 @@ void Physics_TempTransform(CBrucePhysicsSlice *bruce)
         RotAngle.vx = (bruce->mManualLean / 10) & 0xFFF;
         RotMatrixYXZ(&RotAngle, &Rail_RotMatrix);
         MulMatrix(&bruce->mRotationMatrix, &Rail_RotMatrix);
-        Physics_FRUVectorsFromRotMatrix(bruce);
+        reinterpret_cast<CBruce *>(bruce)->FRUVectorsFromRotMatrix();
     }
 
     // CBruce begins with the target-proven inherited CSuper object.
@@ -1337,10 +1325,11 @@ void Physics_TempTransform(CBrucePhysicsSlice *bruce)
  *
  * Address: 0x800102F4
  * Mangled: TempRestore__6CBruce
- * @param bruce  Owner-local view of the implicit `this` pointer.
  */
-void Physics_TempRestore(CBrucePhysicsSlice *bruce)
+void CBruce::TempRestore()
 {
+    CBrucePhysicsSlice *bruce =
+        reinterpret_cast<CBrucePhysicsSlice *>(this);
     int a;
     int b;
     int c;
@@ -1416,7 +1405,7 @@ void CBruce::Trick_TakeOff()
     Panel_TakeOff(reinterpret_cast<CBruce *>(bruce));
     if (GGame == 2)
     {
-        Physics_HistoryReset(bruce);
+        reinterpret_cast<CBruce *>(bruce)->History_Reset();
     }
 }
 
@@ -1551,7 +1540,7 @@ void CBruce::Trick_Land()
     if (bruce->mSloppyLanding)
         SFX_PlayX(0xBD, 0x2000, 0);
 
-    Physics_PanelRefreshTrickMessage(&bruce->mPanelData);
+    bruce->mPanelData.TrickMessageRefresh();
     int trick_count = bruce->mPanelData.mTQStack;
     if ((trick_count == 0
          || (trick_count > 0
@@ -1639,7 +1628,7 @@ void CBruce::Trick_Bail()
     Panel_Bail(reinterpret_cast<CBruce *>(bruce));
     bruce->mTrickAwarded = 0;
     bruce->mDoingWhatTrick = 0;
-    Physics_Vibrate(bruce, 8, 1, 0x96);
+    reinterpret_cast<CBruce *>(bruce)->Vibrate(8, 1, 0x96);
 }
 
 /**
@@ -1649,14 +1638,14 @@ void CBruce::Trick_Bail()
  * Mangled:   Vibrate__6CBruceiii
  * Demangled: CBruce::Vibrate(int, int, int)
  *
- * @param bruce  Owner-local view of the implicit `this` pointer.
  * @param time  Vibration duration.
  * @param motor  Controller actuator index.
  * @param value  Vibration intensity.
  */
-void Physics_Vibrate(
-    CBrucePhysicsSlice *bruce, int time, int motor, int value)
+void CBruce::Vibrate(int time, int motor, int value)
 {
+    CBrucePhysicsSlice *bruce =
+        reinterpret_cast<CBrucePhysicsSlice *>(this);
     int game = GGame;
     int index = bruce->mIndex;
     if (game == 7)
@@ -1720,7 +1709,7 @@ void Physics_StateTransition(CBrucePhysicsSlice *bruce, int NewState, int line)
             {
                 v40 = *(CVector *)&bruce->mRight;
                 bruce->mRight = bruce->mUp;
-                Physics_VectorNegate(&v20, &v40);
+                __mi__C7CVector(&v20, &v40);
                 *(CVector *)&bruce->mUp = v20;
                 goto done;
             }
@@ -1729,18 +1718,18 @@ void Physics_StateTransition(CBrucePhysicsSlice *bruce, int NewState, int line)
         {
             v40 = *(CVector *)&bruce->mRight;
             bruce->mRight = bruce->mUp;
-            Physics_VectorNegate(&v30, &v40);
+            __mi__C7CVector(&v30, &v40);
             *(CVector *)&bruce->mUp = v30;
             goto done;
         }
         v40 = *(CVector *)&bruce->mRight;
-        Physics_VectorNegate(&v30, (CVector *)&bruce->mUp);
+        __mi__C7CVector(&v30, (CVector *)&bruce->mUp);
         *(CVector *)&bruce->mRight = v30;
         *(CVector *)&bruce->mUp = v40;
     }
 
 done:
-    Physics_RotMatrixFromFRUVectors(bruce);
+    reinterpret_cast<CBruce *>(bruce)->RotMatrixFromFRUVectors();
     bruce->mPhysicsState = NewState;
 }
 
@@ -1751,11 +1740,11 @@ done:
  * Mangled:   MaybeFlipAnimationTransition__6CBruce
  * Demangled: CBruce::MaybeFlipAnimationTransition(void)
  *
- * @param bruce  Owner-local view of the implicit `this` pointer.
  */
-void Physics_MaybeFlipAnimationTransition(
-    CBrucePhysicsSlice *bruce)
+void CBruce::MaybeFlipAnimationTransition()
 {
+    CBrucePhysicsSlice *bruce =
+        reinterpret_cast<CBrucePhysicsSlice *>(this);
     if (bruce->CSuper.mAnim == 0x82
         && bruce->CSuper.mFrame >= 0x10)
     {
@@ -1792,14 +1781,14 @@ void Physics_MaybeFlipAnimationTransition(
  * Mangled:   Debug_RunAnim__6CBruceii
  * Demangled: CBruce::Debug_RunAnim(int, int)
  *
- * @param bruce Owner-local view of the implicit `this` pointer.
  * @param x  Animation index.
  * @param line  Source-line diagnostic token supplied by the caller.
  */
-void Physics_DebugRunAnim(
-    CBrucePhysicsSlice *bruce, int x, int line)
+void CBruce::Debug_RunAnim(int x, int line)
 {
-    Physics_MaybeFlipAnimationTransition(bruce);
+    CBrucePhysicsSlice *bruce =
+        reinterpret_cast<CBrucePhysicsSlice *>(this);
+    MaybeFlipAnimationTransition();
     int big = 0x10000;
     int neg = -1;
     bruce->CSuper.mAnimSpeed = big;
@@ -1813,16 +1802,16 @@ void Physics_DebugRunAnim(
  * Mangled:   Debug_RunAnim1__6CBruceiii
  * Demangled: CBruce::Debug_RunAnim1(int, int, int)
  *
- * @param bruce Owner-local view of the implicit `this` pointer.
  * @param x  Animation index.
  * @param y  Starting animation frame.
  * @param line  Source-line diagnostic token supplied by the caller.
  */
-void Physics_DebugRunAnim1(
-    CBrucePhysicsSlice *bruce, int x, int y, int line)
+void CBruce::Debug_RunAnim1(int x, int y, int line)
 {
+    CBrucePhysicsSlice *bruce =
+        reinterpret_cast<CBrucePhysicsSlice *>(this);
     (void)line;
-    Physics_MaybeFlipAnimationTransition(bruce);
+    MaybeFlipAnimationTransition();
     bruce->CSuper.mAnimSpeed = 0x10000;
     reinterpret_cast<CSuper *>(bruce)->RunAnim(x, y, -1, -1);
 }
@@ -1834,17 +1823,17 @@ void Physics_DebugRunAnim1(
  * Mangled:   Debug_RunAnim2__6CBruceiiii
  * Demangled: CBruce::Debug_RunAnim2(int, int, int, int)
  *
- * @param bruce  Owner-local view of the implicit `this` pointer.
  * @param x  Animation index.
  * @param y  Starting animation frame.
  * @param z  Ending animation frame.
  * @param line  Source-line diagnostic token supplied by the caller.
  */
-void Physics_DebugRunAnim2(
-    CBrucePhysicsSlice *bruce, int x, int y, int z, int line)
+void CBruce::Debug_RunAnim2(int x, int y, int z, int line)
 {
+    CBrucePhysicsSlice *bruce =
+        reinterpret_cast<CBrucePhysicsSlice *>(this);
     (void)line;
-    Physics_MaybeFlipAnimationTransition(bruce);
+    MaybeFlipAnimationTransition();
     bruce->CSuper.mAnimSpeed = 0x10000;
     reinterpret_cast<CSuper *>(bruce)->RunAnim(x, y, z, -1);
 }
@@ -1856,18 +1845,18 @@ void Physics_DebugRunAnim2(
  * Mangled:   Debug_RunAnim3__6CBruceiiiii
  * Demangled: CBruce::Debug_RunAnim3(int, int, int, int, int)
  *
- * @param bruce  Owner-local view of the implicit `this` pointer.
  * @param x  Animation index.
  * @param y  Starting animation frame.
  * @param z  Ending animation frame.
  * @param zz  Final animation-control argument passed to RunAnim.
  * @param line  Source-line diagnostic token supplied by the caller.
  */
-void Physics_DebugRunAnim3(
-    CBrucePhysicsSlice *bruce, int x, int y, int z, int zz, int line)
+void CBruce::Debug_RunAnim3(int x, int y, int z, int zz, int line)
 {
+    CBrucePhysicsSlice *bruce =
+        reinterpret_cast<CBrucePhysicsSlice *>(this);
     (void)line;
-    Physics_MaybeFlipAnimationTransition(bruce);
+    MaybeFlipAnimationTransition();
     bruce->CSuper.mAnimSpeed = 0x10000;
     reinterpret_cast<CSuper *>(bruce)->RunAnim(x, y, z, zz);
 }
@@ -1895,14 +1884,14 @@ void CBruce::ResetTrickBuffers()
  * Demangled: CBruce::Bail(int, ELimitBailVel)
  *            Reset trick/physics state for a bail, pick the bail script, and trigger it.
  *
- * @param bruce  Owner-local view of the implicit `this` pointer.
  * @param BailNumber  Bail script/animation selector.
  * @param LimitBailVel  Whether the bail path limits the skater's velocity.
  */
-void Physics_Bail(
-    CBrucePhysicsSlice *bruce, int BailNumber, ELimitBailVel LimitBailVel)
+void CBruce::Bail(int BailNumber, ELimitBailVel LimitBailVel)
 {
     int frame_pad[2];
+    CBrucePhysicsSlice *bruce =
+        reinterpret_cast<CBrucePhysicsSlice *>(this);
     CBruceScriptQueueSlice *script =
         reinterpret_cast<CBruceScriptQueueSlice *>(bruce);
     int bailCount = bruce->mBails;
@@ -1942,8 +1931,8 @@ void Physics_Bail(
     }
     short val = GBailsList[BailNumber];
     short half = val / 2;
-    Physics_TriggerTrickScript(bruce, GTricks + half);
-    Physics_UpdateScript(bruce);
+    reinterpret_cast<CBruce *>(bruce)->TriggerTrick(GTricks + half);
+    reinterpret_cast<CBruce *>(bruce)->UpdateScript();
     bruce->mDoingATrick = 0;
 }
 
@@ -2024,8 +2013,8 @@ void UberFrig(CBruce *pSkater, CVector v, char *pc)
     M3dZone_LineToItem(&li, 1);
     if (li.pItem != 0)
     {
-        Physics_CalculateDynamicLighting(
-            bruce, li.pFace, li.pItem);
+        reinterpret_cast<CBruce *>(bruce)->CalculateDynamicLighting(
+            li.pFace, li.pItem);
         return;
     }
 
@@ -2094,10 +2083,11 @@ void UberFrig(CBruce *pSkater, CVector v, char *pc)
  * Address: 0x8001131C
  * Mangled: FrigDarkenObject__6CBruce
  *
- * @param bruce  Owner-local view of the implicit `this` pointer.
  */
-void Physics_FrigDarkenObject(CBrucePhysicsSlice *bruce)
+void CBruce::FrigDarkenObject()
 {
+    CBrucePhysicsSlice *bruce =
+        reinterpret_cast<CBrucePhysicsSlice *>(this);
     if (bruce->mLastSItem != 0)
     {
         if (bruce->mLastPSX != 0)
@@ -2121,20 +2111,20 @@ void Physics_FrigDarkenObject(CBrucePhysicsSlice *bruce)
  *          Target: addiu $sp,-0x10; addiu $sp,0x10; jr $ra; nop
  * Mangled: TrickObRail__6CBruce
  *
- * @param bruce  Owner-local view of the implicit `this` pointer.
  */
-void Physics_TrickObRail(CBrucePhysicsSlice *bruce)
+void CBruce::TrickObRail()
 {
     int frame[4];
-    (void)bruce;
 }
 
 // ====== 0x80011388 StartHandPlant__6CBruce =====================================
 // StartHandPlant__6CBruce
 // Address: 0x80011388
 // Demangled: CBruce::StartHandPlant(void)
-void Physics_StartHandPlant(CBrucePhysicsSlice *bruce)
+void CBruce::StartHandPlant()
 {
+    CBrucePhysicsSlice *bruce =
+        reinterpret_cast<CBrucePhysicsSlice *>(this);
     bruce->mHandPlantTweaked = 0;
     if (bruce->mTrickTookOff == 0)
     {
@@ -2147,14 +2137,14 @@ void Physics_StartHandPlant(CBrucePhysicsSlice *bruce)
     }
     reinterpret_cast<CBruce *>(bruce)->Trick_Trick(
         PhysicsTrickNames.Handplant, 0x3E8, 1);
-    Physics_DebugRunAnim1(bruce, 0x22, 8, 0x586);
+    reinterpret_cast<CBruce *>(bruce)->Debug_RunAnim1(0x22, 8, 0x586);
     bruce->mDoingWhatTrick = bruce->mDoingWhatTrick | 0x4000;
     Physics_StateTransition(bruce, 8, 0x588);
     SFX_PlayX(0xE7, 0x1000, 0);
     bruce->CSuper.CBody.CItem.mPos = bruce->mRailPos;
     bruce->CSuper.CBody.CItem.mPos.y =
         bruce->CSuper.CBody.CItem.mPos.y - 0x1E;
-    Physics_TrickObRail(bruce);
+    TrickObRail();
     bruce->mDontStickRail = bruce->mCurrentRailStart;
     bruce->CSuper.CBody.mVel.x = 0;
     bruce->CSuper.CBody.mVel.z = 0;
@@ -2199,10 +2189,10 @@ static inline int PhysicsShortAbsolute(unsigned short value)
  * Mangled:   StartGrind__6CBruce
  * Demangled: CBruce::StartGrind(void)
  *
- * @param bruce Owner-local view of the implicit `this` pointer.
  */
-extern "C" void Physics_StartGrind(CBrucePhysicsSlice *bruce)
+void CBruce::StartGrind()
 {
+#define bruce ((CBrucePhysicsSlice *)this)
     int temp;
     int FrontDot;
     int RightDot;
@@ -2233,9 +2223,18 @@ extern "C" void Physics_StartGrind(CBrucePhysicsSlice *bruce)
     }
 
     bruce->mGrindLeanDir =
-        (((bruce->mGrindLeanDir
-           * (100 - PHYSICS_RECON_EFFECTIVE_BALANCE((int)bruce) * 0xF))
-          / 100)
+        (bruce->mGrindLeanDir
+         * (100
+            - (Cheat_StatsOverride != 0
+                   ? Cheat_StatsOverride
+                   : Stats[bruce->mSkaterType].Balance
+                         + ((bruce->mMagicTime != 0 || Cheat_Fire != 0)
+                                ? (temp = (unsigned char)
+                                              bruce->mpBoardStats->balance) + 3
+                                : (temp = (unsigned char)
+                                              bruce->mpBoardStats->balance)))
+                * 0xF)
+         / 100
          * (bruce->mGrindTime + 0x3C))
         / 0x50;
 
@@ -2275,7 +2274,7 @@ extern "C" void Physics_StartGrind(CBrucePhysicsSlice *bruce)
     bruce->mDoingATrick = 1;
     bruce->mComboCounter = bruce->mComboCounter + 1;
     bruce->mRails = bruce->mRails + 1;
-    Physics_TrickObRail(bruce);
+    TrickObRail();
 
     /* Rail right-hand normal, as the cross of the segment with world up. */
     CVector mSideVel =
@@ -2322,7 +2321,7 @@ extern "C" void Physics_StartGrind(CBrucePhysicsSlice *bruce)
     }
     bruce->mDontStickRail = bruce->mCurrentRailStart;
 
-    Direction = Physics_GetDirection(bruce);
+    Direction = reinterpret_cast<CBruce *>(bruce)->GetDirection();
     if ((unsigned int)(Direction - 1) < 4)
     {
         int LastEvent = bruce->mEventQueuePos - 1;
@@ -2330,8 +2329,9 @@ extern "C" void Physics_StartGrind(CBrucePhysicsSlice *bruce)
         if (LastEvent < 0)
             LastEvent = 0x1F;
 
-        int Event = Physics_GetPreviousPressedEvent(
-            bruce, LastEvent, 0, 0x3C, LastEvent);
+        int Event = reinterpret_cast<CBruce *>(bruce)
+                        ->GetPreviousPressedEvent(
+                            LastEvent, 0, 0x3C, LastEvent);
         while (Event >= 0)
         {
             if (bruce->mEventQueue[Event].Button == Direction &&
@@ -2342,8 +2342,9 @@ extern "C" void Physics_StartGrind(CBrucePhysicsSlice *bruce)
             }
             if (bruce->mEventQueue[Event].Button == Direction)
                 FoundFirst = 1;
-            Event = Physics_GetPreviousPressedEvent(
-                bruce, Event, 1, 0x3C, LastEvent);
+            Event = reinterpret_cast<CBruce *>(bruce)
+                        ->GetPreviousPressedEvent(
+                            Event, 1, 0x3C, LastEvent);
         }
     }
 
@@ -2382,14 +2383,16 @@ extern "C" void Physics_StartGrind(CBrucePhysicsSlice *bruce)
     if (bruce->mpRailTrickQueued != 0 &&
         XFrames - bruce->mRailTrickTime < 0x1E)
     {
-        Physics_TriggerTrickScript(bruce, bruce->mpRailTrickQueued);
+        reinterpret_cast<CBruce *>(bruce)->TriggerTrick(
+            bruce->mpRailTrickQueued);
         bruce->mpRailTrickQueued = 0;
     }
     else
     {
-        Physics_TriggerTrickIndex(bruce, RailTrick);
+        reinterpret_cast<CBruce *>(bruce)->TriggerTrick(RailTrick);
     }
-    Physics_UpdateScript(bruce);
+    reinterpret_cast<CBruce *>(bruce)->UpdateScript();
+#undef bruce
 }
 
 /**
@@ -2399,10 +2402,11 @@ extern "C" void Physics_StartGrind(CBrucePhysicsSlice *bruce)
  * Mangled:   HandleStickToRail__6CBruce
  * Demangled: CBruce::HandleStickToRail(void)
  *
- * @param bruce  Owner-local view of the skater whose rail state is updated.
  */
-void Physics_HandleStickToRail(CBrucePhysicsSlice *bruce)
+void CBruce::HandleStickToRail()
 {
+    CBrucePhysicsSlice *bruce =
+        reinterpret_cast<CBrucePhysicsSlice *>(this);
     if (bruce->mPad->Triangle.Pressed == 0)
         bruce->mJumpInhibit = 0;
 
@@ -2473,8 +2477,8 @@ try_stick:
         }
         if (bail)
         {
-            Physics_Bail(
-                bruce, (int)bruce->mRailBailNumber, DO_LIMIT);
+            reinterpret_cast<CBruce *>(bruce)->Bail(
+                (int)bruce->mRailBailNumber, DO_LIMIT);
             ++bruce->mTrickBails;
             bruce->mRailBailNumber = 0;
             return;
@@ -2495,7 +2499,7 @@ try_stick:
                 int z = PhysicsAbsolute(bruce->mRight.y);
                 if (z < 0x5DC && (char)bruce->mPad->Up.Pressed != 0)
                 {
-                    Physics_StartHandPlant(bruce);
+                    StartHandPlant();
                     return;
                 }
             }
@@ -2504,7 +2508,7 @@ try_stick:
 
     if (bruce->mTrickTookOff != 0)
     {
-        Physics_StartGrind(bruce);
+        StartGrind();
         return;
     }
     goto cleanup;
@@ -2517,11 +2521,12 @@ try_stick:
  * Mangled:   HandleBailOnLanding__6CBrucei
  * Demangled: CBruce::HandleBailOnLanding(int)
  *
- * @param bruce  Owner-local view of the implicit `this` pointer.
  * @param line  Source line/debug marker passed by callers.
  */
-void Physics_HandleBailOnLanding(CBrucePhysicsSlice *bruce, int line)
+void CBruce::HandleBailOnLanding(int line)
 {
+    CBrucePhysicsSlice *bruce =
+        reinterpret_cast<CBrucePhysicsSlice *>(this);
     if (bruce->mInBail != 0)
         return;
 
@@ -2573,8 +2578,8 @@ set_bail:
 check_bail:
     if (Bailing != 0)
     {
-        Physics_Bail(
-            bruce, (int)bruce->mBailNumber, DO_LIMIT);
+        reinterpret_cast<CBruce *>(bruce)->Bail(
+            (int)bruce->mBailNumber, DO_LIMIT);
         register int bail_count asm("$2") = bruce->mTrickBails;
         bruce->mBailNumber = 0;
         bail_count++;
@@ -2591,12 +2596,13 @@ check_bail:
  * Projects the skater's velocity and heading into the landing plane, records
  * landing quality, and chooses the lateral bail direction when nearly sideways.
  *
- * @param bruce Owner-local view of the implicit `this` pointer.
  * @param Normal  Surface normal used to resolve the perpendicular bail.
  */
-void Physics_HandleBailPerpendicular(CBrucePhysicsSlice *bruce, SVECTOR Normal)
+void CBruce::HandleBailPerpendicular(SVECTOR Normal)
 {
     CVector InplaneVel;
+    CBrucePhysicsSlice *bruce =
+        reinterpret_cast<CBrucePhysicsSlice *>(this);
 
     bruce->mPerfectLanding = 0;
     bruce->mSloppyLanding = 0;
@@ -2632,7 +2638,7 @@ void Physics_HandleBailPerpendicular(CBrucePhysicsSlice *bruce, SVECTOR Normal)
             VECTOR v;
             CVector vv;
 
-            Physics_FlipToVelocity(bruce);
+            reinterpret_cast<CBruce *>(bruce)->FlipToVelocity();
             CVector *Right = (CVector *)&bruce->mRight;
             int RightDot = Mips_CVecDotProd(&InplaneVel, Right);
 
@@ -2650,7 +2656,7 @@ void Physics_HandleBailPerpendicular(CBrucePhysicsSlice *bruce, SVECTOR Normal)
             VectorNormal(&v, &v);
 
             {
-                register int nvx asm("$3") = -v.vx;
+                register int nvx = -v.vx;
                 bruce->mFront.x = nvx;
             }
             bruce->mFront.y = -v.vy;
@@ -2667,14 +2673,14 @@ void Physics_HandleBailPerpendicular(CBrucePhysicsSlice *bruce, SVECTOR Normal)
             gte_ldopv2(Right);
             gte_op12();
             gte_stlvnl(Front);
-            Physics_RotMatrixFromFRUVectors(bruce);
+            reinterpret_cast<CBruce *>(bruce)->RotMatrixFromFRUVectors();
 
             if (bruce->CSuper.mExtraFlags & 2)
                 RightDot = -RightDot;
             if (RightDot <= 0)
-                Physics_Bail(bruce, 2, DO_LIMIT);
+                reinterpret_cast<CBruce *>(bruce)->Bail(2, DO_LIMIT);
             else
-                Physics_Bail(bruce, 0, DO_LIMIT);
+                reinterpret_cast<CBruce *>(bruce)->Bail(0, DO_LIMIT);
             bruce->mPerpendicularBails++;
         }
     }
@@ -2687,12 +2693,12 @@ void Physics_HandleBailPerpendicular(CBrucePhysicsSlice *bruce, SVECTOR Normal)
  * Mangled:   TriggerTrick__6CBrucePs
  * Demangled: CBruce::TriggerTrick(short *)
  *
- * @param bruce  Owner-local view of the implicit `this` pointer.
  * @param pTrick  Trick to operate on.
  */
-void Physics_TriggerTrickScript(
-    CBrucePhysicsSlice *bruce, short *pTrick)
+void CBruce::TriggerTrick(short *pTrick)
 {
+    CBrucePhysicsSlice *bruce =
+        reinterpret_cast<CBrucePhysicsSlice *>(this);
     CBruceScriptQueueSlice *script =
         reinterpret_cast<CBruceScriptQueueSlice *>(bruce);
     register int one asm("$2") = 1;
@@ -2719,17 +2725,17 @@ void Physics_TriggerTrickScript(
  * Mangled:   TriggerTrick__6CBrucei
  * Demangled: CBruce::TriggerTrick(int)
  *
- * @param bruce  Owner-local view of the implicit `this` pointer.
  * @param Trick  Index into the grind-trick table.
  */
-void Physics_TriggerTrickIndex(
-    CBrucePhysicsSlice *bruce, int Trick)
+void CBruce::TriggerTrick(int Trick)
 {
+    CBrucePhysicsSlice *bruce =
+        reinterpret_cast<CBrucePhysicsSlice *>(this);
     short *table1 = GGrindTricksList;
     short val = table1[Trick];
     short half = val / 2;
     short *table2 = GTricks;
-    Physics_TriggerTrickScript(bruce, table2 + half);
+    reinterpret_cast<CBruce *>(bruce)->TriggerTrick(table2 + half);
 }
 
 /**
@@ -2738,13 +2744,13 @@ void Physics_TriggerTrickIndex(
  * Address:   0x80012238
  * Mangled:   ButtonRecord__6CBruceUcUc
  * Demangled: CBruce::ButtonRecord(unsigned char, unsigned char)
- * @param bruce  Owner-local view of the implicit `this` pointer.
  * @param Button  Button identifier to record.
  * @param Pressed  New pressed-state value.
  */
-void Physics_ButtonRecord(
-    CBrucePhysicsSlice *bruce, unsigned char Button, unsigned char Pressed)
+void CBruce::ButtonRecord(unsigned char Button, unsigned char Pressed)
 {
+    CBrucePhysicsSlice *bruce =
+        reinterpret_cast<CBrucePhysicsSlice *>(this);
     CBruceScriptQueueSlice *queue =
         reinterpret_cast<CBruceScriptQueueSlice *>(bruce);
     u8 btn = Button & 0xFF;
@@ -2786,13 +2792,13 @@ void Physics_ButtonRecord(
  * Demangled: CBruce::ButtonRemoveLast(unsigned char, unsigned char)
  *            Walk backward through button history and clear the most recent matching event.
  *
- * @param bruce  Owner-local view of the implicit `this` pointer.
  * @param Button  Button identifier to find.
  * @param Pressed  Pressed-state value to match.
  */
-void Physics_ButtonRemoveLast(
-    CBrucePhysicsSlice *bruce, unsigned char Button, unsigned char Pressed)
+void CBruce::ButtonRemoveLast(unsigned char Button, unsigned char Pressed)
 {
+    CBrucePhysicsSlice *bruce =
+        reinterpret_cast<CBrucePhysicsSlice *>(this);
     CBruceScriptQueueSlice *queue =
         reinterpret_cast<CBruceScriptQueueSlice *>(bruce);
     char *queueBase = reinterpret_cast<char *>(bruce);
@@ -2839,11 +2845,12 @@ void Physics_ButtonRemoveLast(
  * Mangled:   GetDirection__6CBruce
  * Demangled: CBruce::GetDirection(void)
  *
- * @param bruce  Owner-local view of the implicit `this` pointer.
  * @return DirectionTable[dir]
  */
-int Physics_GetDirection(CBrucePhysicsSlice *bruce)
+int CBruce::GetDirection()
 {
+    CBrucePhysicsSlice *bruce =
+        reinterpret_cast<CBrucePhysicsSlice *>(this);
     int pad = (int)bruce->mPad;
     SControl *control = (SControl *)pad;
     u8 leftX = control->Down.Pressed;
@@ -2870,7 +2877,7 @@ int Physics_GetDirection(CBrucePhysicsSlice *bruce)
     {
         dir |= 8;
     }
-    return DirectionTable[dir];
+    return PhysicsDirectionTableOwner::DirectionTable[dir];
 }
 
 /**
@@ -2880,31 +2887,32 @@ int Physics_GetDirection(CBrucePhysicsSlice *bruce)
  * Mangled:   UpdateButtons__6CBruce
  * Demangled: CBruce::UpdateButtons(void)
  *
- * @param bruce  Owner-local view of the implicit `this` pointer.
  */
-void Physics_UpdateButtons(CBrucePhysicsSlice *bruce)
+void CBruce::UpdateButtons()
 {
-    unsigned int dir = Physics_GetDirection(bruce);
-    Physics_ButtonRecord(bruce, 1, (dir ^ 1) < 1u);
-    Physics_ButtonRecord(bruce, 2, (dir ^ 2) < 1u);
-    Physics_ButtonRecord(bruce, 3, (dir ^ 3) < 1u);
-    Physics_ButtonRecord(bruce, 4, (dir ^ 4) < 1u);
-    Physics_ButtonRecord(bruce, 5, (dir ^ 5) < 1u);
-    Physics_ButtonRecord(bruce, 6, (dir ^ 6) < 1u);
-    Physics_ButtonRecord(bruce, 7, (dir ^ 7) < 1u);
-    Physics_ButtonRecord(bruce, 8, (dir ^ 8) < 1u);
+    CBrucePhysicsSlice *bruce =
+        reinterpret_cast<CBrucePhysicsSlice *>(this);
+    unsigned int dir = GetDirection();
+    ButtonRecord(1, (dir ^ 1) < 1u);
+    ButtonRecord(2, (dir ^ 2) < 1u);
+    ButtonRecord(3, (dir ^ 3) < 1u);
+    ButtonRecord(4, (dir ^ 4) < 1u);
+    ButtonRecord(5, (dir ^ 5) < 1u);
+    ButtonRecord(6, (dir ^ 6) < 1u);
+    ButtonRecord(7, (dir ^ 7) < 1u);
+    ButtonRecord(8, (dir ^ 8) < 1u);
     int pad = (int)bruce->mPad;
-    Physics_ButtonRecord(bruce, 9, ((SControl *)pad)->Circle.Pressed);
+    ButtonRecord(9, ((SControl *)pad)->Circle.Pressed);
     pad = (int)bruce->mPad;
-    Physics_ButtonRecord(bruce, 0xA, ((SControl *)pad)->Square.Pressed);
+    ButtonRecord(0xA, ((SControl *)pad)->Square.Pressed);
     pad = (int)bruce->mPad;
-    Physics_ButtonRecord(bruce, 0xB, ((SControl *)pad)->X.Pressed);
+    ButtonRecord(0xB, ((SControl *)pad)->X.Pressed);
     pad = (int)bruce->mPad;
-    Physics_ButtonRecord(bruce, 0xC, ((SControl *)pad)->Triangle.Pressed);
+    ButtonRecord(0xC, ((SControl *)pad)->Triangle.Pressed);
     pad = (int)bruce->mPad;
-    Physics_ButtonRecord(bruce, 0xE, ((SControl *)pad)->LeftTwo.Pressed);
+    ButtonRecord(0xE, ((SControl *)pad)->LeftTwo.Pressed);
     pad = (int)bruce->mPad;
-    Physics_ButtonRecord(bruce, 0x10, ((SControl *)pad)->RightTwo.Pressed);
+    ButtonRecord(0x10, ((SControl *)pad)->RightTwo.Pressed);
 }
 
 /**
@@ -2914,14 +2922,14 @@ void Physics_UpdateButtons(CBrucePhysicsSlice *bruce)
  * Mangled:   QueueTrick__6CBrucePsii
  * Demangled: CBruce::QueueTrick(short *, int, int)
  *
- * @param bruce  Owner-local view of the implicit `this` pointer.
  * @param pTrick Trick script to queue.
  * @param Button Button associated with the queued trick.
  * @param EventTime Time of the triggering button event.
  */
-void Physics_QueueTrick(
-    CBrucePhysicsSlice *bruce, short *pTrick, int Button, int EventTime)
+void CBruce::QueueTrick(short *pTrick, int Button, int EventTime)
 {
+    CBrucePhysicsSlice *bruce =
+        reinterpret_cast<CBrucePhysicsSlice *>(this);
     CBruceScriptQueueSlice *queue = (CBruceScriptQueueSlice *)bruce;
     if (queue->mTricksQueued == 10)
         return;
@@ -2948,10 +2956,11 @@ void Physics_QueueTrick(
  * Mangled:   UpdateQueue__6CBruce
  * Demangled: CBruce::UpdateQueue(void)
  *
- * @param bruce Owner-local view of the implicit `this` pointer.
  */
-void Physics_UpdateQueue(CBrucePhysicsSlice *bruce)
+void CBruce::UpdateQueue()
 {
+    CBrucePhysicsSlice *bruce =
+        reinterpret_cast<CBrucePhysicsSlice *>(this);
     CBruceScriptQueueSlice *queue = (CBruceScriptQueueSlice *)bruce;
 
     if (bruce->mDoingATrick != 0)
@@ -2973,7 +2982,8 @@ void Physics_UpdateQueue(CBrucePhysicsSlice *bruce)
         {
             queue->mActionButton = queue->mTrickQueue[idx].Button;
             queue->mActionButtonEventTime = queue->mTrickQueue[idx].EventTime;
-            Physics_TriggerTrickScript(bruce, queue->mTrickQueue[idx].pTrick);
+            reinterpret_cast<CBruce *>(bruce)->TriggerTrick(
+                queue->mTrickQueue[idx].pTrick);
             idx = queue->mTrickQueueTail;
         }
         queue->mTrickQueueTail = (idx + 1) % 10;
@@ -2988,11 +2998,12 @@ void Physics_UpdateQueue(CBrucePhysicsSlice *bruce)
  * Mangled:   ActionButtonHeld__6CBruce
  * Demangled: CBruce::ActionButtonHeld(void)
  *
- * @param bruce Owner-local view of the implicit `this` pointer.
  * @return 0 if the action event was released after its trigger time; otherwise 1.
  */
-int Physics_ActionButtonHeld(CBrucePhysicsSlice *bruce)
+int CBruce::ActionButtonHeld()
 {
+    CBrucePhysicsSlice *bruce =
+        reinterpret_cast<CBrucePhysicsSlice *>(this);
     CBruceScriptQueueSlice *queue = (CBruceScriptQueueSlice *)bruce;
     int obj = (int)bruce;
     int head = queue->mEventQueuePos;
@@ -3047,16 +3058,16 @@ int Physics_ActionButtonHeld(CBrucePhysicsSlice *bruce)
  * Mangled:   GetPreviousPressedEvent__6CBruceiiii
  * Demangled: CBruce::GetPreviousPressedEvent(int, int, int, int)
  *
- * @param bruce Owner-local view of the implicit `this` pointer.
  * @param Event Event queue position from which to start searching.
  * @param Skip Number of recent events to skip.
  * @param Time Maximum age of a matching event.
  * @param Top Queue position at which to stop searching.
  * @return The matching queue position, or -1 if none is found.
  */
-int Physics_GetPreviousPressedEvent(
-    CBrucePhysicsSlice *bruce, int Event, int Skip, int Time, int Top)
+int CBruce::GetPreviousPressedEvent(int Event, int Skip, int Time, int Top)
 {
+    CBrucePhysicsSlice *bruce =
+        reinterpret_cast<CBrucePhysicsSlice *>(this);
     char *queueBase = reinterpret_cast<char *>(bruce);
     Event -= Skip;
     if (Event < 0)
@@ -3250,11 +3261,11 @@ void CBruce::MaybeTriggerTrick()
                                 EventX = Event2;
                                 while (ButtonsLeft != 0)
                                 {
-                                    NumButtons = *pKey--;
+                                    const short WantButton = *pKey--;
                                     EventX = GetPreviousPressedEvent(
                                         EventX, 1, Time, LastEvent);
                                     if (EventX == -1 ||
-                                        mEventQueue[EventX].Button != NumButtons)
+                                        mEventQueue[EventX].Button != WantButton)
                                         break;
                                     if (OtherButtonIndex < 10)
                                     {
@@ -3268,20 +3279,9 @@ void CBruce::MaybeTriggerTrick()
                                 {
                                     ButtonRemoveLast(Button1, 1);
                                     ButtonRemoveLast(ActionButton, 1);
-                                    {
-                                        int *pOtherButton;
-                                        int i;
-                                        i = 0;
-                                        pOtherButton = OtherButton;
-                                        if (OtherButtonIndex > 0)
-                                        {
-                                            do
-                                            {
-                                                ButtonRemoveLast(*pOtherButton++, 1);
-                                                ++i;
-                                            } while (i < OtherButtonIndex);
-                                        }
-                                    }
+                                    int i;
+                                    for (i = 0; i < OtherButtonIndex; ++i)
+                                        ButtonRemoveLast(OtherButton[i], 1);
                                     QueueTrick(
                                         pTrick, ActionButton, ActionButtonEventTime);
                                     return;
@@ -3301,12 +3301,13 @@ void CBruce::MaybeTriggerTrick()
  * Address:   0x80012CE0
  * Mangled:   GetScriptFrame__6CBrucei
  * Demangled: CBruce::GetScriptFrame(int)
- * @param bruce  Owner-local view of the implicit `this` pointer.
  * @param Frame  Animation frame index.
  * @return The resolved frame, clamped to the active animation.
  */
-short Physics_GetScriptFrame(CBrucePhysicsSlice *bruce, int Frame)
+short CBruce::GetScriptFrame(int Frame)
 {
+    CBrucePhysicsSlice *bruce =
+        reinterpret_cast<CBrucePhysicsSlice *>(this);
     if (Frame == 0x2711)
     {
         return (signed char)bruce->CSuper.mTargetFrame;
@@ -3325,7 +3326,8 @@ short Physics_GetScriptFrame(CBrucePhysicsSlice *bruce, int Frame)
         if (dir > 0)
         {
             int cur = (signed char)bruce->CSuper.mTargetFrame;
-            asm("addu %0,%1,%0" : "+r"(Frame) : "r"(cur));
+            cur += Frame;
+            Frame = cur;
             if (Frame < 0)
             {
                 Frame = 0;
@@ -3357,10 +3359,11 @@ short Physics_GetScriptFrame(CBrucePhysicsSlice *bruce, int Frame)
  * Mangled:   UpdateScript__6CBruce
  * Demangled: CBruce::UpdateScript(void)
  *
- * @param bruce Owner-local view of the implicit `this` pointer.
  */
-void Physics_UpdateScript(CBrucePhysicsSlice *bruce)
+void CBruce::UpdateScript()
 {
+    CBrucePhysicsSlice *bruce =
+        reinterpret_cast<CBrucePhysicsSlice *>(this);
     // Keep each access tied to the owner field.  A persistent pointer-to-field
     // local changes the original allocator's treatment of the skater pointer.
 #define scriptCursor (&bruce->mpTrick)
@@ -3409,8 +3412,8 @@ void Physics_UpdateScript(CBrucePhysicsSlice *bruce)
 
         case 2:
             (*scriptCursor)++;
-            Physics_DebugRunAnim(
-                bruce, (unsigned short)*(short *)((int)&bruce->CSuper.mAnim), 0xA64);
+            reinterpret_cast<CBruce *>(bruce)->Debug_RunAnim(
+                (unsigned short)*(short *)((int)&bruce->CSuper.mAnim), 0xA64);
             break;
 
         case 3:
@@ -3483,8 +3486,8 @@ void Physics_UpdateScript(CBrucePhysicsSlice *bruce)
 
         case 0xD:
         {
-            int targetFrame =
-                Physics_GetScriptFrame(bruce, (*scriptCursor)[1]);
+            int targetFrame = reinterpret_cast<CBruce *>(bruce)
+                                  ->GetScriptFrame((*scriptCursor)[1]);
             if (bruce->CSuper.mFrame
                         * bruce->CSuper.mAnimDir
                     >= targetFrame
@@ -3527,14 +3530,15 @@ void Physics_UpdateScript(CBrucePhysicsSlice *bruce)
 
         case 0x10:
         {
-            int targetFrame =
-                Physics_GetScriptFrame(bruce, (*scriptCursor)[1]);
+            int targetFrame = reinterpret_cast<CBruce *>(bruce)
+                                  ->GetScriptFrame((*scriptCursor)[1]);
             if (bruce->CSuper.mFrame
                         * bruce->CSuper.mAnimDir
                     < targetFrame
                           * bruce->CSuper.mAnimDir
                     && bruce->CSuper.mAnimFinished == 0
-                    && Physics_ActionButtonHeld(bruce) != 0)
+                    && reinterpret_cast<CBruce *>(bruce)
+                           ->ActionButtonHeld() != 0)
             {
                 Done = 1;
             }
@@ -3555,7 +3559,7 @@ void Physics_UpdateScript(CBrucePhysicsSlice *bruce)
             break;
 
         case 0x11:
-            if (Physics_ActionButtonHeld(bruce) != 0)
+            if (reinterpret_cast<CBruce *>(bruce)->ActionButtonHeld() != 0)
             {
                 reinterpret_cast<CBruce *>(bruce)->Trick_HoldTrick(
                     (*scriptCursor)[1]);
@@ -3572,7 +3576,7 @@ void Physics_UpdateScript(CBrucePhysicsSlice *bruce)
             {
                 short branchOffset = **scriptCursor;
                 (*scriptCursor)++;
-                if (Physics_ActionButtonHeld(bruce) != 0)
+                if (reinterpret_cast<CBruce *>(bruce)->ActionButtonHeld() != 0)
                     *scriptCursor =
                         (short *)(reinterpret_cast<unsigned char *>(GTricks) + branchOffset);
             }
@@ -3608,7 +3612,7 @@ void Physics_UpdateScript(CBrucePhysicsSlice *bruce)
                 short frame = **scriptCursor;
                 (*scriptCursor)++;
                 bruce->CSuper.mPingPongEnd =
-                    (short)Physics_GetScriptFrame(bruce, frame);
+                    reinterpret_cast<CBruce *>(bruce)->GetScriptFrame(frame);
                 bruce->CSuper.mPingPongStart = bruce->CSuper.mFrame;
                 bruce->CSuper.mPingPongFrame = (short)XFrames;
                 bruce->CSuper.mAnimMode = 3;
@@ -3668,8 +3672,7 @@ void Physics_UpdateScript(CBrucePhysicsSlice *bruce)
 
         case 0x1E:
             (*scriptCursor)++;
-            Physics_Bail(
-                bruce, 0, DO_LIMIT);
+            reinterpret_cast<CBruce *>(bruce)->Bail(0, DO_LIMIT);
             break;
 
         case 0x1F:
@@ -3697,7 +3700,7 @@ void Physics_UpdateScript(CBrucePhysicsSlice *bruce)
             RotAngle.vy = rotationY & 0xFFF;
             RotMatrixYXZ(&RotAngle, pRotation);
             MulMatrix(&bruce->mRotationMatrix, pRotation);
-            Physics_FRUVectorsFromRotMatrix(bruce);
+            reinterpret_cast<CBruce *>(bruce)->FRUVectorsFromRotMatrix();
             break;
         }
 
@@ -3711,12 +3714,12 @@ void Physics_UpdateScript(CBrucePhysicsSlice *bruce)
 
         case 0x32:
             (*scriptCursor)++;
-            Physics_BoardOn(bruce);
+            reinterpret_cast<CBruce *>(bruce)->BoardOn();
             break;
 
         case 0x33:
             (*scriptCursor)++;
-            Physics_BoardOff(bruce);
+            reinterpret_cast<CBruce *>(bruce)->BoardOff();
             break;
 
         case 0x23:
@@ -3881,7 +3884,7 @@ void Physics_UpdateScript(CBrucePhysicsSlice *bruce)
 
         case 0x30:
             (*scriptCursor)++;
-            Physics_BloodSplat(bruce, 0, 0x32);
+            reinterpret_cast<CBruce *>(bruce)->BloodSplat(0, 0x32);
             break;
 
         case 0x46:
@@ -3891,8 +3894,7 @@ void Physics_UpdateScript(CBrucePhysicsSlice *bruce)
 
         case 0x45:
             (*scriptCursor)++;
-            Physics_Vibrate(
-                bruce,
+            reinterpret_cast<CBruce *>(bruce)->Vibrate(
                 PhysicsShortAbsolute((unsigned short)*(*scriptCursor)++),
                 *(*scriptCursor)++,
                 *(*scriptCursor)++);
@@ -3907,19 +3909,18 @@ void Physics_UpdateScript(CBrucePhysicsSlice *bruce)
             if (bruce->mManIsCrouched != 0
                 && bruce->mPad->Square.Pressed != 0)
             {
-                Physics_DebugRunAnim3(
-                    bruce, 8, 0, 0x1A, 0x13, 0xCBE);
+                reinterpret_cast<CBruce *>(bruce)->Debug_RunAnim3(8, 0, 0x1A, 0x13, 0xCBE);
             }
             else
             {
                 bruce->mManIsCrouched = 0;
-                Physics_DebugRunAnim(bruce, 0, 0xCC3);
+                reinterpret_cast<CBruce *>(bruce)->Debug_RunAnim(0, 0xCC3);
             }
             bruce->mInBail = 0;
             bruce->CSuper.CBody.mVel.z = 0;
             bruce->CSuper.CBody.mVel.y = 0;
             bruce->CSuper.CBody.mVel.x = 0;
-            Physics_BoardOn(bruce);
+            reinterpret_cast<CBruce *>(bruce)->BoardOn();
             break;
         }
 
@@ -4101,8 +4102,8 @@ void Physics_UpdateScript(CBrucePhysicsSlice *bruce)
 
         case 0x48:
         {
-            int targetFrame =
-                Physics_GetScriptFrame(bruce, (*scriptCursor)[1]);
+            int targetFrame = reinterpret_cast<CBruce *>(bruce)
+                                  ->GetScriptFrame((*scriptCursor)[1]);
             short *currentCursor = *scriptCursor;
             *scriptCursor = currentCursor + 2;
             int Offset = **scriptCursor;
@@ -4449,18 +4450,19 @@ void ExtraAnims_AddSkatersAnims(void)
  * Address: 0x80013EE4
  * Mangled: HandleTricksNew__6CBruce
  *
- * @param bruce Owner-local view of the implicit `this` pointer.
  */
-void Physics_HandleTricks(CBrucePhysicsSlice *bruce)
+void CBruce::HandleTricksNew()
 {
+    CBrucePhysicsSlice *bruce =
+        reinterpret_cast<CBrucePhysicsSlice *>(this);
     CBruceScriptQueueSlice *queue = (CBruceScriptQueueSlice *)bruce;
-    Physics_UpdateButtons(bruce);
-    ((CBruce *)bruce)->MaybeTriggerTrick();
-    Physics_UpdateQueue(bruce);
+    UpdateButtons();
+    MaybeTriggerTrick();
+    UpdateQueue();
     int scriptState = queue->mDoingAScript;
     if (scriptState)
     {
-        Physics_UpdateScript(bruce);
+        UpdateScript();
     }
 }
 
@@ -4533,14 +4535,10 @@ int InterpolateFrame(int Current, int Dest)
  * Selects and interpolates the regular and crouched lean animation frames,
  * including truck-squeak triggers at the animation limits.
  */
-/* Aliases to reach the debug-anim helpers with their trailing __LINE__ arg. */
-extern "C" void CalcLean_RunAnim2(int, int, int, int, int)
-    asm("Debug_RunAnim2__6CBruceiiii");
-extern "C" void CalcLean_RunAnim3(int, int, int, int, int, int)
-    asm("Debug_RunAnim3__6CBruceiiiii");
-
-void Physics_CalcAnimLeanFrame(CBrucePhysicsSlice *bruce)
+void CBruce::CalcAnimLeanFrame()
 {
+    CBrucePhysicsSlice *bruce =
+        reinterpret_cast<CBrucePhysicsSlice *>(this);
     int MaxLeanAngle;
     int mode;
 
@@ -4580,8 +4578,7 @@ region1_body:
                 bruce->CSuper.mFrame = 0;
             bruce->CSuper.mFrame =
                 InterpolateFrame(bruce->CSuper.mFrame, Frame);
-            CalcLean_RunAnim2(
-                (int)bruce, 7, bruce->CSuper.mFrame,
+            reinterpret_cast<CBruce *>(bruce)->Debug_RunAnim2(7, bruce->CSuper.mFrame,
                 bruce->CSuper.mFrame, 0xf0c);
         }
         else
@@ -4595,8 +4592,7 @@ region1_body:
                 bruce->CSuper.mFrame = bruce->CSuper.mFrame + 1;
             bruce->CSuper.mFrame =
                 InterpolateFrame(bruce->CSuper.mFrame, Frame);
-            CalcLean_RunAnim2(
-                (int)bruce, 6, bruce->CSuper.mFrame,
+            reinterpret_cast<CBruce *>(bruce)->Debug_RunAnim2(6, bruce->CSuper.mFrame,
                 bruce->CSuper.mFrame, 0xf16);
         }
     }
@@ -4611,8 +4607,7 @@ region1_body:
                 bruce->CSuper.mFrame = 0;
             bruce->CSuper.mFrame =
                 InterpolateFrame(bruce->CSuper.mFrame, Frame);
-            CalcLean_RunAnim2(
-                (int)bruce, 6, bruce->CSuper.mFrame,
+            reinterpret_cast<CBruce *>(bruce)->Debug_RunAnim2(6, bruce->CSuper.mFrame,
                 bruce->CSuper.mFrame, 0xf23);
         }
         else
@@ -4624,8 +4619,7 @@ region1_body:
                 bruce->CSuper.mFrame = 0;
             bruce->CSuper.mFrame =
                 InterpolateFrame(bruce->CSuper.mFrame, Frame);
-            CalcLean_RunAnim2(
-                (int)bruce, 7, bruce->CSuper.mFrame,
+            reinterpret_cast<CBruce *>(bruce)->Debug_RunAnim2(7, bruce->CSuper.mFrame,
                 bruce->CSuper.mFrame, 0xf2c);
         }
     }
@@ -4669,11 +4663,10 @@ region2_body:
                 bruce->CSuper.mFrame = 0;
             bruce->CSuper.mFrame =
                 InterpolateFrame(bruce->CSuper.mFrame, Frame);
-            CalcLean_RunAnim2(
-                (int)bruce, 10, bruce->CSuper.mFrame,
+            reinterpret_cast<CBruce *>(bruce)->Debug_RunAnim2(10, bruce->CSuper.mFrame,
                 bruce->CSuper.mFrame, 0xf50);
             if (bruce->CSuper.mFrame == 12)
-                Physics_HandleTruckSqueak(bruce);
+                reinterpret_cast<CBruce *>(bruce)->HandleTruckSqueakSound();
         }
         else
         {
@@ -4689,11 +4682,10 @@ region2_body:
                 bruce->CSuper.mFrame = 0;
             bruce->CSuper.mFrame =
                 InterpolateFrame(bruce->CSuper.mFrame, Frame);
-            CalcLean_RunAnim2(
-                (int)bruce, 9, bruce->CSuper.mFrame,
+            reinterpret_cast<CBruce *>(bruce)->Debug_RunAnim2(9, bruce->CSuper.mFrame,
                 bruce->CSuper.mFrame, 0xf60);
             if (bruce->CSuper.mFrame == 15)
-                Physics_HandleTruckSqueak(bruce);
+                reinterpret_cast<CBruce *>(bruce)->HandleTruckSqueakSound();
         }
     }
     else
@@ -4712,11 +4704,10 @@ region2_body:
                 bruce->CSuper.mFrame = 0;
             bruce->CSuper.mFrame =
                 InterpolateFrame(bruce->CSuper.mFrame, Frame);
-            CalcLean_RunAnim2(
-                (int)bruce, 9, bruce->CSuper.mFrame,
+            reinterpret_cast<CBruce *>(bruce)->Debug_RunAnim2(9, bruce->CSuper.mFrame,
                 bruce->CSuper.mFrame, 0xf75);
             if (bruce->CSuper.mFrame == 15)
-                Physics_HandleTruckSqueak(bruce);
+                reinterpret_cast<CBruce *>(bruce)->HandleTruckSqueakSound();
         }
         else
         {
@@ -4732,11 +4723,10 @@ region2_body:
                 bruce->CSuper.mFrame = 0;
             bruce->CSuper.mFrame =
                 InterpolateFrame(bruce->CSuper.mFrame, Frame);
-            CalcLean_RunAnim2(
-                (int)bruce, 10, bruce->CSuper.mFrame,
+            reinterpret_cast<CBruce *>(bruce)->Debug_RunAnim2(10, bruce->CSuper.mFrame,
                 bruce->CSuper.mFrame, 0xf85);
             if (bruce->CSuper.mFrame == 12)
-                Physics_HandleTruckSqueak(bruce);
+                reinterpret_cast<CBruce *>(bruce)->HandleTruckSqueakSound();
         }
     }
 }
@@ -4752,14 +4742,14 @@ final_block:
             return;
         if (st < 8)
         {
-            Physics_DebugRunAnim(bruce, 0, 0xf94);
+            reinterpret_cast<CBruce *>(bruce)->Debug_RunAnim(0, 0xf94);
             return;
         }
         if (st >= 11)
             return;
         if (st < 9)
             return;
-        CalcLean_RunAnim3((int)bruce, 8, 0x13, 0x1a, 0x13, 0xf9a);
+        reinterpret_cast<CBruce *>(bruce)->Debug_RunAnim3(8, 0x13, 0x1a, 0x13, 0xf9a);
     }
 }
 
@@ -4770,10 +4760,11 @@ final_block:
  * Mangled:   HandleSpin__6CBruce
  * Demangled: CBruce::HandleSpin(void)
  *
- * @param bruce Owner-local view of the implicit `this` pointer.
  */
-void Physics_HandleSpin(CBrucePhysicsSlice *bruce)
+void CBruce::HandleSpin()
 {
+    CBrucePhysicsSlice *bruce =
+        reinterpret_cast<CBrucePhysicsSlice *>(this);
     int DeltaAngle;
     int MaxLeanAngle;
     MATRIX SurfaceRotMatrix;
@@ -4860,8 +4851,8 @@ void Physics_HandleSpin(CBrucePhysicsSlice *bruce)
     {
         if (bruce->mTapTurn > 0)
         {
-            Physics_RotateHeadingAndVelocity(
-                bruce, (TimeScale * 0x96) >> 8, 0, 0);
+            reinterpret_cast<CBruce *>(bruce)->RotateHeadingAndVelocity(
+                (TimeScale * 0x96) >> 8, 0, 0);
             bruce->mTallyAngles += (TimeScale * 0x96) >> 8;
             if (bruce->mTallyAngles >= 0x800)
             {
@@ -4874,8 +4865,8 @@ void Physics_HandleSpin(CBrucePhysicsSlice *bruce)
 
         if (bruce->mTapTurn < 0)
         {
-            Physics_RotateHeadingAndVelocity(
-                bruce, -((TimeScale * 0x96) >> 8), 0, 0);
+            reinterpret_cast<CBruce *>(bruce)->RotateHeadingAndVelocity(
+                -((TimeScale * 0x96) >> 8), 0, 0);
             bruce->mTallyAngles -= (TimeScale * 0x96) >> 8;
             if (bruce->mTallyAngles < -0x7FF)
             {
@@ -5069,7 +5060,7 @@ void Physics_HandleSpin(CBrucePhysicsSlice *bruce)
     }
 
     bruce->mAnimLeanAngle = bruce->mLeanAngle;
-    Physics_CalcAnimLeanFrame(bruce);
+    CalcAnimLeanFrame();
 
     /* Nose/tail shift while grinding without grabs. */
     bruce->mPitchAngle = 0;
@@ -5097,10 +5088,11 @@ void Physics_HandleSpin(CBrucePhysicsSlice *bruce)
  *            Align heading on rail: rebuild Right/Up vectors orthogonal to Front
  *            using GTE OP (cross product) twice with a world-up reference.
  *
- * @param bruce Owner-local view of the implicit `this` pointer.
  */
-void Physics_AlignHeadingOnRail(CBrucePhysicsSlice *bruce)
+void CBruce::AlignHeadingOnRail()
 {
+    CBrucePhysicsSlice *bruce =
+        reinterpret_cast<CBrucePhysicsSlice *>(this);
     CVector *up = (CVector *)&bruce->mUp;
     bruce->mUp.x = 0;
     up->vy = -0x1000;
@@ -5114,7 +5106,7 @@ void Physics_AlignHeadingOnRail(CBrucePhysicsSlice *bruce)
     gte_ldopv2((CVector *)&bruce->mFront);
     gte_op12();
     gte_stlvnl(up);
-    Physics_RotMatrixFromFRUVectors(bruce);
+    reinterpret_cast<CBruce *>(bruce)->RotMatrixFromFRUVectors();
 }
 
 // ====== 0x80014F58 CreateRailSparks__6CBruce ===================================
@@ -5122,16 +5114,18 @@ void Physics_AlignHeadingOnRail(CBrucePhysicsSlice *bruce)
 // Address: 0x80014F58
 // Demangled: CBruce::CreateRailSparks(void)
 #include "BIT2.h"
-void Physics_CreateRailSparks(CBrucePhysicsSlice *bruce)
+void CBruce::CreateRailSparks()
 {
+    CBrucePhysicsSlice *bruce =
+        reinterpret_cast<CBrucePhysicsSlice *>(this);
     if (BitCount >= 0xC8)
         return;
     int i = 0;
-    Physics_SetAnglesFromHeading(bruce);
+    reinterpret_cast<CBruce *>(bruce)->SetAnglesFromHeading();
     Bit_SetSparkTrajectory(*reinterpret_cast<const CSVector *>(
         &bruce->CSuper.CBody.CItem.mAngles));
     CSVector cone;
-    register CSVector *conePtr asm("$5") = &cone;
+    CSVector *conePtr = &cone;
     cone.vx = 0x1C2;
     conePtr->vy = 0x384;
     conePtr->vz = 0;
@@ -5145,7 +5139,7 @@ void Physics_CreateRailSparks(CBrucePhysicsSlice *bruce)
     do
     {
         CGrindSpark *bit = static_cast<CGrindSpark *>(
-            Bit_AllocateStorage(BIT2_GRIND_SPARK_STORAGE_SIZE));
+            CBit::operator new(BIT2_GRIND_SPARK_STORAGE_SIZE));
         if (bit != 0)
         {
             Bit2_ConstructGrindSpark(
@@ -5165,10 +5159,11 @@ void Physics_CreateRailSparks(CBrucePhysicsSlice *bruce)
  * Mangled:   TweakRailScore__6CBruce
  * Demangled: CBruce::TweakRailScore(void)
  *
- * @param bruce Owner-local view of the implicit `this` pointer.
  */
-void Physics_TweakRailScore(CBrucePhysicsSlice *bruce)
+void CBruce::TweakRailScore()
 {
+    CBrucePhysicsSlice *bruce =
+        reinterpret_cast<CBrucePhysicsSlice *>(this);
     CVector localVec =
         *(CVector *)&bruce->CSuper.CBody.CItem.mPos -
         *(CVector *)&bruce->mGrindPos;
@@ -5188,10 +5183,11 @@ void Physics_TweakRailScore(CBrucePhysicsSlice *bruce)
  * Mangled:   HandleGrindOffSound__6CBruce
  * Demangled: CBruce::HandleGrindOffSound(void)
  *
- * @param bruce Owner-local view of the implicit `this` pointer.
  */
-void Physics_HandleGrindOffSound(CBrucePhysicsSlice *bruce)
+void CBruce::HandleGrindOffSound()
 {
+    CBrucePhysicsSlice *bruce =
+        reinterpret_cast<CBrucePhysicsSlice *>(this);
     int sfx;
     switch (bruce->mRailType)
     {
@@ -5224,10 +5220,11 @@ void Physics_HandleGrindOffSound(CBrucePhysicsSlice *bruce)
  * Mangled:   LeaveRail__6CBruce
  * Demangled: CBruce::LeaveRail(void)
  *
- * @param bruce Owner-local view of the implicit `this` pointer.
  */
-void Physics_LeaveRail(CBrucePhysicsSlice *bruce)
+void CBruce::LeaveRail()
 {
+    CBrucePhysicsSlice *bruce =
+        reinterpret_cast<CBrucePhysicsSlice *>(this);
     CBruceScriptQueueSlice *script = (CBruceScriptQueueSlice *)bruce;
     Physics_StateTransition(bruce, 1, 0x1152);
     bruce->mDontStickTimer = 5;
@@ -5238,17 +5235,17 @@ void Physics_LeaveRail(CBrucePhysicsSlice *bruce)
     bruce->mDoingATrick = 0;
     bruce->mNum180Spins = 0;
     bruce->mTallyAngles = 0;
-    Physics_HandleGrindOffSound(bruce);
+    reinterpret_cast<CBruce *>(bruce)->HandleGrindOffSound();
     short *trick = script->mpOffTrick;
     script->mpJumpTrick = 0;
     if (trick != 0)
     {
-        Physics_TriggerTrickScript(bruce, trick);
+        reinterpret_cast<CBruce *>(bruce)->TriggerTrick(trick);
         script->mpOffTrick = 0;
     }
     else
     {
-        Physics_DebugRunAnim(bruce, 0xE, 0x1168);
+        reinterpret_cast<CBruce *>(bruce)->Debug_RunAnim(0xE, 0x1168);
         script->mDoingAScript = 0;
     }
 }
@@ -5288,10 +5285,10 @@ void CBruce::DoOnRailPhysics()
     int AccMagnitude;
 
     bruce->mManualLean = 0;
-    Physics_Vibrate(bruce, 2, 0, 1);
+    reinterpret_cast<CBruce *>(bruce)->Vibrate(2, 0, 1);
     FirstTimeThroughLoop = 1;
     if (bruce->mRailSparks != 0)
-        Physics_CreateRailSparks(bruce);
+        reinterpret_cast<CBruce *>(bruce)->CreateRailSparks();
 
     ((CVectorPhysicsOwner *)((int)&bruce->CSuper.CBody.mAcc))->Set(0, 0, 0);
 
@@ -5299,7 +5296,7 @@ void CBruce::DoOnRailPhysics()
     Gravity.vy = 0x32C8;
     Gravity.vz = 0;
 
-    Physics_TweakRailScore(bruce);
+    reinterpret_cast<CBruce *>(bruce)->TweakRailScore();
 
     do
     {
@@ -5417,7 +5414,7 @@ void CBruce::DoOnRailPhysics()
                     continue;
                 }
             }
-            Physics_LeaveRail(bruce);
+            reinterpret_cast<CBruce *>(bruce)->LeaveRail();
             RemainingSpeed = 0;
         }
         else
@@ -5426,7 +5423,7 @@ void CBruce::DoOnRailPhysics()
             int NextSegment2 = Rail_NextNode((unsigned short)NextSegment);
             if (NextSegment2 == 0)
             {
-                Physics_LeaveRail(bruce);
+                reinterpret_cast<CBruce *>(bruce)->LeaveRail();
                 RemainingSpeed = 0;
             }
             else
@@ -5441,7 +5438,7 @@ void CBruce::DoOnRailPhysics()
                 M3dUtils_NormaliseVector((CVector *)&SegDir2);
                 if (Mips_CVecDotProd(&SegDir, &SegDir2) < 0xA49)
                 {
-                    Physics_LeaveRail(bruce);
+                    reinterpret_cast<CBruce *>(bruce)->LeaveRail();
                     RemainingSpeed = 0;
                 }
                 else
@@ -5460,7 +5457,7 @@ void CBruce::DoOnRailPhysics()
     {
         CVector Negated;
 
-        Physics_VectorNegate(&Negated, &SegDir);
+        __mi__C7CVector(&Negated, &SegDir);
         *(CVector *)&bruce->mRailDir = Negated;
     }
     else
@@ -5471,7 +5468,7 @@ void CBruce::DoOnRailPhysics()
     *(CVector *)&bruce->mFront =
         *(CVector *)&bruce->mRailDir * bruce->mRailFlip;
 
-    Physics_AlignHeadingOnRail(bruce);
+    reinterpret_cast<CBruce *>(bruce)->AlignHeadingOnRail();
 
     /* Balance meter: decay the lean, then nudge it by the current tilt. */
     bruce->mGrindLean +=
@@ -5522,16 +5519,16 @@ void CBruce::DoOnRailPhysics()
 
     if (PhysicsAbsolute(bruce->mGrindLean) > 4000)
     {
-        Physics_Bail(
-            bruce, bruce->mRailBailNumber, DO_LIMIT);
+        reinterpret_cast<CBruce *>(bruce)->Bail(
+            bruce->mRailBailNumber, DO_LIMIT);
         bruce->mRailBailNumber = 0;
         bruce->mRailBails = bruce->mRailBails + 1;
     }
 
     if (bruce->mInBail == 0 && PhysicsAbsolute(LastSpeed) < 7000)
     {
-        Physics_Bail(
-            bruce, bruce->mRailBailNumber, DO_LIMIT);
+        reinterpret_cast<CBruce *>(bruce)->Bail(
+            bruce->mRailBailNumber, DO_LIMIT);
         bruce->mRailBailNumber = 0;
     }
 
@@ -5544,7 +5541,7 @@ void CBruce::DoOnRailPhysics()
         RotAngle.vz = (bruce->mGrindLean / 10) & 0xFFF;
         RotMatrixYXZ(&RotAngle, &Rail_RotMatrix);
         MulMatrix(&bruce->mRotationMatrix, &Rail_RotMatrix);
-        Physics_FRUVectorsFromRotMatrix(bruce);
+        reinterpret_cast<CBruce *>(bruce)->FRUVectorsFromRotMatrix();
 
         /* Probe the segment just travelled for geometry that blocks the grind. */
         if (bruce->mOnRail != 0 && bruce->mGrindTime >= 3)
@@ -5601,7 +5598,7 @@ void CBruce::DoOnRailPhysics()
                 if (line_info.pItem != 0)
                 {
                     bruce->CSuper.CBody.CItem.mPos = bruce->CSuper.CBody.mOldPos;
-                    Physics_LeaveRail(bruce);
+                    reinterpret_cast<CBruce *>(bruce)->LeaveRail();
                 }
             }
         }
@@ -5616,10 +5613,11 @@ void CBruce::DoOnRailPhysics()
  * Mangled:   SkateOffGround__6CBruce
  * Demangled: CBruce::SkateOffGround(void)
  *
- * @param bruce Owner-local view of the implicit `this` pointer.
  */
-void Physics_SkateOffGround(CBrucePhysicsSlice *bruce)
+void CBruce::SkateOffGround()
 {
+    CBrucePhysicsSlice *bruce =
+        reinterpret_cast<CBrucePhysicsSlice *>(this);
     if (bruce->mPhysicsState == 2)
     {
         Physics_StateTransition(bruce, 1, 0x12E0);
@@ -5638,11 +5636,11 @@ void Physics_SkateOffGround(CBrucePhysicsSlice *bruce)
         return;
     if (bruce->mManIsCrouched != 0)
     {
-        Physics_DebugRunAnim(bruce, 0x1A, 0x12F9);
+        reinterpret_cast<CBruce *>(bruce)->Debug_RunAnim(0x1A, 0x12F9);
     }
     else
     {
-        Physics_DebugRunAnim(bruce, 0x1B, 0x12FB);
+        reinterpret_cast<CBruce *>(bruce)->Debug_RunAnim(0x1B, 0x12FB);
     }
 }
 
@@ -5653,15 +5651,15 @@ void Physics_SkateOffGround(CBrucePhysicsSlice *bruce)
  * Mangled:   CheckSide__6CBruceiii
  * Demangled: CBruce::CheckSide(int, int, int)
  *
- * @param bruce Owner-local view of the implicit `this` pointer.
  * @param Side  Signed side of the skater to probe.
  * @param SideCol  Probe distance along the skater's right vector.
  * @param BounceOff  Whether a collision reflects the skater away from the wall.
  * @return 1 when the skater can be moved to the resolved side position; otherwise 0.
  */
-int Physics_CheckSide(
-    CBrucePhysicsSlice *bruce, int Side, int SideCol, int BounceOff)
+int CBruce::CheckSide(int Side, int SideCol, int BounceOff)
 {
+    CBrucePhysicsSlice *bruce =
+        reinterpret_cast<CBrucePhysicsSlice *>(this);
     SLineInfo line_info;
 
     line_info.StartCoords.vx =
@@ -5707,13 +5705,13 @@ int Physics_CheckSide(
                     if (Mips_CVecDotProd(&WallFloorNormal, (CVector *)&bruce->mFront) > 0xB50)
                     {
                         reinterpret_cast<CBruce *>(bruce)->EndManual();
-                        Physics_DebugRunAnim(bruce, 0xC, 0x1338);
+                        reinterpret_cast<CBruce *>(bruce)->Debug_RunAnim(0xC, 0x1338);
                         TurnAway = 0xC8;
                         SFX_Grunt(reinterpret_cast<CBruce *>(bruce));
                     }
                 }
-                Physics_ReflectHeadingVelocityInPlane(
-                    bruce, line_info.Normal, TurnAway);
+                reinterpret_cast<CBruce *>(bruce)->ReflectHeadingVelocityInPlane(
+                    line_info.Normal, TurnAway);
             }
 
             line_info.StartCoords.vx = bruce->CSuper.CBody.CItem.mPos.x;
@@ -5749,10 +5747,11 @@ int Physics_CheckSide(
  * Emit terrain-colored landing sparks and scale controller vibration by the
  * skater's current speed.
  *
- * @param bruce Owner-local view of the implicit `this` pointer.
  */
-void Physics_DoTerrainEffects(CBrucePhysicsSlice *bruce)
+void CBruce::DoTerrainEffects()
 {
+    CBrucePhysicsSlice *bruce =
+        reinterpret_cast<CBrucePhysicsSlice *>(this);
     CVector *a = (CVector *)&bruce->CSuper.CBody.mVel;
     int Speed = M3dMaths_SquareRoot0(
                     Mips_CVecDotProd(a, a))
@@ -5761,7 +5760,7 @@ void Physics_DoTerrainEffects(CBrucePhysicsSlice *bruce)
     if (((unsigned int)(bruce->mTerrain - 5) < 2 || bruce->mTerrain == 3)
         && BitCount < 200)
     {
-        Physics_SetAnglesFromHeading(bruce);
+        reinterpret_cast<CBruce *>(bruce)->SetAnglesFromHeading();
         Bit_SetSparkTrajectory(*reinterpret_cast<const CSVector *>(
             &bruce->CSuper.CBody.CItem.mAngles));
         CSVectorPhysicsOwner cone;
@@ -5806,15 +5805,13 @@ void Physics_DoTerrainEffects(CBrucePhysicsSlice *bruce)
         {
             if (Mem_GetFree(1) > 10000)
             {
-                CBitVelocityPhysicsOwner *pSpark =
-                    static_cast<CBitVelocityPhysicsOwner *>(
-                        Bit_AllocateStorage(BIT_SPARK_STORAGE_SIZE));
+                CSpark *pSpark =
+                    static_cast<CSpark *>(
+                        CBit::operator new(BIT_SPARK_STORAGE_SIZE));
                 if (pSpark != 0)
-                    pSpark = reinterpret_cast<CBitVelocityPhysicsOwner *>(
-                        Physics_ConstructSpark(
-                            reinterpret_cast<CSpark *>(pSpark),
-                            *(CVector *)&bruce->CSuper.CBody.CItem.mPos,
-                            0x14, Speed >> 0x10, 0x14));
+                    pSpark = ::new (pSpark) CSpark(
+                        *(CVector *)&bruce->CSuper.CBody.CItem.mPos,
+                        0x14, Speed >> 0x10, 0x14);
                 pSpark->mVel += *a;
             }
             i++;
@@ -5835,13 +5832,13 @@ void Physics_DoTerrainEffects(CBrucePhysicsSlice *bruce)
         case 4:
             return;
         case 5:
-            Physics_Vibrate(bruce, 8, 1, 0x2580 / Speed);
+            reinterpret_cast<CBruce *>(bruce)->Vibrate(8, 1, 0x2580 / Speed);
             break;
         case 6:
-            Physics_Vibrate(bruce, 8, 1, 0x1180 / Speed);
+            reinterpret_cast<CBruce *>(bruce)->Vibrate(8, 1, 0x1180 / Speed);
             break;
         case 3:
-            Physics_Vibrate(bruce, 8, 1, 0x3FC0 / Speed);
+            reinterpret_cast<CBruce *>(bruce)->Vibrate(8, 1, 0x3FC0 / Speed);
             break;
         default:
             return;
@@ -5856,10 +5853,11 @@ void Physics_DoTerrainEffects(CBrucePhysicsSlice *bruce)
  * Mangled:   DoManualPhysics__6CBruce
  * Demangled: CBruce::DoManualPhysics(void)
  *
- * @param bruce Owner-local view of the implicit `this` pointer.
  */
-void Physics_DoManual(CBrucePhysicsSlice *bruce)
+void CBruce::DoManualPhysics()
 {
+    CBrucePhysicsSlice *bruce =
+        reinterpret_cast<CBrucePhysicsSlice *>(this);
 
     if (bruce->mManual == 0)
     {
@@ -5936,18 +5934,18 @@ void Physics_DoManual(CBrucePhysicsSlice *bruce)
         if (bruce->mManual == 1 && bruce->mManualLean > 0)
         {
             bruce->mManualLean = 0;
-            Physics_Bail(bruce, 6, DO_LIMIT);
+            reinterpret_cast<CBruce *>(bruce)->Bail(6, DO_LIMIT);
         }
         else if (bruce->mManual == 2 && bruce->mManualLean < 0)
         {
             bruce->mManualLean = 0;
-            Physics_Bail(bruce, 0, DO_LIMIT);
+            reinterpret_cast<CBruce *>(bruce)->Bail(0, DO_LIMIT);
         }
         else
         {
             bruce->mManualLean = 0;
             reinterpret_cast<CBruce *>(bruce)->EndManual();
-            Physics_DebugRunAnim(bruce, 5, 0x1408);
+            reinterpret_cast<CBruce *>(bruce)->Debug_RunAnim(5, 0x1408);
             return;
         }
     }
@@ -5963,7 +5961,6 @@ void Physics_DoManual(CBrucePhysicsSlice *bruce)
  * Demangled: CBruce::MoveOriginTo(int, int, int)
  *            SLineInfo: StartCoords[0..2] at +0, EndCoords[0..2] at +12, pItem at +104
  *
- * @param bruce Owner-local view of the implicit `this` pointer.
  * @param x  X coordinate.
  * @param y  Y coordinate.
  * @param z  Z coordinate.
@@ -5972,9 +5969,10 @@ void Physics_DoManual(CBrucePhysicsSlice *bruce)
 #define HEADBLOODATFRAME_CONSUMER_DECLARATION
 #include "HEADBLOODATFRAME.h"
 
-void Physics_MoveOriginTo(
-    CBrucePhysicsSlice *bruce, int x, int y, int z)
+void CBruce::MoveOriginTo(int x, int y, int z)
 {
+    CBrucePhysicsSlice *bruce =
+        reinterpret_cast<CBrucePhysicsSlice *>(this);
     SLineInfo line_info;
     int old_bcc = BulletCollisionCheck;
     BulletCollisionCheck = 1;
@@ -6051,10 +6049,11 @@ done:
  * Mangled:   HandleTruckSqueakSound__6CBruce
  * Demangled: CBruce::HandleTruckSqueakSound(void)
  *
- * @param bruce Owner-local view of the implicit `this` pointer.
  */
-void Physics_HandleTruckSqueak(CBrucePhysicsSlice *bruce)
+void CBruce::HandleTruckSqueakSound()
 {
+    CBrucePhysicsSlice *bruce =
+        reinterpret_cast<CBrucePhysicsSlice *>(this);
     int shouldSkip = 0;
     int val54 = bruce->CSuper.CBody.mVel.x >> 12;
     if ((u32)(val54 + 1) < 3)
@@ -6112,7 +6111,7 @@ void CBruce::DoOnGroundPhysics()
     CVector Old;
 
     if (XFrames - bruce->mLandedTime > 20 && GState != 1)
-        Physics_MaybeManual(bruce, 15, 1);
+        reinterpret_cast<CBruce *>(bruce)->MaybeManual(15, 1);
 
     bruce->mLastGroundPos = *(CVectorOwner *)&mPos;
 
@@ -6129,7 +6128,7 @@ void CBruce::DoOnGroundPhysics()
     if (bruce->mPhysicsState == 0)
         bruce->mFlipAngle = 0;
 
-    Physics_DoTerrainEffects(bruce);
+    reinterpret_cast<CBruce *>(bruce)->DoTerrainEffects();
     CVector &velocity = mVel;
     Old = mPos;
 
@@ -6142,13 +6141,13 @@ void CBruce::DoOnGroundPhysics()
 
     if (!OnInvisible
         && bruce->mInBail == 0
-        && Physics_FlipToVelocity(bruce) != 0
+        && reinterpret_cast<CBruce *>(bruce)->FlipToVelocity() != 0
         && bruce->mPhysicsState == 0
         && XFrames - bruce->mLandedTime > 5
         && bruce->mManual != 0)
     {
         reinterpret_cast<CBruce *>(bruce)->EndManual();
-        Physics_DebugRunAnim(bruce, 5, 0x14BF);
+        reinterpret_cast<CBruce *>(bruce)->Debug_RunAnim(5, 0x14BF);
     }
 
     if (bruce->mFlipNum != 0
@@ -6164,7 +6163,7 @@ void CBruce::DoOnGroundPhysics()
     {
         if (TurnAngle == 0)
         {
-            Physics_AlignToFallLine(bruce, 40);
+            reinterpret_cast<CBruce *>(bruce)->AlignToFallLine(40);
         }
         else
         {
@@ -6187,8 +6186,7 @@ void CBruce::DoOnGroundPhysics()
         bruce->mAutoTurn = 0;
     }
 
-    Physics_RotateHeadingAndVelocity(
-        bruce,
+    reinterpret_cast<CBruce *>(bruce)->RotateHeadingAndVelocity(
         (TurnAngle * TimeScale) >> 8,
         OnInvisible ^ 1,
         0);
@@ -6276,14 +6274,13 @@ void CBruce::DoOnGroundPhysics()
                             (CVector *)&bruce->mFront) > 0xB50)
                     {
                         reinterpret_cast<CBruce *>(bruce)->EndManual();
-                        Physics_DebugRunAnim(
-                            bruce, 12, 0x153C);
+                        reinterpret_cast<CBruce *>(bruce)->Debug_RunAnim(12, 0x153C);
                         TurnAway = 200;
                         SFX_Grunt(reinterpret_cast<CBruce *>(bruce));
                     }
                 }
-                Physics_ReflectHeadingVelocityInPlane(
-                    bruce, line_info.Normal, TurnAway);
+                reinterpret_cast<CBruce *>(bruce)->ReflectHeadingVelocityInPlane(
+                    line_info.Normal, TurnAway);
         }
         else if (line_info.pItem != 0
                  && (Face_Air == 0 || Face_Visible != 0))
@@ -6306,8 +6303,7 @@ void CBruce::DoOnGroundPhysics()
                                           (short)(unsigned short)
                                               line_info.Normal.vz))
                     {
-                        Physics_MoveOriginTo(
-                            bruce,
+                        reinterpret_cast<CBruce *>(bruce)->MoveOriginTo(
                             line_info.Position.vx
                                 + line_info.Normal.vx * 30,
                             line_info.Position.vy
@@ -6324,7 +6320,7 @@ void CBruce::DoOnGroundPhysics()
                             normalY;
                         mNormal.vz =
                             normalZ;
-                        Physics_OrientToNormal(bruce);
+                        reinterpret_cast<CBruce *>(bruce)->OrientToNormal();
 
                         if (bruce->mPhysicsState == 2)
                         {
@@ -6354,7 +6350,7 @@ void CBruce::DoOnGroundPhysics()
                             gte_ldopv2(up);
                             gte_op12();
                             gte_stlvnl((CVector *)&bruce->mRight);
-                            Physics_RotMatrixFromFRUVectors(bruce);
+                            reinterpret_cast<CBruce *>(bruce)->RotMatrixFromFRUVectors();
                         }
                         Physics_StateTransition(
                             bruce, 0, 0x1576);
@@ -6381,22 +6377,19 @@ void CBruce::DoOnGroundPhysics()
                                     (CVector *)&bruce->mFront) > 0xB50)
                             {
                                 reinterpret_cast<CBruce *>(bruce)->EndManual();
-                                Physics_DebugRunAnim(
-                                    bruce, 12, 0x1589);
+                                reinterpret_cast<CBruce *>(bruce)->Debug_RunAnim(12, 0x1589);
                                 SFX_Grunt(reinterpret_cast<CBruce *>(bruce));
                                 TurnAway = 200;
                             }
                         }
 
-                        Physics_ReflectHeadingVelocityInPlane(
-                            bruce,
+                        reinterpret_cast<CBruce *>(bruce)->ReflectHeadingVelocityInPlane(
                             line_info.Normal, TurnAway);
                     }
                 }
                 else if (line_info.Distance <= (Speed >> 12))
                 {
-                    Physics_MoveOriginTo(
-                        bruce,
+                    reinterpret_cast<CBruce *>(bruce)->MoveOriginTo(
                         line_info.Position.vx
                             + line_info.Normal.vx * 30,
                         line_info.Position.vy
@@ -6426,7 +6419,7 @@ void CBruce::DoOnGroundPhysics()
                         mNormal.vz =
                             normalZ;
                     }
-                    Physics_OrientToNormal(bruce);
+                    reinterpret_cast<CBruce *>(bruce)->OrientToNormal();
                 }
         }
     }
@@ -6440,7 +6433,7 @@ void CBruce::DoOnGroundPhysics()
     else
         bruce->mTooFast = 0;
 
-    Physics_FRUVectorsFromRotMatrix(bruce);
+    reinterpret_cast<CBruce *>(bruce)->FRUVectorsFromRotMatrix();
     line_info.StartCoords.vx =
         mPos.vx + bruce->mUp.vx * 70;
     line_info.StartCoords.vy =
@@ -6518,8 +6511,7 @@ void CBruce::DoOnGroundPhysics()
 
                 CVector Orig =
                     *(CVector *)&mPos;
-                Physics_MoveOriginTo(
-                    bruce,
+                reinterpret_cast<CBruce *>(bruce)->MoveOriginTo(
                     line_info.Position.vx + bruce->mUp.vx * 30,
                     line_info.Position.vy + bruce->mUp.vy * 30,
                     line_info.Position.vz + bruce->mUp.vz * 30);
@@ -6554,8 +6546,7 @@ void CBruce::DoOnGroundPhysics()
                                 bruce, 1, 0x1646);
                             reinterpret_cast<CBruce *>(bruce)->Trick_TakeOff();
                             bruce->mIsOnTaggedPoly = 0;
-                            Physics_DebugRunAnim(
-                                bruce, 14, 0x1649);
+                            reinterpret_cast<CBruce *>(bruce)->Debug_RunAnim(14, 0x1649);
                             bruce->mManIsJumping = 1;
                         }
                         else
@@ -6563,8 +6554,7 @@ void CBruce::DoOnGroundPhysics()
                             if (bruce->mManIsJumping == 0
                                 && bruce->mInBail == 0)
                             {
-                                Physics_DebugRunAnim(
-                                    bruce, 14, 0x1651);
+                                reinterpret_cast<CBruce *>(bruce)->Debug_RunAnim(14, 0x1651);
                                 bruce->mManIsJumping = 1;
                             }
                             reinterpret_cast<CBruce *>(bruce)->Trick_TakeOff();
@@ -6625,13 +6615,14 @@ void CBruce::DoOnGroundPhysics()
                             && UpDot > 0
                             && UpDot < 3000)
                         {
-                            Physics_SkateOffGround(bruce);
+                            reinterpret_cast<CBruce *>(bruce)->
+                                SkateOffGround();
                         }
                     }
                     else if (bruce->mPhysicsState != 7)
                     {
-                        Physics_HandleBailPerpendicular(
-                            bruce, line_info.Normal);
+                        reinterpret_cast<CBruce *>(bruce)->
+                            HandleBailPerpendicular(line_info.Normal);
                         Physics_StateTransition(
                             bruce, 0, 0x16A5);
                         bruce->mLandedTime = XFrames;
@@ -6654,7 +6645,7 @@ void CBruce::DoOnGroundPhysics()
                 }
                 else
                 {
-                    Physics_SkateOffGround(bruce);
+                    reinterpret_cast<CBruce *>(bruce)->SkateOffGround();
                 }
 
                 if (bruce->mPhysicsState != 1)
@@ -6681,14 +6672,14 @@ void CBruce::DoOnGroundPhysics()
                         mNormal.vz =
                             normalZ;
                     }
-                    Physics_OrientToNormal(bruce);
+                    reinterpret_cast<CBruce *>(bruce)->OrientToNormal();
                 }
             }
             else
             {
                 bruce->mIsOnTaggedPoly =
                     ((unsigned short *)line_info.pFace)[7] & 0x20;
-                Physics_SkateOffGround(bruce);
+                reinterpret_cast<CBruce *>(bruce)->SkateOffGround();
             }
         }
     }
@@ -6696,7 +6687,7 @@ void CBruce::DoOnGroundPhysics()
     goto ground_probe_done;
 
 missed_ground:
-    Physics_SkateOffGround(bruce);
+    reinterpret_cast<CBruce *>(bruce)->SkateOffGround();
 
 ground_probe_done:
 
@@ -6830,12 +6821,12 @@ int arccos(int a)
  * Bail when the skater leans too far into the supplied surface normal, then
  * rebuild the front/up basis and redirect velocity along the new front.
  *
- * @param bruce Owner-local view of the implicit `this` pointer.
  * @param v     Surface normal used for the lean test.
  */
-void Physics_HandleLeaningBail(
-    CBrucePhysicsSlice *bruce, SVECTOR v)
+void CBruce::HandleLeaningBail(SVECTOR v)
 {
+    CBrucePhysicsSlice *bruce =
+        reinterpret_cast<CBrucePhysicsSlice *>(this);
     if (bruce->mInBail == 0 && bruce->mPhysicsState != 2)
     {
         CVector TmpCV;
@@ -6847,18 +6838,18 @@ void Physics_HandleLeaningBail(
         if (Mips_CVecDotProd(up, &TmpCV) < 2000
             && bruce->mUp.vy > -2000)
         {
-            Physics_Bail(bruce, 3, DO_LIMIT);
+            reinterpret_cast<CBruce *>(bruce)->Bail(3, DO_LIMIT);
 
             CVector Temp = *(CVector *)&bruce->mFront;
             CVector negated;
-            Physics_VectorNegate(&negated, up);
+            __mi__C7CVector(&negated, up);
             *(CVector *)&bruce->mFront = negated;
             *(CVector *)&bruce->mUp = Temp;
 
-            Physics_RotMatrixFromFRUVectors(bruce);
+            reinterpret_cast<CBruce *>(bruce)->RotMatrixFromFRUVectors();
 
             CVector negatedFront;
-            Physics_VectorNegate(&negatedFront, (CVector *)&bruce->mFront);
+            __mi__C7CVector(&negatedFront, (CVector *)&bruce->mFront);
             int scale = 10;
             Physics_VectorMultiply(&negated, &negatedFront, &scale);
             *(CVector *)&bruce->CSuper.CBody.mVel = negated;
@@ -6874,12 +6865,12 @@ void Physics_HandleLeaningBail(
  * Mangled:   HitAirPoly__6CBruceR9SLineInfo
  * Demangled: CBruce::HitAirPoly(SLineInfo &)
  *
- * @param bruce      Skater whose airborne collision is being resolved.
  * @param line_info  Collision query containing the face normal.
  */
-void Physics_HitAirPoly(
-    CBrucePhysicsSlice *bruce, SLineInfo *line_info)
+void CBruce::HitAirPoly(SLineInfo &line_info)
 {
+    CBrucePhysicsSlice *bruce =
+        reinterpret_cast<CBrucePhysicsSlice *>(this);
     int NewMag;
 
     if (bruce->mStickToInvisible != 0)
@@ -6901,7 +6892,7 @@ void Physics_HitAirPoly(
         NewMag = M3dMaths_SquareRoot0(
                      Mips_CVecDotProd((CVector *)&bruce->CSuper.CBody.mVel,
                                                     (CVector *)&bruce->CSuper.CBody.mVel)) << 6;
-        SVECTOR Push = line_info->Normal;
+        SVECTOR Push = line_info.Normal;
         bruce->CSuper.CBody.mVel.x -= Mips_FixMul(Push.vx, NewMag / 4);
         bruce->CSuper.CBody.mVel.z -= Mips_FixMul(Push.vz, NewMag / 4);
     }
@@ -6910,7 +6901,7 @@ void Physics_HitAirPoly(
     if (bruce->mManIsJumping == 0 || bruce->mDoingATrick == 0)
     {
         reinterpret_cast<CBruce *>(bruce)->Trick_TakeOff();
-        Physics_DebugRunAnim(bruce, 0xE, 0x17FC);
+        reinterpret_cast<CBruce *>(bruce)->Debug_RunAnim(0xE, 0x17FC);
         bruce->mManIsJumping = 1;
     }
 }
@@ -6922,12 +6913,12 @@ void Physics_HitAirPoly(
  * Mangled:   MaybeManual__6CBruceii
  * Demangled: CBruce::MaybeManual(int, int)
  *
- * @param bruce Owner-local view of the implicit `this` pointer.
  * @param Time  Manual-input timing window.
  * @param FromGround  Whether the manual attempt began on the ground.
  */
-void Physics_MaybeManual(CBrucePhysicsSlice *bruce, int Time, int FromGround)
+void CBruce::MaybeManual(int Time, int FromGround)
 {
+#define bruce ((CBrucePhysicsSlice *)this)
     if (bruce->mInBail != 0)
         return;
     if (bruce->CSuper.mAnim == 0x82)
@@ -6947,8 +6938,9 @@ void Physics_MaybeManual(CBrucePhysicsSlice *bruce, int Time, int FromGround)
         LastEvent = 0x1F;
 
     int FirstEvent = -1;
-    int Event = Physics_GetPreviousPressedEvent(
-        bruce, LastEvent, 0, Time, LastEvent);
+    int Event = reinterpret_cast<CBruce *>(bruce)
+                    ->GetPreviousPressedEvent(
+                        LastEvent, 0, Time, LastEvent);
 
     while (Event >= 0)
     {
@@ -6986,8 +6978,9 @@ void Physics_MaybeManual(CBrucePhysicsSlice *bruce, int Time, int FromGround)
             break;
         }
 
-        Event = Physics_GetPreviousPressedEvent(
-            bruce, Event, 1, Time, LastEvent);
+        Event = reinterpret_cast<CBruce *>(bruce)
+                    ->GetPreviousPressedEvent(
+                        Event, 1, Time, LastEvent);
     }
 
     if (bruce->mManual == 0)
@@ -7032,14 +7025,15 @@ void Physics_MaybeManual(CBrucePhysicsSlice *bruce, int Time, int FromGround)
     if (bruce->mPhysicsState == 0)
     {
         if (bruce->mManual == 1)
-            Physics_DebugRunAnim(bruce, 0x28, 0x188D);
+            reinterpret_cast<CBruce *>(bruce)->Debug_RunAnim(0x28, 0x188D);
         else
-            Physics_DebugRunAnim(bruce, 0x29, 0x188F);
+            reinterpret_cast<CBruce *>(bruce)->Debug_RunAnim(0x29, 0x188F);
     }
     else
     {
         printf(PhysicsDiagnosticPool.manualAnimation);
     }
+#undef bruce
 }
 
 /** Return the skater's current fixed-point top speed, including board boosts. */
@@ -7059,6 +7053,12 @@ static inline int PhysicsMaxSpeed(CBrucePhysicsSlice *bruce)
     }
 }
 
+/** Report whether a wall normal is steep enough to throw the skater off. */
+static inline bool PhysicsWallNormalIsSteep(short normalY)
+{
+    return normalY >= 0xCCE;
+}
+
 /**
  * DoInAirPhysics__6CBruce
  *
@@ -7074,10 +7074,10 @@ static inline int PhysicsMaxSpeed(CBrucePhysicsSlice *bruce)
  * the way down a second short probe along the board's up axis catches air
  * polys the movement segment missed.
  *
- * @param bruce Owner-local view of the implicit `this` pointer.
  */
-extern "C" void Physics_DoInAir(CBrucePhysicsSlice *bruce)
+void CBruce::DoInAirPhysics()
 {
+#define bruce ((CBrucePhysicsSlice *)this)
     CVector vMovement;
     int Speed;
     int TurnAngle;
@@ -7131,9 +7131,8 @@ extern "C" void Physics_DoInAir(CBrucePhysicsSlice *bruce)
                 Mips_CVecDotProd(&vMovement, &vMovement))
             << 6;
 
-    int MaxSpeed = PHYSICS_RECON_SKATER_STATS_SPEED;
-    if (Speed > MaxSpeed)
-        Speed = MaxSpeed;
+    if (Speed > PhysicsMaxSpeed(bruce))
+        Speed = PhysicsMaxSpeed(bruce);
 
     TurnAngle = bruce->mLeanAngle >> 12;
     Mips_FixMul(TurnAngle, 0xC00);
@@ -7162,7 +7161,7 @@ extern "C" void Physics_DoInAir(CBrucePhysicsSlice *bruce)
     }
 
     if (bruce->mPhysicsState != 2)
-        Physics_UprightSideways(bruce);
+        reinterpret_cast<CBruce *>(bruce)->UprightSideways();
 
     line_info.StartCoords.Set(
         bruce->CSuper.CBody.mOldPos.x,
@@ -7223,7 +7222,7 @@ extern "C" void Physics_DoInAir(CBrucePhysicsSlice *bruce)
                     && bruce->mCanStartNextTrick == 0
                     && bruce->CSuper.mFrame < 10000)
                 {
-                    Physics_Bail(bruce, 0, DO_LIMIT);
+                    reinterpret_cast<CBruce *>(bruce)->Bail(0, DO_LIMIT);
                     bruce->mTrickBails++;
                 }
                 else
@@ -7233,13 +7232,12 @@ extern "C" void Physics_DoInAir(CBrucePhysicsSlice *bruce)
 
                 if (bruce->mInBail == 0)
                 {
-                    Physics_FrigDarkenObject(bruce);
+                    reinterpret_cast<CBruce *>(bruce)->FrigDarkenObject();
                     Physics_StateTransition(bruce, 5, 0x19B8);
                     SFX_PlayX(0xB3, 0x2000, 0);
 
                     bruce->mWallrideTime = XFrames;
-                    Physics_MoveOriginTo(
-                        bruce,
+                    reinterpret_cast<CBruce *>(bruce)->MoveOriginTo(
                         line_info.Position.vx + line_info.Normal.vx * 30,
                         line_info.Position.vy + line_info.Normal.vy * 30,
                         line_info.Position.vz + line_info.Normal.vz * 30);
@@ -7254,8 +7252,8 @@ extern "C" void Physics_DoInAir(CBrucePhysicsSlice *bruce)
                     gte_ldopv2((CVector *)&bruce->mUp);
                     gte_op12();
                     gte_stlvnl((CVector *)&bruce->mRight);
-                    Physics_RotMatrixFromFRUVectors(bruce);
-                    Physics_FlipToVelocity(bruce);
+                    reinterpret_cast<CBruce *>(bruce)->RotMatrixFromFRUVectors();
+                    reinterpret_cast<CBruce *>(bruce)->FlipToVelocity();
 
                     int nx = line_info.Normal.vx;
                     int ny = line_info.Normal.vy;
@@ -7276,25 +7274,25 @@ extern "C" void Physics_DoInAir(CBrucePhysicsSlice *bruce)
                     gte_op12();
                     CVector WallRight;
                     gte_stlvnl(&WallRight);
-                    Physics_RotMatrixFromFRUVectors(bruce);
+                    reinterpret_cast<CBruce *>(bruce)->RotMatrixFromFRUVectors();
 
                     if ((bruce->CSuper.mExtraFlags & 2) != 0)
                     {
                         if (Mips_CVecDotProd(
                                 &WallRight,
                                 (CVector *)&bruce->CSuper.CBody.mVel) >= 0)
-                            Physics_DebugRunAnim(bruce, 0x23, 0x19DF);
+                            reinterpret_cast<CBruce *>(bruce)->Debug_RunAnim(0x23, 0x19DF);
                         else
-                            Physics_DebugRunAnim(bruce, 0x24, 0x19E3);
+                            reinterpret_cast<CBruce *>(bruce)->Debug_RunAnim(0x24, 0x19E3);
                     }
                     else
                     {
                         if (Mips_CVecDotProd(
                                 &WallRight,
                                 (CVector *)&bruce->CSuper.CBody.mVel) >= 0)
-                            Physics_DebugRunAnim(bruce, 0x24, 0x19EA);
+                            reinterpret_cast<CBruce *>(bruce)->Debug_RunAnim(0x24, 0x19EA);
                         else
-                            Physics_DebugRunAnim(bruce, 0x23, 0x19EE);
+                            reinterpret_cast<CBruce *>(bruce)->Debug_RunAnim(0x23, 0x19EE);
                     }
                 }
                 else
@@ -7306,7 +7304,7 @@ extern "C" void Physics_DoInAir(CBrucePhysicsSlice *bruce)
             {
                 bruce->CSuper.CBody.CItem.mPos = bruce->CSuper.CBody.mOldPos;
                 printf(PhysicsDiagnosticPool.newBail);
-                Physics_Bail(bruce, 0, DO_LIMIT);
+                reinterpret_cast<CBruce *>(bruce)->Bail(0, DO_LIMIT);
             }
         }
         else if (Face_Skateable == 0
@@ -7328,8 +7326,8 @@ extern "C" void Physics_DoInAir(CBrucePhysicsSlice *bruce)
             if (bruce->mDontStickTimer != 0)
             {
                 bruce->mDontStickTimer = 10;
-                Physics_RotateHeadingAndVelocity(
-                    bruce, Rnd(2) * 0x200 - 0x100, 1, 0);
+                reinterpret_cast<CBruce *>(bruce)->RotateHeadingAndVelocity(
+                    Rnd(2) * 0x200 - 0x100, 1, 0);
             }
 
             bruce->CSuper.CBody.mNormal.vx = 0;
@@ -7337,11 +7335,10 @@ extern "C" void Physics_DoInAir(CBrucePhysicsSlice *bruce)
             bruce->CSuper.CBody.mNormal.vz = 0;
             setVector(&bruce->mOldNormal, 0, -0x1000, 0);
             bruce->mSameNormal = 0;
-            Physics_OrientToNormal(bruce);
+            reinterpret_cast<CBruce *>(bruce)->OrientToNormal();
 
             bruce->mNoTrick = 15;
-            Physics_MoveOriginTo(
-                bruce,
+            reinterpret_cast<CBruce *>(bruce)->MoveOriginTo(
                 line_info.Position.vx + line_info.Normal.vx,
                 line_info.Position.vy + line_info.Normal.vy,
                 line_info.Position.vz + line_info.Normal.vz);
@@ -7349,8 +7346,8 @@ extern "C" void Physics_DoInAir(CBrucePhysicsSlice *bruce)
             Physics_StateTransition(bruce, 1, 0x1A5B);
 
             bruce->mManIsJumping = 1;
-            Physics_ReflectHeadingVelocityInPlane(
-                bruce, line_info.Normal, 0);
+            reinterpret_cast<CBruce *>(bruce)->ReflectHeadingVelocityInPlane(
+                line_info.Normal, 0);
 
             bruce->CSuper.CBody.mVel.vx += line_info.Normal.vx / 4;
             bruce->CSuper.CBody.mVel.vy += line_info.Normal.vy / 4;
@@ -7365,15 +7362,14 @@ extern "C" void Physics_DoInAir(CBrucePhysicsSlice *bruce)
         }
         else
         {
-            Physics_MoveOriginTo(
-                bruce,
+            reinterpret_cast<CBruce *>(bruce)->MoveOriginTo(
                 line_info.Position.vx + line_info.Normal.vx * 30,
                 line_info.Position.vy + line_info.Normal.vy * 30,
                 line_info.Position.vz + line_info.Normal.vz * 30);
 
             if (bruce->mInBail == 0 && Face_Air != 0)
             {
-                Physics_HitAirPoly(bruce, &line_info);
+                reinterpret_cast<CBruce *>(bruce)->HitAirPoly(line_info);
             }
             else
             {
@@ -7388,12 +7384,13 @@ extern "C" void Physics_DoInAir(CBrucePhysicsSlice *bruce)
 
                     if (bruce->mInBail == 0)
                     {
-                        Physics_HandleBailPerpendicular(
-                            bruce, line_info.Normal);
-                        Physics_HandleLeaningBail(
-                            bruce, line_info.Normal);
-                        Physics_HandleBailOnLanding(bruce, 0x1AA9);
-                        Physics_MaybeManual(bruce, 0x28, 0);
+                        reinterpret_cast<CBruce *>(bruce)->
+                            HandleBailPerpendicular(line_info.Normal);
+                        reinterpret_cast<CBruce *>(bruce)->HandleLeaningBail(
+                            line_info.Normal);
+                        reinterpret_cast<CBruce *>(bruce)->HandleBailOnLanding(
+                            0x1AA9);
+                        reinterpret_cast<CBruce *>(bruce)->MaybeManual(0x28, 0);
                     }
 
                     bruce->mLandedTime = XFrames;
@@ -7418,7 +7415,7 @@ extern "C" void Physics_DoInAir(CBrucePhysicsSlice *bruce)
                 bruce->mOldNormal.vx = nx;
                 bruce->mOldNormal.vy = ny;
                 bruce->mOldNormal.vz = nz;
-                Physics_OrientToNormal(bruce);
+                reinterpret_cast<CBruce *>(bruce)->OrientToNormal();
             }
         }
     }
@@ -7447,8 +7444,9 @@ extern "C" void Physics_DoInAir(CBrucePhysicsSlice *bruce)
         GetFaceFlags(&line_info);
 
         if (line_info.pItem != 0 && Face_Air != 0)
-            Physics_HitAirPoly(bruce, &line_info);
+            reinterpret_cast<CBruce *>(bruce)->HitAirPoly(line_info);
     }
+#undef bruce
 }
 
 #undef PHYSICS_RECON_SKATER_STATS_SPEED
@@ -7479,10 +7477,11 @@ extern "C" void Physics_DoInAir(CBrucePhysicsSlice *bruce)
  * Mangled:   DoFootPlantPhysics__6CBruce
  * Demangled: CBruce::DoFootPlantPhysics(void)
  *
- * @param bruce Owner-local view of the implicit `this` pointer.
  */
-void Physics_DoFootPlant(CBrucePhysicsSlice *bruce)
+void CBruce::DoFootPlantPhysics()
 {
+    CBrucePhysicsSlice *bruce =
+        reinterpret_cast<CBrucePhysicsSlice *>(this);
     CVector launchVelocity;
     CVector reverseHeading;
     int speed[2];
@@ -7495,7 +7494,7 @@ void Physics_DoFootPlant(CBrucePhysicsSlice *bruce)
     Physics_StateTransition(bruce, 1, 0x1B24);
     bruce->mManIsJumping = 1;
 
-    Physics_VectorNegate(&reverseHeading, (CVector *)&bruce->mFront);
+    __mi__C7CVector(&reverseHeading, (CVector *)&bruce->mFront);
     speed[0] = reinterpret_cast<const CVector &>(
         bruce->CSuper.CBody.mVel).Length();
     Physics_VectorMultiply(&launchVelocity, &reverseHeading, speed);
@@ -7580,7 +7579,7 @@ void CBruce::DoHandPlantPhysics()
             bruce->mRight.x = bruce->mRotationMatrix.m[0][0] = -bruce->mRight.x;
             bruce->mRight.y = bruce->mRotationMatrix.m[1][0] = -bruce->mRight.y;
             bruce->mRight.z = bruce->mRotationMatrix.m[2][0] = -bruce->mRight.z;
-            Physics_DebugRunAnim(bruce, 0, 0x1B7C);
+            reinterpret_cast<CBruce *>(bruce)->Debug_RunAnim(0, 0x1B7C);
         }
     }
 }
@@ -7601,10 +7600,10 @@ void CBruce::DoHandPlantPhysics()
  * the ride continues, whether a near-vertical face throws the skater off, or
  * whether he has left the surface entirely and falls.
  *
- * @param bruce Owner-local view of the implicit `this` pointer.
  */
-extern "C" void Physics_DoWallRide(CBrucePhysicsSlice *bruce)
+void CBruce::DoWallRidePhysics()
 {
+#define bruce ((CBrucePhysicsSlice *)this)
     CVector vMovement;
     CVector InplaneGravity;
     int Speed;
@@ -7635,18 +7634,16 @@ extern "C" void Physics_DoWallRide(CBrucePhysicsSlice *bruce)
     Speed = M3dMaths_SquareRoot0(
                 Mips_CVecDotProd(&vMovement, &vMovement))
             << 6;
-    int MaxSpeed = PhysicsMaxSpeed(bruce);
-    if (Speed > MaxSpeed)
-        Speed = MaxSpeed;
+    if (Speed > PhysicsMaxSpeed(bruce))
+        Speed = PhysicsMaxSpeed(bruce);
     TurnAngle = 0;
     if (bruce->mFlipNum == 0 && bruce->mTapTurn == 0)
     {
-        Physics_AlignToFallLine(bruce, 4);
+        reinterpret_cast<CBruce *>(bruce)->AlignToFallLine(4);
         TurnAngle = bruce->mFallLineAdjustment;
     }
     Mips_FixMul(TurnAngle, 0xC00);
-    Physics_RotateHeadingAndVelocity(
-        bruce,
+    reinterpret_cast<CBruce *>(bruce)->RotateHeadingAndVelocity(
         (TurnAngle * TimeScale) >> 8, OnInvisible ^ 1, 0);
 
     line_info.StartCoords.Set(bruce->CSuper.CBody.mOldPos.x,
@@ -7687,8 +7684,7 @@ extern "C" void Physics_DoWallRide(CBrucePhysicsSlice *bruce)
 
         if (line_info.pItem != 0 && (Face_Visible != 0 || Face_Air == 0))
         {
-            Physics_MoveOriginTo(
-                bruce,
+            reinterpret_cast<CBruce *>(bruce)->MoveOriginTo(
                 line_info.Position.vx + bruce->mUp.vx * 30,
                 line_info.Position.vy + bruce->mUp.vy * 30,
                 line_info.Position.vz + bruce->mUp.vz * 30);
@@ -7709,11 +7705,16 @@ extern "C" void Physics_DoWallRide(CBrucePhysicsSlice *bruce)
             else
             {
                 bruce->mSameNormal = 0;
-                bruce->CSuper.CBody.mNormal.Set(line_info.Normal.vx,
-                                                line_info.Normal.vy,
-                                                line_info.Normal.vz);
+                {
+                    int _x = line_info.Normal.vx;
+                    int _y = line_info.Normal.vy;
+                    int _z = line_info.Normal.vz;
+                    bruce->CSuper.CBody.mNormal.vx = _x;
+                    bruce->CSuper.CBody.mNormal.vy = _y;
+                    bruce->CSuper.CBody.mNormal.vz = _z;
+                }
             }
-            Physics_OrientToNormal(bruce);
+            reinterpret_cast<CBruce *>(bruce)->OrientToNormal();
 
             if (Face_Skateable != 0)
             {
@@ -7721,19 +7722,29 @@ extern "C" void Physics_DoWallRide(CBrucePhysicsSlice *bruce)
                 ProjectCVectorToPlane(
                     (CVector *)&bruce->mFront, line_info.Normal);
                 M3dUtils_NormaliseVector((CVector *)&bruce->mFront);
-                bruce->mUp.Set(line_info.Normal.vx,
-                               line_info.Normal.vy,
-                               line_info.Normal.vz);
+                {
+                    int _x = line_info.Normal.vx;
+                    int _y = line_info.Normal.vy;
+                    int _z = line_info.Normal.vz;
+                    bruce->mUp.vx = _x;
+                    bruce->mUp.vy = _y;
+                    bruce->mUp.vz = _z;
+                }
                 gte_ldopv1(&bruce->mFront);
                 gte_ldopv2(&bruce->mUp);
                 gte_op12();
                 gte_stlvnl(&bruce->mRight);
-                Physics_RotMatrixFromFRUVectors(bruce);
+                reinterpret_cast<CBruce *>(bruce)->RotMatrixFromFRUVectors();
 
                 bruce->mSameNormal = 0;
-                bruce->CSuper.CBody.mNormal.Set(line_info.Normal.vx,
-                                                line_info.Normal.vy,
-                                                line_info.Normal.vz);
+                {
+                    int _x = line_info.Normal.vx;
+                    int _y = line_info.Normal.vy;
+                    int _z = line_info.Normal.vz;
+                    bruce->CSuper.CBody.mNormal.vx = _x;
+                    bruce->CSuper.CBody.mNormal.vy = _y;
+                    bruce->CSuper.CBody.mNormal.vz = _z;
+                }
                 bruce->mOldNormal.vx = line_info.Normal.vx;
                 bruce->mOldNormal.vy = line_info.Normal.vy;
                 bruce->mOldNormal.vz = line_info.Normal.vz;
@@ -7743,7 +7754,7 @@ extern "C" void Physics_DoWallRide(CBrucePhysicsSlice *bruce)
         }
     }
 
-    Physics_FRUVectorsFromRotMatrix(bruce);
+    reinterpret_cast<CBruce *>(bruce)->FRUVectorsFromRotMatrix();
     line_info.StartCoords.vx =
         bruce->CSuper.CBody.CItem.mPos.x + bruce->mUp.vx * 70;
     line_info.StartCoords.vy =
@@ -7766,8 +7777,7 @@ extern "C" void Physics_DoWallRide(CBrucePhysicsSlice *bruce)
         {
             bruce->mIsOnTaggedPoly =
                 ((unsigned short *)line_info.pFace)[7] & 0x20;
-            Physics_MoveOriginTo(
-                bruce,
+            reinterpret_cast<CBruce *>(bruce)->MoveOriginTo(
                 line_info.Position.vx + bruce->mUp.vx * 30,
                 line_info.Position.vy + bruce->mUp.vy * 30,
                 line_info.Position.vz + bruce->mUp.vz * 30);
@@ -7788,11 +7798,16 @@ extern "C" void Physics_DoWallRide(CBrucePhysicsSlice *bruce)
             else
             {
                 bruce->mSameNormal = 0;
-                bruce->CSuper.CBody.mNormal.Set(line_info.Normal.vx,
-                                                line_info.Normal.vy,
-                                                line_info.Normal.vz);
+                {
+                    int _x = line_info.Normal.vx;
+                    int _y = line_info.Normal.vy;
+                    int _z = line_info.Normal.vz;
+                    bruce->CSuper.CBody.mNormal.vx = _x;
+                    bruce->CSuper.CBody.mNormal.vy = _y;
+                    bruce->CSuper.CBody.mNormal.vz = _z;
+                }
             }
-            Physics_OrientToNormal(bruce);
+            reinterpret_cast<CBruce *>(bruce)->OrientToNormal();
 
             if (Face_Skateable != 0)
             {
@@ -7800,33 +7815,43 @@ extern "C" void Physics_DoWallRide(CBrucePhysicsSlice *bruce)
                 ProjectCVectorToPlane(
                     (CVector *)&bruce->mFront, line_info.Normal);
                 M3dUtils_NormaliseVector((CVector *)&bruce->mFront);
-                bruce->mUp.Set(line_info.Normal.vx,
-                               line_info.Normal.vy,
-                               line_info.Normal.vz);
+                {
+                    int _x = line_info.Normal.vx;
+                    int _y = line_info.Normal.vy;
+                    int _z = line_info.Normal.vz;
+                    bruce->mUp.vx = _x;
+                    bruce->mUp.vy = _y;
+                    bruce->mUp.vz = _z;
+                }
                 gte_ldopv1(&bruce->mFront);
                 gte_ldopv2(&bruce->mUp);
                 gte_op12();
                 gte_stlvnl(&bruce->mRight);
-                Physics_RotMatrixFromFRUVectors(bruce);
+                reinterpret_cast<CBruce *>(bruce)->RotMatrixFromFRUVectors();
 
                 bruce->mSameNormal = 0;
-                bruce->CSuper.CBody.mNormal.Set(line_info.Normal.vx,
-                                                line_info.Normal.vy,
-                                                line_info.Normal.vz);
+                {
+                    int _x = line_info.Normal.vx;
+                    int _y = line_info.Normal.vy;
+                    int _z = line_info.Normal.vz;
+                    bruce->CSuper.CBody.mNormal.vx = _x;
+                    bruce->CSuper.CBody.mNormal.vy = _y;
+                    bruce->CSuper.CBody.mNormal.vz = _z;
+                }
                 bruce->mOldNormal.vx = line_info.Normal.vx;
                 bruce->mOldNormal.vy = line_info.Normal.vy;
                 bruce->mOldNormal.vz = line_info.Normal.vz;
                 ProjectCVectorToPlane(
                     (CVector *)&bruce->CSuper.CBody.mVel, line_info.Normal);
             }
-            else if (line_info.Normal.vy >= 0xCCE)
+            else if (PhysicsWallNormalIsSteep(line_info.Normal.vy))
             {
                 bruce->CSuper.CBody.CItem.mPos = bruce->CSuper.CBody.mOldPos;
                 Physics_StateTransition(bruce, 1, 0x1C9C);
                 bruce->mManIsJumping = 1;
                 *(CVector *)&bruce->CSuper.CBody.mAcc += Gravity;
-                Physics_ReflectHeadingVelocityInPlane(
-                    bruce, line_info.Normal, 200);
+                reinterpret_cast<CBruce *>(bruce)->ReflectHeadingVelocityInPlane(
+                    line_info.Normal, 200);
                 SFX_Grunt(reinterpret_cast<CBruce *>(bruce));
             }
         }
@@ -7853,12 +7878,13 @@ extern "C" void Physics_DoWallRide(CBrucePhysicsSlice *bruce)
         if (bruce->mInBail == 0)
         {
             if (bruce->mManIsCrouched != 0)
-                Physics_DebugRunAnim(bruce, 0x1A, 0x1CE5);
+                reinterpret_cast<CBruce *>(bruce)->Debug_RunAnim(0x1A, 0x1CE5);
             else
-                Physics_DebugRunAnim(bruce, 0x1B, 0x1CE7);
+                reinterpret_cast<CBruce *>(bruce)->Debug_RunAnim(0x1B, 0x1CE7);
         }
         *(CVector *)&bruce->CSuper.CBody.mAcc += Gravity;
     }
+#undef bruce
 }
 
 #define PHYSICS_RECON_HANDLE_JUMP_OLLIE                                                \
@@ -7905,8 +7931,7 @@ void CBruce::HandleJump()
     {
         if (bruce->CSuper.mAnim == 0)
         {
-            Physics_DebugRunAnim3(
-                bruce, 8, 0, 0x1A, 0x13, 0x1D05);
+            reinterpret_cast<CBruce *>(bruce)->Debug_RunAnim3(8, 0, 0x1A, 0x13, 0x1D05);
         }
     }
     else if (bruce->CSuper.mAnim == 8)
@@ -7914,12 +7939,11 @@ void CBruce::HandleJump()
         if ((signed char)bruce->CSuper.mTargetFrame2 == -1)
         {
             if (bruce->CSuper.mFrame == 0)
-                Physics_DebugRunAnim(bruce, 0, 0x1D0D);
+                reinterpret_cast<CBruce *>(bruce)->Debug_RunAnim(0, 0x1D0D);
         }
         else
         {
-            Physics_DebugRunAnim2(
-                bruce, 8, 0x13, 0, 0x1D10);
+            reinterpret_cast<CBruce *>(bruce)->Debug_RunAnim2(8, 0x13, 0, 0x1D10);
         }
     }
 
@@ -7946,19 +7970,18 @@ void CBruce::HandleJump()
 
         case 8:
             if (bruce->CSuper.mFrame == 0)
-                Physics_DebugRunAnim(bruce, 0, 0x1D3D);
+                reinterpret_cast<CBruce *>(bruce)->Debug_RunAnim(0, 0x1D3D);
             break;
 
         case 5:
         case 0x19:
             if (bruce->mManIsCrouched != 0)
             {
-                Physics_DebugRunAnim3(
-                    bruce, 8, 0x13, 0x1A, 0x13, 0x1D4A);
+                reinterpret_cast<CBruce *>(bruce)->Debug_RunAnim3(8, 0x13, 0x1A, 0x13, 0x1D4A);
             }
             else
             {
-                Physics_DebugRunAnim(bruce, 0, 0x1D4E);
+                reinterpret_cast<CBruce *>(bruce)->Debug_RunAnim(0, 0x1D4E);
             }
             break;
 
@@ -7966,47 +7989,43 @@ void CBruce::HandleJump()
             bruce->mCess = 0;
             if (bruce->mManIsCrouched != 0)
             {
-                Physics_DebugRunAnim3(
-                    bruce, 8, 0, 0x1A, 0x13, 0x1D56);
+                reinterpret_cast<CBruce *>(bruce)->Debug_RunAnim3(8, 0, 0x1A, 0x13, 0x1D56);
             }
             else
             {
-                Physics_DebugRunAnim(bruce, 0, 0x1D5A);
+                reinterpret_cast<CBruce *>(bruce)->Debug_RunAnim(0, 0x1D5A);
             }
             break;
 
         case 4:
         case 0xD:
             if (bruce->mManIsCrouched == 0)
-                Physics_DebugRunAnim(bruce, 0xE, 0x1D65);
+                reinterpret_cast<CBruce *>(bruce)->Debug_RunAnim(0xE, 0x1D65);
             break;
 
         case 0xE:
-            Physics_DebugRunAnim(bruce, 0xE, 0x1D6A);
+            reinterpret_cast<CBruce *>(bruce)->Debug_RunAnim(0xE, 0x1D6A);
             break;
 
         case 0x22:
             if (bruce->mManIsCrouched != 0)
             {
-                Physics_DebugRunAnim3(
-                    bruce, 8, 0x13, 0x1A, 0x13, 0x1D72);
+                reinterpret_cast<CBruce *>(bruce)->Debug_RunAnim3(8, 0x13, 0x1A, 0x13, 0x1D72);
             }
             else
             {
-                Physics_DebugRunAnim2(
-                    bruce, 8, 0x13, 0, 0x1D75);
+                reinterpret_cast<CBruce *>(bruce)->Debug_RunAnim2(8, 0x13, 0, 0x1D75);
             }
             break;
 
         case 0:
             if (bruce->mManIsCrouched != 0)
             {
-                Physics_DebugRunAnim3(
-                    bruce, 8, 0x13, 0x1A, 0x13, 0x1D81);
+                reinterpret_cast<CBruce *>(bruce)->Debug_RunAnim3(8, 0x13, 0x1A, 0x13, 0x1D81);
             }
             else
             {
-                Physics_DebugRunAnim(bruce, 0, 0x1D84);
+                reinterpret_cast<CBruce *>(bruce)->Debug_RunAnim(0, 0x1D84);
             }
             break;
 
@@ -8050,32 +8069,30 @@ void CBruce::HandleJump()
                 SFX_PlayX(5, 0x2000, 0);
                 break;
             }
-            Physics_Vibrate(bruce, 2, 1, 0xFF);
+            reinterpret_cast<CBruce *>(bruce)->Vibrate(2, 1, 0xFF);
             if (bruce->mManual != 0)
             {
                 if (bruce->mManual == 1)
                 {
-                    Physics_DebugRunAnim(bruce, 0x28, 0x1DC3);
+                    reinterpret_cast<CBruce *>(bruce)->Debug_RunAnim(0x28, 0x1DC3);
                 }
                 else
                 {
-                    Physics_DebugRunAnim(bruce, 0x29, 0x1DC5);
+                    reinterpret_cast<CBruce *>(bruce)->Debug_RunAnim(0x29, 0x1DC5);
                 }
             }
             else
             {
                 if (bruce->mManIsCrouched != 0)
                 {
-                    Physics_DebugRunAnim1(
-                        bruce, 0x19, 3, 0x1DCC);
+                    reinterpret_cast<CBruce *>(bruce)->Debug_RunAnim1(0x19, 3, 0x1DCC);
                 }
                 else
                 {
-                    Physics_DebugRunAnim1(
-                        bruce, 5, 0, 0x1DD0);
+                    reinterpret_cast<CBruce *>(bruce)->Debug_RunAnim1(5, 0, 0x1DD0);
                 }
             }
-            Physics_HandleBailOnLanding(bruce, 0x1DD4);
+            reinterpret_cast<CBruce *>(bruce)->HandleBailOnLanding(0x1DD4);
             if (bruce->mInBail == 0)
             {
                 int Boost =
@@ -8113,8 +8130,7 @@ void CBruce::HandleJump()
                     (bruce->mLeanAngle = 0,
                      bruce->mManual == 0))
                 {
-                    Physics_DebugRunAnim3(
-                        bruce, 8, 0, 0x1A, 0x13, 0x1E04);
+                    reinterpret_cast<CBruce *>(bruce)->Debug_RunAnim3(8, 0, 0x1A, 0x13, 0x1E04);
                 }
             }
         }
@@ -8151,7 +8167,7 @@ void CBruce::HandleJump()
         (bruce->mManual == 0))
     {
         bruce->mJumpPending = 0;
-        Physics_DebugRunAnim(bruce, 0, 0x1E24);
+        reinterpret_cast<CBruce *>(bruce)->Debug_RunAnim(0, 0x1E24);
     }
     else
     {
@@ -8175,7 +8191,7 @@ void CBruce::HandleJump()
         bruce->mStickToRail = 0;
         bruce->mDoingATrick = 0;
         bruce->mFront = bruce->mRailDir;
-        Physics_AlignHeadingOnRail(bruce);
+        reinterpret_cast<CBruce *>(bruce)->AlignHeadingOnRail();
         Speed = Mips_CVecDotProd(
             (CVector *)&bruce->mRailDir,
             (CVector *)&bruce->CSuper.CBody.mVel);
@@ -8187,7 +8203,8 @@ void CBruce::HandleJump()
             Rotate = -200;
         if (bruce->mPad->Right.Pressed != 0)
             Rotate = 200;
-        Physics_RotateHeadingAndVelocity(bruce, Rotate, 1, 0);
+        reinterpret_cast<CBruce *>(bruce)->RotateHeadingAndVelocity(
+            Rotate, 1, 0);
     }
     bruce->mStickToInvisible = bruce->mIsOnTaggedPoly;
     bruce->mJumpsOffWallRide = (bruce->mPhysicsState == 5);
@@ -8206,9 +8223,10 @@ void CBruce::HandleJump()
     playedGrindOffSound = 0;
     if ((bruce->mPhysicsState == 4) && (*(short **)((int)&bruce->mpJumpTrick) != (short *)0x0))
     {
-        Physics_TriggerTrickScript(bruce, *(short **)((int)&bruce->mpJumpTrick));
+        reinterpret_cast<CBruce *>(bruce)->TriggerTrick(
+            *(short **)((int)&bruce->mpJumpTrick));
         bruce->mpJumpTrick = 0;
-        Physics_HandleGrindOffSound(bruce);
+        reinterpret_cast<CBruce *>(bruce)->HandleGrindOffSound();
         playedGrindOffSound = 1;
     }
     if (PhysicsAbsolute(bruce->mUp.vy) < 0x9C4)
@@ -8259,8 +8277,9 @@ void CBruce::HandleJump()
 
         int FirstEvent = -1;
         int SecondEvent = -1;
-        int Event = Physics_GetPreviousPressedEvent(
-            bruce, LastEvent, 0, 0x14, LastEvent);
+        int Event = reinterpret_cast<CBruce *>(bruce)
+                        ->GetPreviousPressedEvent(
+                            LastEvent, 0, 0x14, LastEvent);
         while (Event >= 0)
         {
             if (FirstEvent != -1)
@@ -8277,8 +8296,9 @@ void CBruce::HandleJump()
                 Time = 0x23;
             }
 
-            Event = Physics_GetPreviousPressedEvent(
-                bruce, Event, 1, Time, LastEvent);
+            Event = reinterpret_cast<CBruce *>(bruce)
+                        ->GetPreviousPressedEvent(
+                            Event, 1, Time, LastEvent);
         }
 
         if ((((bruce->mPad->LeftTwo.Pressed == 0) && (bruce->mManual == 0)) &&
@@ -8293,26 +8313,24 @@ void CBruce::HandleJump()
                 bruce->CSuper.CBody.mVel.y = bruce->CSuper.CBody.mVel.y + -0x5000;
                 reinterpret_cast<CBruce *>(bruce)->Trick_Trick(
                     GTricksFilename + 0x38, 0xFA, 0);
-                Physics_DebugRunAnim1(bruce, 0x91, 5, 0x1EE1);
+                reinterpret_cast<CBruce *>(bruce)->Debug_RunAnim1(0x91, 5, 0x1EE1);
                 SFX_PlayX(0xB4, 0x2000, 0);
-                Physics_ButtonRemoveLast(
-                    bruce, 1, 1);
+                reinterpret_cast<CBruce *>(bruce)->ButtonRemoveLast(1, 1);
             }
             else
             {
                 reinterpret_cast<CBruce *>(bruce)->Trick_TakeOff();
                 reinterpret_cast<CBruce *>(bruce)->Trick_Trick(
                     GTricksFilename + 0x44, 200, 0);
-                Physics_DebugRunAnim(bruce, 0xD, 0x1EED);
+                reinterpret_cast<CBruce *>(bruce)->Debug_RunAnim(0xD, 0x1EED);
             }
-            Physics_ButtonRemoveLast(
-                bruce, 1, 1);
+            reinterpret_cast<CBruce *>(bruce)->ButtonRemoveLast(1, 1);
             bruce->mTrickAwarded = 1;
         }
         else
         {
             reinterpret_cast<CBruce *>(bruce)->Trick_TakeOff();
-            Physics_DebugRunAnim(bruce, 4, 0x1EF6);
+            reinterpret_cast<CBruce *>(bruce)->Debug_RunAnim(4, 0x1EF6);
         }
     }
     if (!playedGrindOffSound)
@@ -8378,11 +8396,11 @@ void CBruce::HandleKick()
         switch (bruce->CSuper.mAnim)
         {
         case 1:
-            Physics_DebugRunAnim(bruce, 3, 0x1F21);
+            reinterpret_cast<CBruce *>(bruce)->Debug_RunAnim(3, 0x1F21);
             bruce->CSuper.mAnimSpeed = 0x14000;
             break;
         case 3:
-            Physics_DebugRunAnim(bruce, 0, 0x1F26);
+            reinterpret_cast<CBruce *>(bruce)->Debug_RunAnim(0, 0x1F26);
             break;
         }
     }
@@ -8433,7 +8451,7 @@ void CBruce::HandleKick()
                         PHYSICS_RECON_KICK_SPEED_VALUE(0x11);
                     bruce->mKickLockout = 0x14;
                     bruce->mFootSound = 1;
-                    Physics_DebugRunAnim1(bruce, 1, 0, 0x1F59);
+                    reinterpret_cast<CBruce *>(bruce)->Debug_RunAnim1(1, 0, 0x1F59);
                     bruce->CSuper.mAnimSpeed = 0x14000;
                 }
             }
@@ -8497,7 +8515,7 @@ void CBruce::HandleKick()
     }
     bruce->mMaxKickSpeed = PHYSICS_RECON_KICK_SPEED_VALUE(0x16);
     bruce->mKickLockout = 0x14;
-    Physics_DebugRunAnim1(bruce, 1, 0, 0x1FAC);
+    reinterpret_cast<CBruce *>(bruce)->Debug_RunAnim1(1, 0, 0x1FAC);
     bruce->CSuper.mAnimSpeed = 0x14000;
     bruce->mFootSound = 1;
 
@@ -8535,14 +8553,15 @@ tail:
  * Mangled:   RotateHeadingAndVelocity__6CBruceiii
  * Demangled: CBruce::RotateHeadingAndVelocity(int, int, int)
  *
- * @param bruce Owner-local view of the implicit `this` pointer.
  * @param TurnAngle Heading rotation in PSX angle units.
  * @param RotateVelocity Whether the velocity should follow the new heading.
  * @param SlipAngle Heading offset retained by the velocity vector.
  */
-void Physics_RotateHeadingAndVelocity(
-    CBrucePhysicsSlice *bruce, int TurnAngle, int RotateVelocity, int SlipAngle)
+void CBruce::RotateHeadingAndVelocity(
+    int TurnAngle, int RotateVelocity, int SlipAngle)
 {
+    CBrucePhysicsSlice *bruce =
+        reinterpret_cast<CBrucePhysicsSlice *>(this);
     int OldMag;
     int NewMag;
     MATRIX SurfaceRotMatrix;
@@ -8555,7 +8574,7 @@ void Physics_RotateHeadingAndVelocity(
         RotAngle.vy = (unsigned short)TurnAngle & 0xFFF;
         RotMatrixYXZ(&RotAngle, &SurfaceRotMatrix);
         MulMatrix(&bruce->mRotationMatrix, &SurfaceRotMatrix);
-        Physics_FRUVectorsFromRotMatrix(bruce);
+        reinterpret_cast<CBruce *>(bruce)->FRUVectorsFromRotMatrix();
 
         if (RotateVelocity != 0)
         {
@@ -8613,13 +8632,13 @@ void Physics_RotateHeadingAndVelocity(
  * Removes inward velocity and rotates the skater's heading basis away from a
  * collision plane while preserving an orthonormal front/right/up frame.
  *
- * @param bruce Owner-local view of the implicit `this` pointer.
  * @param Normal  Plane normal used for the reflection.
  * @param Angle  Reflection adjustment.
  */
-void Physics_ReflectHeadingVelocityInPlane(
-    CBrucePhysicsSlice *bruce, SVECTOR Normal, int Angle)
+void CBruce::ReflectHeadingVelocityInPlane(SVECTOR Normal, int Angle)
 {
+    CBrucePhysicsSlice *bruce =
+        reinterpret_cast<CBrucePhysicsSlice *>(this);
     CVectorPhysicsOwner TmpCV;
     int dot;
     MATRIX SurfaceRotMatrix;
@@ -8678,7 +8697,7 @@ void Physics_ReflectHeadingVelocityInPlane(
             RotAngle.vy = (0x400 - Angle) & 0xFFF;
         RotMatrixYXZ(&RotAngle, &SurfaceRotMatrix);
         MulMatrix(&bruce->mRotationMatrix, &SurfaceRotMatrix);
-        Physics_FRUVectorsFromRotMatrix(bruce);
+        reinterpret_cast<CBruce *>(bruce)->FRUVectorsFromRotMatrix();
 
         M3dUtils_NormaliseVector((CVector *)&bruce->mFront);
         M3dUtils_NormaliseVector((CVector *)&bruce->mUp);
@@ -8691,7 +8710,7 @@ void Physics_ReflectHeadingVelocityInPlane(
         gte_ldopv2(&bruce->mRight);
         gte_op12();
         gte_stlvnl(&bruce->mFront);
-        Physics_RotMatrixFromFRUVectors(bruce);
+        reinterpret_cast<CBruce *>(bruce)->RotMatrixFromFRUVectors();
     }
 }
 
@@ -8731,12 +8750,11 @@ void Physics_ReflectHeadingVelocityInPlane(
  * Computes a speed- and slope-scaled steering adjustment toward the most
  * recent terrain fall line while suppressing repeated turns in one direction.
  *
- * @param bruce  Skater object.
  * @param Amount  Amount by which to align toward the fall line.
  */
-void Physics_AlignToFallLine(
-    CBrucePhysicsSlice *bruce, int Amount)
+void CBruce::AlignToFallLine(int Amount)
 {
+#define bruce ((CBrucePhysicsSlice *)this)
     bruce->mFallLineAdjustment = 0;
     if (bruce->mInBail != 0)
         return;
@@ -8806,6 +8824,7 @@ void Physics_AlignToFallLine(
     {
         bruce->mLastTurnDirection = 0;
     }
+#undef bruce
 }
 
 /**
@@ -8820,10 +8839,12 @@ void Physics_AlignToFallLine(
  *            the lean direction; rotates the body's rotation matrix by
  *            +/-0xB and rebuilds the F/R/U vectors.
  *
- * @param bruce Owner-local view of the implicit `this` pointer.
  */
-void Physics_UprightSideways(CBrucePhysicsSlice *bruce)
+void CBruce::UprightSideways()
 {
+    CBrucePhysicsSlice *bruce =
+        reinterpret_cast<CBrucePhysicsSlice *>(this);
+
     CVector *mFront = (CVector *)&bruce->mFront;
     CVector TmpCV;
     MATRIX SurfaceRotMatrix;
@@ -8861,7 +8882,7 @@ void Physics_UprightSideways(CBrucePhysicsSlice *bruce)
     {
         Mips_CVecDotProd(mUp, (CVector *)&WorldUp);
     }
-    Physics_FRUVectorsFromRotMatrix(bruce);
+    reinterpret_cast<CBruce *>(bruce)->FRUVectorsFromRotMatrix();
 }
 
 /**
@@ -8871,10 +8892,13 @@ void Physics_UprightSideways(CBrucePhysicsSlice *bruce)
  *          Matrix at self+0xE90 is 3x3 shorts (row-major). Outputs are 3 int vectors at 0x10A0/0x10AC/0x10B8.
  * Mangled: FRUVectorsFromRotMatrix__6CBruce
  *
- * @param bruce Owner-local view of the implicit `this` pointer.
+ * The implementation uses the owner-local physics slice for the proven field
+ * offsets while retaining the method's natural CBruce ABI.
  */
-void Physics_FRUVectorsFromRotMatrix(CBrucePhysicsSlice *bruce)
+void CBruce::FRUVectorsFromRotMatrix()
 {
+    CBrucePhysicsSlice *bruce = reinterpret_cast<CBrucePhysicsSlice *>(this);
+
     // Column 2 → vector at 0x10A0
     int c20 = bruce->mRotationMatrix.m[0][2];
     int c21 = bruce->mRotationMatrix.m[1][2];
@@ -8907,10 +8931,12 @@ void Physics_FRUVectorsFromRotMatrix(CBrucePhysicsSlice *bruce)
  * Address: 0x8001D68C
  * Mangled: RotMatrixFromFRUVectors__6CBruce
  *
- * @param bruce Owner-local view of the implicit `this` pointer.
  */
-void Physics_RotMatrixFromFRUVectors(CBrucePhysicsSlice *bruce)
+void CBruce::RotMatrixFromFRUVectors()
 {
+    CBrucePhysicsSlice *bruce =
+        reinterpret_cast<CBrucePhysicsSlice *>(this);
+
     // Load all 9 values (column 0, column 1, column 2)
     u16 r00 = (u16)bruce->mRight.x;
     u16 r10 = (u16)bruce->mRight.y;
@@ -8940,10 +8966,12 @@ void Physics_RotMatrixFromFRUVectors(CBrucePhysicsSlice *bruce)
  * Mangled:   SetAnglesFromHeading__6CBruce
  * Demangled: CBruce::SetAnglesFromHeading(void)
  *
- * @param bruce Owner-local view of the implicit `this` pointer.
  */
-void Physics_SetAnglesFromHeading(CBrucePhysicsSlice *bruce)
+void CBruce::SetAnglesFromHeading()
 {
+    CBrucePhysicsSlice *bruce =
+        reinterpret_cast<CBrucePhysicsSlice *>(this);
+
     SVECTOR temp;
     u16 vx = bruce->mRotationMatrix.m[0][1];
     u16 vy = bruce->mRotationMatrix.m[1][1];
@@ -8966,6 +8994,65 @@ void Physics_SetAnglesFromHeading(CBrucePhysicsSlice *bruce)
     bruce->CSuper.CBody.CItem.mAngles.z = r2;
 }
 
+/** Compute the airborne loop pitch from a pre-scaled velocity numerator. */
+static inline unsigned short PhysicsContinuousAirPitch(
+    CBrucePhysicsSlice *bruce, int PitchNumerator)
+{
+    unsigned short NewPitch;
+    if (Cheat_StatsOverride == 0)
+    {
+        int stat = Stats[bruce->mSkaterType].Speed;
+        unsigned char board = bruce->mpBoardStats->speed;
+        if (bruce->mMagicTime != 0 || Cheat_Fire != 0)
+            NewPitch = (unsigned short)(
+                PitchNumerator
+                / ((((board + stat + 0x35) << 12) * 45) / 28));
+        else
+            NewPitch = (unsigned short)(
+                PitchNumerator
+                / ((((stat + board + 0x32) << 12) * 45) / 28));
+    }
+    else
+    {
+        NewPitch = (unsigned short)(
+            PitchNumerator
+            / ((((Cheat_StatsOverride + 0x32) << 12) * 45) / 28));
+    }
+
+    return NewPitch;
+}
+
+/** Fill the ground-loop pitch from a pre-scaled velocity numerator. */
+static inline void PhysicsContinuousGroundPitch(
+    CBrucePhysicsSlice *bruce, int PitchNumerator, int &NewPitch)
+{
+    if (Cheat_StatsOverride == 0)
+    {
+        int stat = Stats[bruce->mSkaterType].Speed;
+        unsigned char board = bruce->mpBoardStats->speed;
+        if (bruce->mMagicTime != 0 || Cheat_Fire != 0)
+            NewPitch = PitchNumerator
+                / ((((board + stat + 0x35) << 12) * 45) / 28);
+        else
+            NewPitch = PitchNumerator
+                / ((((stat + board + 0x32) << 12) * 45) / 28);
+    }
+    else
+    {
+        NewPitch = PitchNumerator
+            / ((((Cheat_StatsOverride + 0x32) << 12) * 45) / 28);
+    }
+}
+
+/** Apply a newly created ground-loop sound at the neutral scaling level. */
+static inline void PhysicsContinuousApplyGroundSound(
+    CBrucePhysicsSlice *bruce, unsigned int sound, int level)
+{
+    bruce->mSFXGround = sound;
+    bruce->mGroundVol = level;
+    bruce->mGroundPitch = level;
+}
+
 /**
  * HandleContinuousSounds__6CBruce
  *
@@ -8977,10 +9064,11 @@ void Physics_SetAnglesFromHeading(CBrucePhysicsSlice *bruce)
  * with the current physics state.  Ground sounds follow the current terrain;
  * wind volume and pitch scale with velocity and the skater's speed stat.
  *
- * @param bruce Owner-local view of the implicit `this` pointer.
  */
-extern "C" void Physics_HandleContinuousSounds(CBrucePhysicsSlice *bruce)
+void CBruce::HandleContinuousSounds()
 {
+    CBrucePhysicsSlice *bruce =
+        reinterpret_cast<CBrucePhysicsSlice *>(this);
 
     if (bruce->mPhysicsState == 5)
     {
@@ -9058,87 +9146,91 @@ extern "C" void Physics_HandleContinuousSounds(CBrucePhysicsSlice *bruce)
 
         if (bruce->mSFXGround == 0 && bruce->mInBail == 0)
         {
-            bruce->mGroundVol = 100;
-            bruce->mGroundPitch = 100;
+            int NewVol = 100;
+            bruce->mGroundVol = NewVol;
+            bruce->mGroundPitch = NewVol;
             bruce->mTerrainSFX = bruce->mTerrain;
 
             switch (bruce->mTerrain)
             {
             case 2:
-                bruce->mSFXGround =
-                    SFX_PlayX(0x01, 0x2000, 0);
-                goto reset_ground_sound;
+                PhysicsContinuousApplyGroundSound(
+                    bruce, SFX_PlayX(0x01, 0x2000, 0), 100);
+                goto ground_sound_ready;
             case 5:
                 bruce->mSFXGround =
                     SFX_PlayX(0x3D, 0x2000, 0);
-                break;
+                goto ground_sound_ready;
             case 3:
                 bruce->mSFXGround =
                     SFX_PlayX(0x21, 0x2000, 0);
-                break;
+                goto ground_sound_ready;
             case 13:
-                bruce->mSFXGround =
-                    SFX_PlayX(0x38, 0x2000, 0);
-                goto reset_ground_sound;
+                PhysicsContinuousApplyGroundSound(
+                    bruce, SFX_PlayX(0x38, 0x2000, 0), 100);
+                goto ground_sound_ready;
             case 4:
-                bruce->mSFXGround = SFX_PlayX(
-                    GLevel != 7 ? 0x38 : 0xA9, 0x2000, 0);
-                goto reset_ground_sound;
+                PhysicsContinuousApplyGroundSound(
+                    bruce,
+                    SFX_PlayX(
+                        GLevel != 7 ? 0x38 : 0xA9, 0x2000, 0),
+                    100);
+                goto ground_sound_ready;
             case 6:
                 bruce->mSFXGround =
                     SFX_PlayX(0x48, 0x2000, 0);
-                break;
+                goto ground_sound_ready;
             case 8:
-                bruce->mSFXGround =
-                    SFX_PlayX(0x39, 0x2000, 0);
-                goto reset_ground_sound;
+                PhysicsContinuousApplyGroundSound(
+                    bruce, SFX_PlayX(0x39, 0x2000, 0), 100);
+                goto ground_sound_ready;
             case 7:
             case 9:
             case 11:
-                bruce->mSFXGround =
-                    SFX_PlayX(0, 0x2000, 0);
-                goto reset_ground_sound;
+                PhysicsContinuousApplyGroundSound(
+                    bruce, SFX_PlayX(0, 0x2000, 0), 100);
+                goto ground_sound_ready;
             case 1:
                 if (GLevel == 8)
                 {
-                    bruce->mSFXGround =
-                        SFX_PlayX(0xAB, 0x2000, 0);
-                    goto reset_ground_sound;
+                    PhysicsContinuousApplyGroundSound(
+                        bruce, SFX_PlayX(0xAB, 0x2000, 0), 100);
+                    goto ground_sound_ready;
                 }
                 else
                 {
                     bruce->mSFXGround =
                         SFX_PlayX(0x49, 0x2000, 0);
+                    goto ground_sound_ready;
                 }
-                break;
             case 12:
-                bruce->mSFXGround = SFX_PlayX(
-                    GLevel != 8 ? 0x37 : 0x8F, 0x2000, 0);
-                goto reset_ground_sound;
+                PhysicsContinuousApplyGroundSound(
+                    bruce,
+                    SFX_PlayX(
+                        GLevel != 8 ? 0x37 : 0x8F, 0x2000, 0),
+                    100);
+                goto ground_sound_ready;
             case 10:
-                bruce->mSFXGround =
-                    SFX_PlayX(0x47, 0x2000, 0);
-                goto reset_ground_sound;
+                PhysicsContinuousApplyGroundSound(
+                    bruce, SFX_PlayX(0x47, 0x2000, 0), 100);
+                goto ground_sound_ready;
             case 14:
                 bruce->mSFXGround =
                     SFX_PlayX(0x69, 0x2000, 0);
-                break;
+                goto ground_sound_ready;
             case 15:
-                bruce->mSFXGround =
-                    SFX_PlayX(0x77, 0x2000, 0);
-                goto reset_ground_sound;
+                PhysicsContinuousApplyGroundSound(
+                    bruce, SFX_PlayX(0x77, 0x2000, 0), 100);
+                goto ground_sound_ready;
             default:
-                bruce->mSFXGround =
-                    SFX_PlayX(0, 0x2000, 0);
-                bruce->mGroundVol = 100;
-                break;
+                goto default_ground_sound;
             }
 
-            goto ground_sound_ready;
-
-        reset_ground_sound:
+        default_ground_sound:
+            NewVol = 0x2000;
+            bruce->mSFXGround =
+                SFX_PlayX(0, NewVol, 0);
             bruce->mGroundVol = 100;
-            bruce->mGroundPitch = 100;
 
         ground_sound_ready:
             ;
@@ -9178,7 +9270,7 @@ extern "C" void Physics_HandleContinuousSounds(CBrucePhysicsSlice *bruce)
                         numerator
                         / ((((board + stat + 0x35)
                              << 12)
-                            * 45)
+                           * 45)
                            / 448));
                 else
                     NewVol = (unsigned short)(
@@ -9198,31 +9290,7 @@ extern "C" void Physics_HandleContinuousSounds(CBrucePhysicsSlice *bruce)
             bruce->mSFXAir = SFX_PlayX(
                 7, (short)((NewVol * 2) / 3), 0);
 
-            NewPitch =
-                Cheat_StatsOverride == 0
-                    ? (bruce->mMagicTime != 0 || Cheat_Fire != 0
-                           ? (unsigned short)(
-                                 (Spd << 11)
-                                 / (((((unsigned char)
-                                           bruce->mpBoardStats->speed
-                                       + Stats[bruce->mSkaterType].Speed
-                                       + 0x35)
-                                      << 12)
-                                     * 45)
-                                    / 28))
-                           : (unsigned short)(
-                                 (Spd << 11)
-                                 / ((((Stats[bruce->mSkaterType].Speed
-                                       + (unsigned char)
-                                           bruce->mpBoardStats->speed
-                                       + 0x32)
-                                      << 12)
-                                     * 45)
-                                    / 28)))
-                    : (unsigned short)(
-                          (Spd << 11)
-                          / ((((Cheat_StatsOverride + 0x32) << 12) * 45)
-                             / 28));
+            NewPitch = PhysicsContinuousAirPitch(bruce, Spd << 11);
             if (NewPitch < 0x191)
                 NewPitch = 0x190;
             if (NewPitch >= 0x400)
@@ -9255,28 +9323,11 @@ extern "C" void Physics_HandleContinuousSounds(CBrucePhysicsSlice *bruce)
                           (CVector *)&bruce->CSuper.CBody.mVel,
                           (CVector *)&bruce->CSuper.CBody.mVel))
                   << 6;
-        int PitchNumerator = Spd << 11;
         int NewPitch;
-        if (Cheat_StatsOverride == 0)
-        {
-            int stat = Stats[bruce->mSkaterType].Speed;
-            unsigned char board = bruce->mpBoardStats->speed;
-            int denominator;
-            if (bruce->mMagicTime != 0 || Cheat_Fire != 0)
-                denominator = (((board + stat + 0x35) << 12) * 45) / 28;
-            else
-                denominator = (((stat + board + 0x32) << 12) * 45) / 28;
-            NewPitch = PitchNumerator / denominator;
-        }
-        else
-        {
-            NewPitch = PitchNumerator
-                / ((((Cheat_StatsOverride + 0x32) << 12) * 45)
-                   / 28);
-        }
+        int NewVol;
+        PhysicsContinuousGroundPitch(bruce, Spd << 11, NewPitch);
 
         int VolumeNumerator = Spd * 2024;
-        int NewVol;
         if (Cheat_StatsOverride == 0)
         {
             int stat = Stats[bruce->mSkaterType].Speed;
@@ -9321,10 +9372,11 @@ extern "C" void Physics_HandleContinuousSounds(CBrucePhysicsSlice *bruce)
  * Smooth the current ground normal, then rebuild the skater's orthogonal
  * front/right/up basis with the PSY-Q GTE outer-product intrinsics.
  *
- * @param bruce Owner-local view of the implicit `this` pointer.
  */
-void Physics_OrientToNormal(CBrucePhysicsSlice *bruce)
+void CBruce::OrientToNormal()
 {
+    CBrucePhysicsSlice *bruce =
+        reinterpret_cast<CBrucePhysicsSlice *>(this);
     VECTOR z1;
     CVector normal;
     CVector x1;
@@ -9409,8 +9461,10 @@ void Physics_OrientToNormal(CBrucePhysicsSlice *bruce)
  * skater to bail based on dot products with mVel; if both moving toward each
  * other, bail the slower one.
  */
-void Physics_HandlePlayerCollisions(CBrucePhysicsSlice *bruce)
+void CBruce::HandlePlayerCollisions()
 {
+    CBrucePhysicsSlice *bruce =
+        reinterpret_cast<CBrucePhysicsSlice *>(this);
     if (bruce->mInBail != 0)
         return;
     CBruce *other = bruce->mpOtherPlayer;
@@ -9427,7 +9481,7 @@ void Physics_HandlePlayerCollisions(CBrucePhysicsSlice *bruce)
         *(CVector *)&bruce->CSuper.CBody.mOldPos;
     BetweenPlayers.Normalize();
 
-    register int Direction1 asm("$17") = Mips_CVecDotProd(
+    int Direction1 = Mips_CVecDotProd(
         (CVector *)&bruce->CSuper.CBody.mVel, &BetweenPlayers);
     int Direction2 = Mips_CVecDotProd(
         &bruce->mpOtherPlayer->mVel, &BetweenPlayers);
@@ -9436,25 +9490,21 @@ void Physics_HandlePlayerCollisions(CBrucePhysicsSlice *bruce)
     {
         if (Direction2 > 0)
         {
-            Physics_Bail(
-                reinterpret_cast<CBrucePhysicsSlice *>(bruce->mpOtherPlayer),
-                0, DO_LIMIT);
+            bruce->mpOtherPlayer->Bail(0, DO_LIMIT);
             return;
         }
         int otherLen = bruce->mpOtherPlayer->mVel.Length();
         int myLen = reinterpret_cast<CVector &>(
             bruce->CSuper.CBody.mVel).Length();
         if (myLen < otherLen)
-            Physics_Bail(bruce, 0, DO_LIMIT);
+            reinterpret_cast<CBruce *>(bruce)->Bail(0, DO_LIMIT);
         else
-            Physics_Bail(
-                reinterpret_cast<CBrucePhysicsSlice *>(bruce->mpOtherPlayer),
-                0, DO_LIMIT);
+            bruce->mpOtherPlayer->Bail(0, DO_LIMIT);
         return;
     }
     if (Direction2 > 0)
         return;
-    Physics_Bail(bruce, 0, DO_LIMIT);
+    reinterpret_cast<CBruce *>(bruce)->Bail(0, DO_LIMIT);
 }
 
 /**
@@ -9464,10 +9514,11 @@ void Physics_HandlePlayerCollisions(CBrucePhysicsSlice *bruce)
  * Mangled:   LimitFinalSpeed__6CBruce
  * Demangled: CBruce::LimitFinalSpeed(void)
  *
- * @param bruce Owner-local view of the implicit `this` pointer.
  */
-void Physics_LimitFinalSpeed(CBrucePhysicsSlice *bruce)
+void CBruce::LimitFinalSpeed()
 {
+    CBrucePhysicsSlice *bruce =
+        reinterpret_cast<CBrucePhysicsSlice *>(this);
     int Spd;
     int AutoKickEnabled;
     Spd = M3dMaths_SquareRoot0(
@@ -9541,10 +9592,11 @@ void Physics_LimitFinalSpeed(CBrucePhysicsSlice *bruce)
  * Mangled:   CheckForTriggers__6CBruce
  * Demangled: CBruce::CheckForTriggers(void)
  *
- * @param bruce Owner-local view of the implicit `this` pointer.
  */
-void Physics_CheckForTriggers(CBrucePhysicsSlice *bruce)
+void CBruce::CheckForTriggers()
 {
+    CBrucePhysicsSlice *bruce =
+        reinterpret_cast<CBrucePhysicsSlice *>(this);
     if (PhysicsTriggerInitialized == 0)
     {
         PhysicsTriggerInitialized = 1;
@@ -9644,14 +9696,18 @@ void Physics_CheckSideCollisions(CBrucePhysicsSlice *bruce)
     if (in_bail != 0)
         SideDistance = 0x46;
 
-    int SideCol = Physics_CheckSide(bruce, -1, SideDistance, 1);
+    int SideCol = reinterpret_cast<CBruce *>(bruce)->CheckSide(
+        -1, SideDistance, 1);
     if (SideCol != 0) {
-        SideCol = Physics_CheckSide(bruce, 1, SideDistance, 1);
+        SideCol = reinterpret_cast<CBruce *>(bruce)->CheckSide(
+            1, SideDistance, 1);
     } else {
-        SideCol = Physics_CheckSide(bruce, 1, SideDistance, 1);
+        SideCol = reinterpret_cast<CBruce *>(bruce)->CheckSide(
+            1, SideDistance, 1);
         if (SideCol == 0)
             return;
-        SideCol = Physics_CheckSide(bruce, -1, SideDistance, 1);
+        SideCol = reinterpret_cast<CBruce *>(bruce)->CheckSide(
+            -1, SideDistance, 1);
     }
     if (SideCol != 0)
     {
@@ -9666,10 +9722,11 @@ void Physics_CheckSideCollisions(CBrucePhysicsSlice *bruce)
  * Mangled:   HandlePhysicsStates__6CBruce
  * Demangled: CBruce::HandlePhysicsStates(void)
  *
- * @param bruce Owner-local view of the implicit `this` pointer.
  */
-void Physics_HandlePhysicsStates(CBrucePhysicsSlice *bruce)
+void CBruce::HandlePhysicsStates()
 {
+    CBrucePhysicsSlice *bruce =
+        reinterpret_cast<CBrucePhysicsSlice *>(this);
     switch (bruce->mPhysicsState)
     {
     case 0:
@@ -9688,15 +9745,15 @@ void Physics_HandlePhysicsStates(CBrucePhysicsSlice *bruce)
             bruce->mPad->RightTwo.Triggered = 0;
             unsigned int sound = (Rnd(0x80) >= 0x40) ? 0xAE : 0xAF;
             SFX_PlayX(sound, 0x2000, 0);
-            Physics_DebugRunAnim(bruce, 0x82, 0x2542);
+            reinterpret_cast<CBruce *>(bruce)->Debug_RunAnim(0x82, 0x2542);
             bruce->mCess = 1;
         }
         ((CBruce *)bruce)->DoOnGroundPhysics();
-        Physics_DoManual(bruce);
+        reinterpret_cast<CBruce *>(bruce)->DoManualPhysics();
         goto side_collisions;
     case 7:
         ((CBruce *)bruce)->DoOnGroundPhysics();
-        Physics_DoManual(bruce);
+        reinterpret_cast<CBruce *>(bruce)->DoManualPhysics();
         bruce->CSuper.CBody.CItem.mPos = bruce->CSuper.CBody.mOldPos;
     side_collisions:
         Physics_CheckSideCollisions(bruce);
@@ -9730,16 +9787,16 @@ void Physics_HandlePhysicsStates(CBrucePhysicsSlice *bruce)
         ((CBruce *)bruce)->DoHandPlantPhysics();
         break;
     case 6:
-        Physics_DoFootPlant(bruce);
+        reinterpret_cast<CBruce *>(bruce)->DoFootPlantPhysics();
     case 1:
-        Physics_DoInAir(bruce);
+        reinterpret_cast<CBruce *>(bruce)->DoInAirPhysics();
         break;
     case 5:
         bruce->mDontStickRail = 0;
-        Physics_DoWallRide(bruce);
+        reinterpret_cast<CBruce *>(bruce)->DoWallRidePhysics();
         break;
     case 3:
-        Physics_DoInAir(bruce);
+        reinterpret_cast<CBruce *>(bruce)->DoInAirPhysics();
         if (bruce->mPhysicsState == 3)
         {
             int xframes = XFrames;
@@ -9761,15 +9818,16 @@ void Physics_HandlePhysicsStates(CBrucePhysicsSlice *bruce)
  * Mangled:   HandleBraking__6CBruce
  * Demangled: CBruce::HandleBraking(void)
  *
- * @param bruce Owner-local view of the implicit `this` pointer.
  */
 /*
  * The recovered top-level locals and case order follow MAIN.SYM's lexical
  * scopes and SLD line order.  Signed pad-axis tests, the two braking formulas,
  * and the animation transition arguments are recovered from the target body.
  */
-void Physics_HandleBraking(CBrucePhysicsSlice *bruce)
+void CBruce::HandleBraking()
 {
+    CBrucePhysicsSlice *bruce =
+        reinterpret_cast<CBrucePhysicsSlice *>(this);
     int DownOnly;
     int BrakeVal;
     int Speed;
@@ -9876,12 +9934,12 @@ void Physics_HandleBraking(CBrucePhysicsSlice *bruce)
             {
                 if (bruce->mManIsCrouched == 0 && Speed < 0x30000)
                 {
-                    Physics_DebugRunAnim(bruce, 0x31, 0x2604);
+                    reinterpret_cast<CBruce *>(bruce)->Debug_RunAnim(0x31, 0x2604);
                     next = 5;
                 }
                 else
                 {
-                    Physics_DebugRunAnim(bruce, 0x83, 0x2609);
+                    reinterpret_cast<CBruce *>(bruce)->Debug_RunAnim(0x83, 0x2609);
                     next = 1;
                 }
                 goto store;
@@ -9933,12 +9991,11 @@ void Physics_HandleBraking(CBrucePhysicsSlice *bruce)
             {
                 if (bruce->mManIsCrouched == 0)
                 {
-                    Physics_DebugRunAnim2(bruce, 8, 0x13, 0, 0x2651);
+                    reinterpret_cast<CBruce *>(bruce)->Debug_RunAnim2(8, 0x13, 0, 0x2651);
                 }
                 else
                 {
-                    Physics_DebugRunAnim3(
-                        bruce, 8, 0x13, 0x1A, 0x13, 0x2653);
+                    reinterpret_cast<CBruce *>(bruce)->Debug_RunAnim3(8, 0x13, 0x1A, 0x13, 0x2653);
                 }
                 next = 4;
                 goto store;
@@ -9948,7 +10005,7 @@ void Physics_HandleBraking(CBrucePhysicsSlice *bruce)
         case 6:
             if (bruce->CSuper.mAnimFinished != 0)
             {
-                Physics_DebugRunAnim(bruce, 0, 0x265D);
+                reinterpret_cast<CBruce *>(bruce)->Debug_RunAnim(0, 0x265D);
                 next = 4;
             store:
                 bruce->mBrakeMode = next;
@@ -9981,10 +10038,11 @@ clear:
  * Mangled:   HandleFlips__6CBruce
  * Demangled: CBruce::HandleFlips(void)
  *
- * @param bruce Owner-local view of the implicit `this` pointer.
  */
-void Physics_HandleFlips(CBrucePhysicsSlice *bruce)
+void CBruce::HandleFlips()
 {
+    CBrucePhysicsSlice *bruce =
+        reinterpret_cast<CBrucePhysicsSlice *>(this);
     register int flipCount asm("$6") = bruce->mFlipNum;
     if (flipCount != 0)
     {
@@ -10016,10 +10074,11 @@ void Physics_HandleFlips(CBrucePhysicsSlice *bruce)
  * Mangled:   HandleTimer__6CBruce
  * Demangled: CBruce::HandleTimer(void)
  *
- * @param bruce Owner-local view of the implicit `this` pointer.
  */
-void Physics_HandleTimer(CBrucePhysicsSlice *bruce)
+void CBruce::HandleTimer()
 {
+    CBrucePhysicsSlice *bruce =
+        reinterpret_cast<CBrucePhysicsSlice *>(this);
     int game = GGame;
     if (game == 2)
         return;
@@ -10066,10 +10125,12 @@ void Physics_HandleTimer(CBrucePhysicsSlice *bruce)
  * Mangled:   DoPhysics__6CBruce
  * Demangled: CBruce::DoPhysics(void)
  *
- * @param bruce Owner-local view of the implicit `this` pointer.
  */
-void Physics_DoPhysics(CBrucePhysicsSlice *bruce)
+void CBruce::DoPhysics()
 {
+    CBrucePhysicsSlice *bruce =
+        reinterpret_cast<CBrucePhysicsSlice *>(this);
+
     ((Dust *)&bruce->mDust[0])->Update((CBruce *)bruce);
     ((Blood *)&bruce->mBlood[0])->Update((CBruce *)bruce);
 
@@ -10120,10 +10181,10 @@ void Physics_DoPhysics(CBrucePhysicsSlice *bruce)
     BulletCollisionCheck = 0;
 
     reinterpret_cast<CBruce *>(bruce)->Trick_PlayerInit(0);
-    Physics_HandleTimer(bruce);
-    Physics_HandleFlips(bruce);
-    Physics_FRUVectorsFromRotMatrix(bruce);
-    Physics_HandleSpin(bruce);
+    reinterpret_cast<CBruce *>(bruce)->HandleTimer();
+    reinterpret_cast<CBruce *>(bruce)->HandleFlips();
+    reinterpret_cast<CBruce *>(bruce)->FRUVectorsFromRotMatrix();
+    reinterpret_cast<CBruce *>(bruce)->HandleSpin();
 
     if (bruce->mPhysicsState != 1)
         bruce->mIgnoreCar = 0;
@@ -10144,15 +10205,15 @@ void Physics_DoPhysics(CBrucePhysicsSlice *bruce)
             if (animation >= 0x23)
             {
                 if (bruce->mPhysicsState == 0)
-                    Physics_DebugRunAnim(bruce, 0, 0x26FC);
+                    reinterpret_cast<CBruce *>(bruce)->Debug_RunAnim(0, 0x26FC);
                 else
-                    Physics_DebugRunAnim(bruce, 0xE, 0x26FE);
+                    reinterpret_cast<CBruce *>(bruce)->Debug_RunAnim(0xE, 0x26FE);
             }
         }
     }
 
-    Physics_HandleTricks(bruce);
-    Physics_HandleBraking(bruce);
+    reinterpret_cast<CBruce *>(bruce)->HandleTricksNew();
+    reinterpret_cast<CBruce *>(bruce)->HandleBraking();
 
     if (bruce->CSuper.mAnimFinished != 0)
     {
@@ -10162,10 +10223,9 @@ void Physics_DoPhysics(CBrucePhysicsSlice *bruce)
             if (animation >= 0xB)
             {
                 if (bruce->mManIsCrouched != 0)
-                    Physics_DebugRunAnim3(
-                        bruce, 8, 0x13, 0x1A, 0x13, 0x2713);
+                    reinterpret_cast<CBruce *>(bruce)->Debug_RunAnim3(8, 0x13, 0x1A, 0x13, 0x2713);
                 else
-                    Physics_DebugRunAnim(bruce, 0, 0x2717);
+                    reinterpret_cast<CBruce *>(bruce)->Debug_RunAnim(0, 0x2717);
             }
         }
     }
@@ -10176,7 +10236,7 @@ void Physics_DoPhysics(CBrucePhysicsSlice *bruce)
     bruce->mOldPos2 = bruce->CSuper.CBody.mOldPos;
     bruce->CSuper.CBody.mOldPos = bruce->CSuper.CBody.CItem.mPos;
 
-    Physics_HandleContinuousSounds(bruce);
+    reinterpret_cast<CBruce *>(bruce)->HandleContinuousSounds();
 
     if (bruce->mManIsCrouched != 0)
     {
@@ -10261,15 +10321,15 @@ keep_max_kick_speed:;
     bruce->mSafePos = bruce->CSuper.CBody.CItem.mPos;
 
     if (bruce->mInBail == 0)
-        Physics_BoardOn(bruce);
+        reinterpret_cast<CBruce *>(bruce)->BoardOn();
     if (bruce->mPhysicsState != 8)
-        Physics_HandleStickToRail(bruce);
+        reinterpret_cast<CBruce *>(bruce)->HandleStickToRail();
 
     if (bruce->mInBail != 0 &&
         bruce->CSuper.mAnim == 0x2E &&
         bruce->CSuper.mFrame == HeadBloodAtFrame[bruce->mSkaterType])
     {
-        Physics_BloodSplat(bruce, 0, 0x32);
+        reinterpret_cast<CBruce *>(bruce)->BloodSplat(0, 0x32);
         ((Dust *)&bruce->mDust[0])->Reset(bruce->mTerrain, 1);
     }
 
@@ -10277,7 +10337,7 @@ keep_max_kick_speed:;
 
     if (bruce->mFrozen == 0)
     {
-        Physics_HandlePhysicsStates(bruce);
+        reinterpret_cast<CBruce *>(bruce)->HandlePhysicsStates();
         ((CBruce *)bruce)->HandleBailStates();
     }
 
@@ -10297,7 +10357,7 @@ keep_max_kick_speed:;
         }
     }
 
-    Physics_HandlePlayerCollisions(bruce);
+    reinterpret_cast<CBruce *>(bruce)->HandlePlayerCollisions();
 
     if (bruce->mPhysicsState == 0 || bruce->mPhysicsState == 7)
     {
@@ -10338,9 +10398,9 @@ keep_max_kick_speed:;
                 gte_ldopv2(Right);
                 gte_op12();
                 gte_stlvnl(Front);
-                Physics_RotMatrixFromFRUVectors(bruce);
-                Physics_ReflectHeadingVelocityInPlane(
-                    bruce, line_info.Normal, 0x200);
+                reinterpret_cast<CBruce *>(bruce)->RotMatrixFromFRUVectors();
+                reinterpret_cast<CBruce *>(bruce)->ReflectHeadingVelocityInPlane(
+                    line_info.Normal, 0x200);
                 bruce->mSameNormal = 0;
             }
         }
@@ -10412,10 +10472,10 @@ keep_max_kick_speed:;
         int y = bruce->CSuper.CBody.CItem.mPos.y;
         int z = bruce->CSuper.CBody.CItem.mPos.z;
         bruce->CSuper.CBody.CItem.mPos = bruce->CSuper.CBody.mOldPos;
-        Physics_MoveOriginTo(bruce, x, y, z);
+        reinterpret_cast<CBruce *>(bruce)->MoveOriginTo(x, y, z);
     }
 
-    Physics_CheckForTriggers(bruce);
+    reinterpret_cast<CBruce *>(bruce)->CheckForTriggers();
 
     int PhysicsState = bruce->mPhysicsState;
     if (PhysicsState < 4)
@@ -10441,7 +10501,7 @@ keep_max_kick_speed:;
     {
         *(CVector *)&bruce->CSuper.CBody.mVel +=
             ((*(CVector *)&bruce->CSuper.CBody.mAcc * TimeScale) >> 8);
-        Physics_LimitFinalSpeed(bruce);
+        reinterpret_cast<CBruce *>(bruce)->LimitFinalSpeed();
     }
     else
     {

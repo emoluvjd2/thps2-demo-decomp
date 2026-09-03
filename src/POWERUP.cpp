@@ -65,7 +65,9 @@ struct CBit {
 
     /** Assign the bit's world-space position. */
     void SetPos(const CVector &position);
-    static void operator delete(void *) asm("__dl__4CBitPv");
+    /** Allocate zero-initialized storage from the transient-bit heap. */
+    static void *operator new(unsigned int size);
+    static void operator delete(void *);
 };
 
 #include "CGLOW.h"
@@ -140,6 +142,12 @@ struct CBody {
     CSVector mDAngles;
 
     CBody();
+    /** Run this body's per-frame behavior. */
+    void EveryFrame();
+    /** Configure this body's lighting state. */
+    void DoLightingSetup();
+    /** Handle a collision hit against this body. */
+    int Hit(int damage, const CVector &knock, int whatHit);
     /** Insert this body at the head of a linked body list. */
     void AttachTo(CBody **list);
     /** Remove this body from a linked body list. */
@@ -292,19 +300,14 @@ enum PowerUpConstant {
 // === External globals (absolute via incomplete array) ===
 #include "MECHLIST.h"
 
-// === External function declarations ===
-extern "C" void CItem_InitItem(PowerUpCItemOwner *, char *)
-    asm("InitItem__5CItemPc");
-
-// === Extern "C" forward declarations ===
-extern "C" void CBody_dtor(CBody *, int) asm("_._5CBody");
-extern "C" void CPowerUp_DestructorAbi(CPowerUp *, int) asm("_._8CPowerUp");
-extern "C" void CPowerUp_DieEntry(CPowerUp *) asm("Die__8CPowerUp");
-extern "C" void CPowerUp_AIEntry(CPowerUp *) asm("AI__8CPowerUp");
-extern "C" void CPowerUp_DeleteStuffEntry(CPowerUp *) asm("DeleteStuff__8CPowerUp");
-extern "C" void CBody_DoLightingSetup(CBody *) asm("DoLightingSetup__5CBody");
-extern "C" int CBody_Hit(CBody *, int, const CVector &, int)
-    asm("Hit__5CBodyiRC7CVectori");
+// === ABI-labelled forward declarations ===
+#define CBODY_ABI_ONLY
+#define CBODY_DECLARE_DESTRUCTOR
+#define CBODY_DESTRUCTOR_NAME CBody_dtor
+#define CBODY_DESTRUCTOR_RECEIVER CBody
+#include "CBODY.h"
+#undef CBODY_ABI_ONLY
+void CPowerUp_DestructorAbi(CPowerUp *, int) asm("_._8CPowerUp");
 
 // === DoPhysics support declarations ===
 #include "RCOSSIN.h"
@@ -329,17 +332,20 @@ static char PowerUpBonusPants[] __attribute__((section(".rdata"))) =
 /**
  * Virtual dispatch table emitted by the power-up owner.
  */
-extern "C" PowerUpItemVtable const __vt_8CPowerUp
+#define POWERUP_DECLARE_OWNER_VTABLE
+#include "POWERUP.h"
+
+PowerUpItemVtable const __vt_8CPowerUp
     __attribute__((aligned(8))) = {
     0,
     0,
     (void (*)(PowerUpCItemOwner *, int))CPowerUp_DestructorAbi,
-    (void (*)(PowerUpCItemOwner *))CPowerUp_DieEntry,
-    (void (*)(PowerUpCItemOwner *))CPowerUp_AIEntry,
-    (void (*)(PowerUpCItemOwner *))CBody_EveryFrame,
-    (void (*)(PowerUpCItemOwner *))CBody_DoLightingSetup,
-    (int (*)(PowerUpCItemOwner *, int, const CVector &, int))CBody_Hit,
-    (void (*)(PowerUpCItemOwner *))CPowerUp_DeleteStuffEntry,
+    (void (*)(PowerUpCItemOwner *))&CPowerUp::Die,
+    (void (*)(PowerUpCItemOwner *))&CPowerUp::AI,
+    (void (*)(PowerUpCItemOwner *))&CBody::EveryFrame,
+    (void (*)(PowerUpCItemOwner *))&CBody::DoLightingSetup,
+    (int (*)(PowerUpCItemOwner *, int, const CVector &, int))&CBody::Hit,
+    (void (*)(PowerUpCItemOwner *))&CPowerUp::DeleteStuff,
     0,
 };
 
@@ -393,22 +399,22 @@ CPowerUp::CPowerUp(unsigned short PowerupType, const CVector &Pos, const CVector
     CBody.mRMinor = 300;
     CBody.ShadowOn();
     CBody.mShadowThreshold = 300;
-    CItem_InitItem(&CBody.CItem, "items");
+    reinterpret_cast<CItem *>(&CBody.CItem)->InitItem("items");
 
     switch (CBody.CItem.mType)
     {
     case PowerUpMedalA:
-        CItem_InitItem(&CBody.CItem, "skmedals");
+        reinterpret_cast<CItem *>(&CBody.CItem)->InitItem("skmedals");
         mIs3d = 1;
         CBody.CItem.mModel = Spool_GetModel(0x54636518, CurrentMedalsFileRegion);
         break;
     case PowerUpMedalB:
-        CItem_InitItem(&CBody.CItem, "skmedals");
+        reinterpret_cast<CItem *>(&CBody.CItem)->InitItem("skmedals");
         mIs3d = 1;
         CBody.CItem.mModel = Spool_GetModel(0xBA6D0434, CurrentMedalsFileRegion);
         break;
     case PowerUpMedalC:
-        CItem_InitItem(&CBody.CItem, "skmedals");
+        reinterpret_cast<CItem *>(&CBody.CItem)->InitItem("skmedals");
         mIs3d = 1;
         CBody.CItem.mModel = Spool_GetModel(0x2364558E, CurrentMedalsFileRegion);
         break;
@@ -543,11 +549,10 @@ CPowerUp::CPowerUp(unsigned short PowerupType, const CVector &Pos, const CVector
  */
 CPowerUp::~CPowerUp()
 {
-    CPowerUp *self = this;
-    self->CBody.CItem._vf = &__vt_8CPowerUp;
-    self->CBody.DeleteFrom(&PowerUpList);
-    self->DeleteStuff();
-    CBody_dtor(&self->CBody, 0);
+    CBody.CItem._vf = &__vt_8CPowerUp;
+    CBody.DeleteFrom(&PowerUpList);
+    DeleteStuff();
+    CBody_dtor(&CBody, 0);
 }
 
 /**
@@ -968,7 +973,7 @@ void CPowerUp::AI()
     {
         // The target keeps base allocation and conditional construction separate.
         CGlow *glow = static_cast<CGlow *>(
-            Bit_AllocateStorage(sizeof(CGlow)));
+            CBit::operator new(sizeof(CGlow)));
         if (glow)
             glow = ::new (glow) CGlow(4, 2);
         mpGlow = glow;

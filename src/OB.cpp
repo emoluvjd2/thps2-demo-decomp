@@ -71,6 +71,7 @@ struct CQuadBitOwner {
 
 /** Narrow natural interface for the shadow quad services owned by BIT.cpp. */
 struct CQuadBit {
+    CQuadBit();
     void SetTexture(char *name, int frame);
     void FlagOn(u8 flag);
     void SetSemiTransparent();
@@ -85,11 +86,20 @@ typedef char CQuadBitOwner_size_check[(sizeof(struct CQuadBitOwner) == 156) ? 1 
 typedef char SVECTOR_owner_size_check[(sizeof(SVECTOR) == 8) ? 1 : -1];
 
 #include "BIT.h"
+
+/** Narrow natural interface to the transient-bit allocator owned by BIT. */
+struct CBit
+{
+    /** Allocate zero-initialized storage from the transient-bit heap. */
+    static void *operator new(unsigned int size);
+};
+
 #include "MEM.h"
 #include "UTILS.h"
 
-extern "C" int ObZeroVectorFirstComponent asm("ZeroVector");
-extern "C" short ObZeroSVectorFirstComponent asm("ZeroSVector");
+#define ZEROVECTOR_FIRST_COMPONENT_DECLARATIONS
+#include "ZEROVECTOR.h"
+#undef ZEROVECTOR_FIRST_COMPONENT_DECLARATIONS
 
 // === Owner-local natural ABI hierarchy ===
 
@@ -151,8 +161,22 @@ public:
     void KillShadow();
     /** Rebuild or retire this body's shadow and refresh its opacity. */
     void UpdateShadow();
+    /** Mark this body dead. */
+    void Die();
     /** Return whether this body has been marked dead. */
     int IsDead() const;
+    /** Apply one hit and report whether it was accepted. */
+    int Hit(int damage, const CVector &knock, int whatHit);
+    /** Run the base body's empty AI behavior. */
+    void AI();
+    /** Run the base body's empty per-frame behavior. */
+    void EveryFrame();
+    /** Interleave expensive AI samples across frames. */
+    void InterleaveAI();
+    /** Configure the base body's empty lighting state. */
+    void DoLightingSetup();
+    /** Release base-body resources. */
+    void DeleteStuff();
     ~CBody();
 };
 
@@ -160,6 +184,8 @@ typedef char CBody_class_size_check[(sizeof(class CBody) == 264) ? 1 : -1];
 
 class CSuper : public CBody {
 public:
+    /** Initialize the body base and animation defaults. */
+    CSuper();
     /** Start a bounded animation sequence. */
     void RunAnim(int anim, int from, int to, int to2);
     /** Start a looping animation in the requested playback direction. */
@@ -178,9 +204,6 @@ public:
 #include "SPOOL.h"
 #include <STRINGS.H>
 
-// $gp-relative globals
-extern int __vt_5CItem;
-
 // === Absolute-addressed globals ===
 #include "M3DDEFAULTLIGHT.h"
 
@@ -192,33 +215,29 @@ void Ob_MaybeUnSuspendOrCull(void);
 
 // === Extern "C" forward declarations ===
 
-extern "C" void CItem_dtor(CItemOwner *, int inCharge) asm("_._5CItem");
-extern "C" void CBody_dtor(CBodyOwner *, int inCharge) asm("_._5CBody");
-extern "C" void CBody_Die(CBodyOwner *) asm("Die__5CBody");
-extern "C" void CBody_AI(CBodyOwner *) asm("AI__5CBody");
-extern "C" void CBody_DoLightingSetup(CBodyOwner *)
-    asm("DoLightingSetup__5CBody");
-extern "C" int CBody_Hit(CBodyOwner *, int Damage, const CVector &knock, int whathit)
-    asm("Hit__5CBodyiRC7CVectori");
-extern "C" void CBody_DeleteStuff(CBodyOwner *) asm("DeleteStuff__5CBody");
-extern "C" CSuperOwner *CSuper_ctor(CSuperOwner *) asm("__6CSuper");
-extern "C" void CSuper_dtor(CSuperOwner *, int inCharge) asm("_._6CSuper");
-extern "C" char Ob_ShadowTextureName[] asm("s_Shadow_800d9b4c");
+void CItem_dtor(CItemOwner *, int inCharge) asm("_._5CItem");
+#define CBODY_ABI_ONLY
+#define CBODY_DECLARE_DESTRUCTOR
+#define CBODY_DESTRUCTOR_NAME CBody_dtor
+#define CBODY_DESTRUCTOR_RECEIVER CBodyOwner
+#include "CBODY.h"
+#undef CBODY_ABI_ONLY
+#define CSUPER_ABI_ONLY
+#define CSUPER_DECLARE_DESTRUCTOR
+#define CSUPER_DESTRUCTOR_NAME CSuper_dtor
+#include "CSUPER.h"
+#undef CSUPER_ABI_ONLY
+extern char s_Shadow_800d9b4c[];
 #include "GSKATER_STATE.h"
-/** Lowered aggregate-return ABI for CVector subtraction. */
-extern "C" void Ob_VectorSubtract(
-    CVectorOwner *, const CVectorOwner *, const CVectorOwner *)
-    asm("__mi__FRC7CVectorT0");
-extern "C" void Ob_VectorDivide(
-    CVectorOwner *, const CVectorOwner *, const int *)
-    asm("__dv__FRC7CVectorRCi");
-extern "C" void Ob_SVectorSubtract(
-    CSVectorOwner *, const CSVectorOwner *, const CSVectorOwner *)
-    asm("__mi__FRC8CSVectorT0");
-/** Typed views of the CQuadBit methods used by the body shadow. */
-extern "C" CQuadBitOwner *CQuadBit_ctor(CQuadBitOwner *) asm("__8CQuadBit");
-
-extern "C" {
+#define CVECTOROPS_OMIT_DIVIDE
+#include "CVECTOROPS.h"
+#undef CVECTOROPS_OMIT_DIVIDE
+namespace ObVectorAbi
+{
+extern "C" void __dv__FRC7CVectorRCi(
+    CVectorOwner *, const CVectorOwner *, const int *);
+}
+#define Ob_VectorDivide ObVectorAbi::__dv__FRC7CVectorRCi
 
 /** Active and suspended environmental-object list heads. */
 CBody *EnvironmentalObjectList
@@ -237,17 +256,25 @@ unsigned int SuspendDistance
     __attribute__((section(".sdata"))) = 13000;
 
 /** Texture name used by the body shadow quad. */
-static char Ob_ShadowTextureName_owner[8] asm("s_Shadow_800d9b4c")
+namespace ObAddressViewOwners {
+extern "C" {
+static char s_Shadow_800d9b4c[8]
     __attribute__((section(".sdata"))) = "Shadow";
+}
+}
 
 /** Base item dispatch table: header words followed by its destructor. */
-int Ob_CItemVtable_owner[3] asm("__vt_5CItem")
+namespace ObCItemVtableOwner
+{
+extern "C"
+{
+int __vt_5CItem[3]
     __attribute__((section(".sdata"))) = {
         0,
         0,
         (int)&CItem_dtor,
 };
-
+}
 }
 
 /**
@@ -256,18 +283,17 @@ int Ob_CItemVtable_owner[3] asm("__vt_5CItem")
  * Each table contains the two GCC 2.x header words and seven virtual slots.
  * Eight-byte alignment contributes one zero padding word between the tables.
  */
-extern "C" {
 int __vt_6CSuper[9]
     __attribute__((section(".rdata"), aligned(8))) = {
         0,
         0,
         (int)&CSuper_dtor,
-        (int)&CBody_Die,
-        (int)&CBody_AI,
-        (int)&CBody_EveryFrame,
-        (int)&CBody_DoLightingSetup,
-        (int)&CBody_Hit,
-        (int)&CBody_DeleteStuff,
+        (int)(void (*)(CBodyOwner *))&CBody::Die,
+        (int)(void (*)(CBodyOwner *))&CBody::AI,
+        (int)(void (*)(CBodyOwner *))&CBody::EveryFrame,
+        (int)(void (*)(CBodyOwner *))&CBody::DoLightingSetup,
+        (int)(int (*)(CBodyOwner *, int, const CVector &, int))&CBody::Hit,
+        (int)(void (*)(CBodyOwner *))&CBody::DeleteStuff,
 };
 
 int __vt_5CBody[9]
@@ -275,14 +301,13 @@ int __vt_5CBody[9]
         0,
         0,
         (int)&CBody_dtor,
-        (int)&CBody_Die,
-        (int)&CBody_AI,
-        (int)&CBody_EveryFrame,
-        (int)&CBody_DoLightingSetup,
-        (int)&CBody_Hit,
-        (int)&CBody_DeleteStuff,
+        (int)(void (*)(CBodyOwner *))&CBody::Die,
+        (int)(void (*)(CBodyOwner *))&CBody::AI,
+        (int)(void (*)(CBodyOwner *))&CBody::EveryFrame,
+        (int)(void (*)(CBodyOwner *))&CBody::DoLightingSetup,
+        (int)(int (*)(CBodyOwner *, int, const CVector &, int))&CBody::Hit,
+        (int)(void (*)(CBodyOwner *))&CBody::DeleteStuff,
 };
-}
 
 // === Virtual dispatch helpers ===
 //
@@ -726,14 +751,15 @@ void CBody::UpdateShadow() {
         if (_this->mpShadow == (void *)0x0) {
             UseCacheForBits = 0;
             CQuadBitOwner *shadow = static_cast<CQuadBitOwner *>(
-                Bit_AllocateStorage(sizeof(CQuadBitOwner)));
+                CBit::operator new(sizeof(CQuadBitOwner)));
             if (shadow != (CQuadBitOwner *)0x0) {
-                shadow = CQuadBit_ctor(shadow);
+                shadow = reinterpret_cast<CQuadBitOwner *>(
+                    ::new (shadow) CQuadBit());
             }
             _this->mpShadow = shadow;
             UseCacheForBits = 1;
             reinterpret_cast<CQuadBit *>(shadow)->SetTexture(
-                Ob_ShadowTextureName, 0);
+                s_Shadow_800d9b4c, 0);
             reinterpret_cast<CQuadBit *>(_this->mpShadow)->FlagOn(4);
             reinterpret_cast<CQuadBit *>(_this->mpShadow)
                 ->SetSemiTransparent();
@@ -769,7 +795,8 @@ void CBody::UpdateShadow() {
  *
  * @param body  Body marked for deletion.
  */
-void CBody_Die(CBodyOwner *body) {
+void CBody::Die() {
+    CBodyOwner *body = reinterpret_cast<CBodyOwner *>(this);
     if (!reinterpret_cast<const CBody *>(body)->IsDead()) {
         body->mCBodyFlags = body->mCBodyFlags | 0x40;
     }
@@ -806,9 +833,8 @@ int CBody::IsDead() const {
  * @param whathit  Impact source identifier.
  * @return 1
  */
-int CBody_Hit(
-    CBodyOwner *body, int Damage, const CVector &knock, int whathit) {
-    (void)body;
+int CBody::Hit(int Damage, const CVector &knock, int whathit) {
+    (void)this;
     (void)Damage;
     (void)knock;
     (void)whathit;
@@ -826,8 +852,8 @@ int CBody_Hit(
  * @param super  Animated body being initialized.
  * @return `this` pointer (GCC 2.x ctor convention).
  */
-CSuperOwner *CSuper_ctor(CSuperOwner *super) {
-    ::new (reinterpret_cast<CBody *>(&super->CBody)) CBody;
+CSuper::CSuper() {
+    CSuperOwner *super = reinterpret_cast<CSuperOwner *>(this);
     super->CBody.CItem.vtable = (void *)&__vt_6CSuper[0];
     super->mExtraFlags = 0;
     super->mAnimSpeed = 0x10000;
@@ -835,7 +861,6 @@ CSuperOwner *CSuper_ctor(CSuperOwner *super) {
     super->mAnimFinished = 1;
     super->mUseAnimOrder = 0;
     super->CBody.CItem.mFlags = super->CBody.CItem.mFlags | 2;
-    return super;
 }
 
 
@@ -1260,8 +1285,8 @@ done:
  * Runs body AI at its requested cadence and interpolates position/angles
  * between full AI samples.
  */
-void CBody_InterleaveAI(CBody *body) {
-    CSuperOwner *super = reinterpret_cast<CSuperOwner *>(body);
+void CBody::InterleaveAI() {
+    CSuperOwner *super = reinterpret_cast<CSuperOwner *>(this);
     if ((super->CBody.CItem.mFlags & 2) != 0) {
         reinterpret_cast<CSuper *>(super)->UpdateFrame();
         CallEveryFrame(&super->CBody);
@@ -1301,25 +1326,31 @@ void CBody_InterleaveAI(CBody *body) {
         }
 
         {
-            CVectorOwner stepPos;
-            CVectorOwner deltaPos;
-            int divisor;
-
             super->CBody.mNewPos = super->CBody.CItem.mPos;
             super->CBody.CItem.mPos = super->CBody.mOldPos;
-            Ob_VectorSubtract(&deltaPos, &super->CBody.mNewPos, &super->CBody.mOldPos);
+
+            CVectorOwner stepPos;
+            CVector deltaPos =
+                reinterpret_cast<const CVector &>(super->CBody.mNewPos) -
+                reinterpret_cast<const CVector &>(super->CBody.mOldPos);
+            int divisor;
+
             divisor = super->CBody.mAIFrequency;
-            Ob_VectorDivide(&stepPos, &deltaPos, &divisor);
+            Ob_VectorDivide(
+                &stepPos,
+                reinterpret_cast<const CVectorOwner *>(&deltaPos),
+                &divisor);
             super->CBody.mDPos = stepPos;
         }
 
         {
-            CSVectorOwner deltaAngles;
-
             super->CBody.mNewAngles = super->CBody.CItem.mAngles;
             super->CBody.CItem.mAngles = super->CBody.mOldAngles;
-            Ob_SVectorSubtract(&deltaAngles, &super->CBody.mNewAngles, &super->CBody.mOldAngles);
-            super->CBody.mDAngles = deltaAngles;
+            CSVector deltaAngles =
+                reinterpret_cast<const CSVector &>(super->CBody.mNewAngles) -
+                reinterpret_cast<const CSVector &>(super->CBody.mOldAngles);
+            super->CBody.mDAngles =
+                reinterpret_cast<const CSVectorOwner &>(deltaAngles);
 
             if (super->CBody.mDAngles.x < -0x800) super->CBody.mDAngles.x += 0x1000;
             if (super->CBody.mDAngles.x > 0x800) super->CBody.mDAngles.x -= 0x1000;
@@ -1416,7 +1447,7 @@ void Ob_AI(CBody ** ppBody) {
                 reinterpret_cast<CBody *>(pBody)->Suspend(ppBody);
             }
             else {
-                CBody_InterleaveAI(reinterpret_cast<CBody *>(pBody));
+                reinterpret_cast<CBody *>(pBody)->InterleaveAI();
                 if ((pBody->mCBodyFlags & 8) != 0) {
                     reinterpret_cast<CBody *>(pBody)->UpdateShadow();
                 }
@@ -1518,7 +1549,7 @@ top:
  * Address: 0x800456C4
  * Mangled: _GLOBAL_.I.EnvironmentalObjectList
  */
-extern "C" void Ob_GlobalInit_EnvironmentalObjectList(void) asm("_GLOBAL_.I.EnvironmentalObjectList");
+void Ob_GlobalInit_EnvironmentalObjectList(void) asm("_GLOBAL_.I.EnvironmentalObjectList");
 void Ob_GlobalInit_EnvironmentalObjectList(void)
 {
     (&ObZeroVectorFirstComponent)[0] = 0;
@@ -1540,21 +1571,21 @@ static void (*Ob_GlobalCtorSlot)(void)
     __attribute__((section(".ctors"))) = Ob_GlobalInit_EnvironmentalObjectList;
 
 /** Empty default used by bodies with no owner-specific teardown work. */
-void CBody_DeleteStuff(CBodyOwner *)
+void CBody::DeleteStuff()
 {
 }
 
 /** Empty default used by bodies with no owner-specific lighting setup. */
-void CBody_DoLightingSetup(CBodyOwner *)
+void CBody::DoLightingSetup()
 {
 }
 
 /** Empty per-frame default supplied by the original inline body. */
-void CBody_EveryFrame(CBody *)
+void CBody::EveryFrame()
 {
 }
 
 /** Empty AI default supplied by the original inline body. */
-void CBody_AI(CBodyOwner *)
+void CBody::AI()
 {
 }

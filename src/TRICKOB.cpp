@@ -33,45 +33,45 @@ static inline int *&TrickOb_VtableAlias(CTrickOb *object)
 
 #include "SPOOL.h"
 
-// === Forward type declarations ===
-
 // === Owner-local $gp-relative globals ===
-extern "C" CTrickOb *TrickObList
+CTrickOb *TrickObList
     __attribute__((section(".sdata"))) = 0;
-extern "C" unsigned short DarkenTimer[3]
+unsigned short DarkenTimer[3]
     __attribute__((section(".sdata"))) = {1800, 600, 900};
 static int MapX __attribute__((section(".sdata"))) = 256;
 static int MapY __attribute__((section(".sdata"))) = 220;
 static int MapScale __attribute__((section(".sdata"))) = 128;
-extern "C" int Missed
+int Missed
     __attribute__((section(".sdata"))) = 0;
 
 // GCC 2.x emits a private copy of `CClass::~CClass` beside a private base
 // vtable in every owner that derives from CClass.  `MAIN.SYM` records 25 such
 // `_._6CClass` copies and no vtable name at all, so both belong to this owner
-// and neither is an XDEF.  The filesystem-safe spelling keeps the per-address
-// target assembly reachable.
-static void TrickOb_ClassDestructor(CClass *self, int flags)
-    asm("__DOT__6CClass_8005083C");
+// and neither is an XDEF.  The legal per-address identifier keeps this private
+// target copy distinct.
+extern "C"
+{
+static void __DOT__6CClass_8005083C(CClass *self, int flags);
+}
 
 // C++ forbids taking a destructor's address, so the vtable slot goes through an
 // addressable declaration of the same symbol this owner already defines.
-extern "C" void TrickOb_DestructorAbi(CTrickOb *, int)
+void TrickOb_DestructorAbi(CTrickOb *object, int inCharge)
     asm("_._8CTrickOb");
 
 // Both vtables are three consecutive eight-byte-aligned small-data words rather
 // than arrays, so -G8 still yields the target's `addiu $vX, $gp, off` form.
-extern "C" int __vt_8CTrickOb
+int __vt_8CTrickOb
     __attribute__((section(".sdata"), aligned(8))) = 0;
 static int TrickOb_VTableIndex __attribute__((section(".sdata"))) = 0;
 static void (*TrickOb_VTableDtor)(CTrickOb *, int)
     __attribute__((section(".sdata"))) = &TrickOb_DestructorAbi;
 
-static int TrickOb_BaseVTable asm("__vt_8CTrickOb_base")
+static int __vt_8CTrickOb_base
     __attribute__((section(".sdata"), aligned(8))) = 0;
 static int TrickOb_BaseVTableIndex __attribute__((section(".sdata"))) = 0;
 static void (*TrickOb_BaseVTableDtor)(CClass *, int)
-    __attribute__((section(".sdata"))) = &TrickOb_ClassDestructor;
+    __attribute__((section(".sdata"))) = &__DOT__6CClass_8005083C;
 
 
 // === Function implementations (address order) ===
@@ -124,33 +124,29 @@ void TrickOb_DeleteAll(void)
  * Demangled: CTrickOb::(unsigned short, unsigned short)
  *            Link a trick object into the active list and cache its trigger command pointer.
  *
- * @param object  Constructor receiver.
  * @param Node  Rail / graph node identifier.
  * @param DelayLevel  Initial delay tier (unused in this demo build).
- * @return `this` pointer (GCC 2.x ctor convention).
  */
-CTrickOb *CTrickOb_Construct(
-    CTrickOb *object, unsigned short Node, unsigned short DelayLevel)
+CTrickOb::CTrickOb(unsigned short Node, unsigned short DelayLevel)
 {
     CTrickOb *oldHead = TrickObList;
     // GCC 2.91 hoists the Node mask in each unpinned form, reordering eight
     // target instructions, so this inherited register variable remains.
     register int *vtable asm("$2") = &__vt_8CTrickOb;
-    TrickObList = object;
-    object->mState = 0;
+    TrickObList = this;
+    mState = 0;
     short **offsets = OffsetList;
-    object->mNode = Node;
-    TrickOb_VtableAlias(object) = vtable;
-    object->mpItem = 0;
-    object->mpNext = oldHead;
+    mNode = Node;
+    TrickOb_VtableAlias(this) = vtable;
+    mpItem = 0;
+    mpNext = oldHead;
     short *pNode = offsets[Node];
     unsigned short count = pNode[1];
     // The command pointer is aligned after skipping the variable short payload.
     pNode += count + 2;
     if (reinterpret_cast<unsigned int>(pNode) & 3)
         pNode++;
-    object->mChecksum = *reinterpret_cast<unsigned int *>(pNode);
-    return object;
+    mChecksum = *reinterpret_cast<unsigned int *>(pNode);
 }
 
 /**
@@ -182,7 +178,7 @@ found:
     {
         TrickObList = mpNext;
     }
-    CClass.vtable = &TrickOb_BaseVTable;
+    CClass.vtable = &__vt_8CTrickOb_base;
 }
 
 /**
@@ -346,9 +342,9 @@ void TrickOb_Update(void)
  * GCC emitted this private copy last in the owner's text, so it remains at
  * the end of the translation unit.
  */
-static void TrickOb_ClassDestructor(CClass *self, int flags)
+static void __DOT__6CClass_8005083C(CClass *self, int flags)
 {
-    self->vtable = &TrickOb_BaseVTable;
+    self->vtable = &__vt_8CTrickOb_base;
     if (flags & 1)
     {
         CClass::operator delete(self);

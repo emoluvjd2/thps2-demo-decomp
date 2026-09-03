@@ -1,47 +1,133 @@
-#!/usr/bin/env bash
-# Install the compiler used by the source-only translation-unit check.
+#!/bin/bash
+# setup_toolchain.sh — Set up GCC 2.91.66 PSX cross-compiler for decompilation matching
+#
+# Run this once from the repository root on Linux or inside WSL Ubuntu:
+#   cd /path/to/thps2-psx-proto
+#   bash setup_toolchain.sh
+#
+# Creates: compiler tools and a validated case-folded Psy-Q header include view.
+
 set -euo pipefail
 
-ROOT="$(cd "$(dirname "$0")" && pwd)"
-TOOLCHAIN_DIR="$ROOT/toolchain"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+TOOLCHAIN_DIR="$SCRIPT_DIR/toolchain"
 COMPILER_DIR="$TOOLCHAIN_DIR/gcc-2.91.66-psx"
-SDK_DIR="$TOOLCHAIN_DIR/psyq-4.6-sdk"
-SDK_HELPER="$ROOT/tools/psyq_sdk_headers.py"
+MASPSX_DIR="$TOOLCHAIN_DIR/maspsx"
+PSYQ_SDK_DIR="$TOOLCHAIN_DIR/psyq-4.6-sdk"
+PSYQ_SDK_HEADER_HELPER="$SCRIPT_DIR/tools/psyq_sdk_headers.py"
+EGCS_JUMP_PATCH_HELPER="$TOOLCHAIN_DIR/patch_egcs_1_1_1_jump.py"
+COMPILER_ARCHIVE_SHA256="25667f9cc2be6fcce38ada9b466fdf9dccf7fd02f86af2fda7019173f308c833"
 
-missing=()
-for command_name in cpp python3 tar wget; do
-    if ! command -v "$command_name" >/dev/null 2>&1; then
-        missing+=("$command_name")
-    fi
-done
+echo "=== PSX Cross-Compiler Setup ==="
+echo "Target: $TOOLCHAIN_DIR"
+echo ""
 
-if (( ${#missing[@]} != 0 )); then
-    echo "ERROR: missing required host commands: ${missing[*]}" >&2
-    exit 1
+# Step 1: Check/install system packages
+echo "[1/5] Checking system packages..."
+MISSING=""
+command -v mips-linux-gnu-as >/dev/null 2>&1 || MISSING="$MISSING binutils-mips-linux-gnu"
+command -v cpp >/dev/null 2>&1 || MISSING="$MISSING cpp"
+command -v python3 >/dev/null 2>&1 || MISSING="$MISSING python3"
+
+if [ -n "$MISSING" ]; then
+    echo "  Installing:$MISSING"
+    sudo apt-get update -qq
+    sudo apt-get install -y -qq $MISSING
+else
+    echo "  All packages present."
 fi
 
-if [[ ! -d "$SDK_DIR/INCLUDE" ]]; then
-    echo "ERROR: install your licensed Psy-Q 4.6 (DTL-S2360) SDK headers at:" >&2
-    echo "       $SDK_DIR/INCLUDE" >&2
-    echo "       This repository does not download or distribute the SDK." >&2
+# Step 2: Validate the user-supplied official SDK and prepare its include view.
+# The SDK cannot be redistributed or downloaded by this repository.
+echo "[2/5] Validating Psy-Q 4.6 SDK headers..."
+if [ ! -d "$PSYQ_SDK_DIR/INCLUDE" ]; then
+    echo "  ERROR: Install the unmodified Psy-Q 4.6 (DTL-S2360) SDK at:" >&2
+    echo "    $PSYQ_SDK_DIR" >&2
+    echo "  The required SDK is not redistributable and is not downloaded here." >&2
     exit 1
 fi
+python3 "$PSYQ_SDK_HEADER_HELPER" --prepare
 
-python3 "$SDK_HELPER" --prepare
-
-mkdir -p "$COMPILER_DIR"
-if [[ ! -x "$COMPILER_DIR/cc1" || ! -x "$COMPILER_DIR/cc1plus" ]]; then
-    tarball="$TOOLCHAIN_DIR/gcc-2.91.66-psx.tar.gz"
-    echo "Downloading GCC 2.91.66-psx..."
-    wget -q --show-progress -O "$tarball" \
+# Step 3: Download GCC 2.91.66-psx
+echo "[3/5] Downloading GCC 2.91.66-psx..."
+mkdir -p "$TOOLCHAIN_DIR"
+if [ -f "$COMPILER_DIR/cc1" ] && [ -f "$COMPILER_DIR/cc1plus" ]; then
+    echo "  Already downloaded."
+else
+    DOWNLOAD_STAGE="$(mktemp -d "$TOOLCHAIN_DIR/.gcc-2.91.66-psx.XXXXXXXX")"
+    TARBALL="$DOWNLOAD_STAGE/gcc-2.91.66-psx.tar.gz"
+    STAGED_COMPILER_DIR="$DOWNLOAD_STAGE/compiler"
+    mkdir "$STAGED_COMPILER_DIR"
+    wget -q --show-progress -O "$TARBALL" \
         "https://github.com/decompals/old-gcc/releases/download/0.13/gcc-2.91.66-psx.tar.gz"
-    tar xzf "$tarball" -C "$COMPILER_DIR"
-    chmod +x "$COMPILER_DIR"/*
-    rm -- "$tarball"
+    printf '%s  %s\n' "$COMPILER_ARCHIVE_SHA256" "$TARBALL" \
+        | sha256sum --check --status
+    tar xzf "$TARBALL" -C "$STAGED_COMPILER_DIR"
+    if [ ! -f "$STAGED_COMPILER_DIR/cc1" ] \
+            || [ ! -f "$STAGED_COMPILER_DIR/cc1plus" ]; then
+        echo "  ERROR: compiler archive is missing cc1 or cc1plus." >&2
+        exit 1
+    fi
+    chmod +x "$STAGED_COMPILER_DIR"/*
+
+    # Patch and verify the complete staged pair before replacing any live
+    # compiler files. A partial existing installation can therefore repair
+    # itself without ever exposing a half-installed canonical toolchain.
+    python3 "$EGCS_JUMP_PATCH_HELPER" --apply "$STAGED_COMPILER_DIR"
+    python3 "$EGCS_JUMP_PATCH_HELPER" --check "$STAGED_COMPILER_DIR" >/dev/null
+
+    COMPILER_BACKUP="$TOOLCHAIN_DIR/.gcc-2.91.66-psx.backup.$$"
+    if [ -e "$COMPILER_DIR" ]; then
+        mv "$COMPILER_DIR" "$COMPILER_BACKUP"
+    fi
+    if ! mv "$STAGED_COMPILER_DIR" "$COMPILER_DIR"; then
+        if [ -e "$COMPILER_BACKUP" ]; then
+            mv "$COMPILER_BACKUP" "$COMPILER_DIR"
+        fi
+        exit 1
+    fi
+    rm -rf -- "$COMPILER_BACKUP" "$DOWNLOAD_STAGE"
+    echo "  Installed: cc1, gcc, cpp, cc1plus, g++"
 fi
 
-"$COMPILER_DIR/cc1" -version </dev/null 2>&1 | head -n 1
-"$COMPILER_DIR/cc1plus" -version </dev/null 2>&1 | head -n 1
-python3 "$SDK_HELPER" --check
+# The target proves EGCS 1.1.1's recursive final-jump deletion behavior.  The
+# downloadable 1.1.2 binaries added a post-scheduler guard which changes two
+# recovered PHYSICS functions.  Restore that genuine historical behavior with
+# an exact-hash, fail-closed binary patch.
+python3 "$EGCS_JUMP_PATCH_HELPER" --apply "$COMPILER_DIR"
+python3 "$EGCS_JUMP_PATCH_HELPER" --check "$COMPILER_DIR" >/dev/null
 
-echo "Toolchain ready. Run: bash build.sh"
+# Step 4: Clone maspsx
+echo "[4/5] Setting up maspsx..."
+if [ -d "$MASPSX_DIR" ]; then
+    echo "  Already cloned."
+else
+    git clone --depth 1 https://github.com/mkst/maspsx.git "$MASPSX_DIR"
+    echo "  Cloned maspsx."
+fi
+
+# Step 5: Create 'as' wrapper so gcc driver routes through maspsx
+echo "[5/5] Creating assembler wrapper..."
+cat > "$COMPILER_DIR/as" << 'WRAPPER'
+#!/bin/bash
+# Route assembly through maspsx (ASPSX emulation) before GNU as
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+python3 "$SCRIPT_DIR/../maspsx/maspsx.py" --run-assembler --gnu-as-path=mips-linux-gnu-as "$@"
+WRAPPER
+chmod +x "$COMPILER_DIR/as"
+
+# Verify
+echo ""
+echo "=== Verification ==="
+echo -n "cc1:      " && "$COMPILER_DIR/cc1" -version < /dev/null 2>&1 | head -1 || echo "FAILED"
+echo -n "EGCS jump: " && python3 "$EGCS_JUMP_PATCH_HELPER" --check "$COMPILER_DIR" >/dev/null \
+    && echo "verified"
+echo -n "as:       " && mips-linux-gnu-as --version | head -1
+echo -n "objdump:  " && mips-linux-gnu-objdump --version | head -1
+echo -n "maspsx:   " && python3 "$MASPSX_DIR/maspsx.py" --version 2>&1 || echo "(no --version flag, but present)"
+echo -n "SDK hdrs: " && python3 "$PSYQ_SDK_HEADER_HELPER" --check
+echo ""
+echo "=== Setup complete! ==="
+echo "Toolchain: $TOOLCHAIN_DIR"
+echo ""
+echo "Next: Run 'bash test_all_tu.sh' to test the complete source build."

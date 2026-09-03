@@ -15,8 +15,6 @@ struct CPolyLine : CBit {
     ~CPolyLine();
     /** Enable semitransparency on every packed segment command. */
     void SetSemiTransparent();
-    /** Release polyline storage through the CBit allocator. */
-    static void operator delete(void *) asm("__dl__4CBitPv");
 };
 
 #endif // CPOLYLINE_INC_H

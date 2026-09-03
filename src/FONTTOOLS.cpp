@@ -48,7 +48,7 @@ struct FontToolsImageVTable {
 inline FontToolsImageVTable *FontTools_GetImageVTable(SlicedImage2 *image)
 {
     return reinterpret_cast<FontToolsImageVTable *>(
-        image->Image.CClass.vtable);
+        image->CClass.vtable);
 }
 
 /**
@@ -94,11 +94,14 @@ inline u16 FontTools_LowHalf(const int &word)
 
 // Owner-ABI entry points retain the linker names recorded in the target
 // object. The destructor alias stays at the ABI boundary.
-extern "C" void FontTools_DestroyFont(Font *font, int inCharge)
+void FontTools_DestroyFont(Font *font, int inCharge)
     asm("_._4Font");
-extern "C" void FontTools_DrawAbi(
-    Font *font, int x, int y, char *str, int drawFirst)
-    asm("draw__4FontiiPci");
+namespace FontToolsAbi
+{
+extern "C" void draw__4FontiiPci(
+    Font *font, int x, int y, char *str, int drawFirst);
+}
+#define FontTools_DrawAbi FontToolsAbi::draw__4FontiiPci
 
 typedef char FontTools_TextEffect_size_must_be_8[
     (sizeof(TextEffect) == 8) ? 1 : -1];
@@ -132,8 +135,9 @@ int FontManager::dumb = 0;
 // vtable in every owner that derives from CClass.  `MAIN.SYM` records 25 such
 // `_._6CClass` copies and names no base vtable, so both are file-local here.
 // The filesystem-safe spelling keeps the per-address target assembly reachable.
-static void FontTools_ClassDestructor(CClass *base, int __in_chrg)
-    asm("__DOT__6CClass_8005C228");
+extern "C" {
+static void __DOT__6CClass_8005C228(CClass *base, int __in_chrg);
+}
 
 // Two owner-local strings sit between the manager scalar and the vtables in
 // the target's small-data contribution.  No surviving code references them.
@@ -147,7 +151,7 @@ static char FontTools_Greeting[12] __attribute__((section(".sdata"))) =
 // GCC 2.x vtable layout for CClass-derived types: word [0] base offset,
 // word [1] RTTI slot, word [2] virtual destructor, words [3..] virtual
 // methods in declaration order.
-extern "C" int __vt_4Font
+int __vt_4Font
     __attribute__((section(".sdata"), aligned(8))) = 0;
 static int FontTools_VTableIndex = 0;
 static void (*FontTools_VTableDtor)(Font *, int) = FontTools_DestroyFont;
@@ -158,7 +162,7 @@ static int __vt_base_4Font
     __attribute__((section(".sdata"), aligned(8))) = 0;
 static int FontTools_BaseVTableIndex = 0;
 static void (*FontTools_BaseVTableDtor)(CClass *, int) =
-    FontTools_ClassDestructor;
+    __DOT__6CClass_8005C228;
 Font::Font()
 {
     CClass.vtable = &__vt_4Font;
@@ -258,9 +262,9 @@ Font::Font(unsigned char *buf)
 
                 CharTab[i].Image->pack();
                 CharTab[i].Image->removeFromMemory();
-                CharTab[i].Image->Image.JustX = 0;
-                CharTab[i].Image->Image.JustY = 0;
-                CharTab[i].Image->Image.Shaded = reinterpret_cast<void *>(1);
+                CharTab[i].Image->JustX = 0;
+                CharTab[i].Image->JustY = 0;
+                CharTab[i].Image->Shaded = reinterpret_cast<void *>(1);
 
                 characterTable = CharTab;
                 int pixelCount = image_w * characterTable[i].H;
@@ -309,9 +313,9 @@ Font::Font(unsigned char *buf)
     Mem_Delete(crap);
     CharTab[NumChars].Image->pack();
     CharTab[NumChars].Image->removeFromMemory();
-    CharTab[NumChars].Image->Image.JustX = 0;
-    CharTab[NumChars].Image->Image.JustY = 0;
-    CharTab[NumChars].Image->Image.Shaded = reinterpret_cast<void *>(1);
+    CharTab[NumChars].Image->JustX = 0;
+    CharTab[NumChars].Image->JustY = 0;
+    CharTab[NumChars].Image->Shaded = reinterpret_cast<void *>(1);
 }
 
 /**
@@ -426,12 +430,12 @@ void Font::draw(int x, int y, char *str, int drawFirst)
             int PreEffectX;
             int PreEffectY;
 
-            CharTab[i].Image->Image.Scale = Scale;
-            CharTab[i].Image->Image.Transparent = 0;
-            CharTab[i].Image->Image.TransType = 1;
-            CharTab[i].Image->Image.R = static_cast<u8>(R);
-            CharTab[i].Image->Image.G = static_cast<u8>(G);
-            CharTab[i].Image->Image.B = static_cast<u8>(B);
+            CharTab[i].Image->Scale = Scale;
+            CharTab[i].Image->Transparent = 0;
+            CharTab[i].Image->TransType = 1;
+            CharTab[i].Image->R = static_cast<u8>(R);
+            CharTab[i].Image->G = static_cast<u8>(G);
+            CharTab[i].Image->B = static_cast<u8>(B);
 
             int aboveScaled = CharTab[i].Baseline * Scale;
             ScreenX = xt;
@@ -449,8 +453,8 @@ void Font::draw(int x, int y, char *str, int drawFirst)
                 void (*modifyColour)(TextEffect *, u8 *, u8 *, u8 *) =
                     colourVTable->modifyColour;
                 modifyColour(
-                    colourEffect, &sprite->Image.R, &sprite->Image.G,
-                    &sprite->Image.B);
+                    colourEffect, &sprite->R, &sprite->G,
+                    &sprite->B);
                 TextEffect *positionEffect = CurrentTextEffect;
                 FontToolsTextEffectVTable *positionVTable =
                     reinterpret_cast<FontToolsTextEffectVTable *>(
@@ -481,9 +485,9 @@ void Font::draw(int x, int y, char *str, int drawFirst)
 
             if (Aliased != 0)
             {
-                CharTab[i].Image->Image.Transparent =
+                CharTab[i].Image->Transparent =
                     reinterpret_cast<void *>(1);
-                CharTab[i].Image->Image.TransType = 2;
+                CharTab[i].Image->TransType = 2;
                 SlicedImage2 *sprite = CharTab[i].Image;
                 FontToolsImageVTable *vtbl = FontTools_GetImageVTable(sprite);
                 void (*drawFn)(SlicedImage2 *, int, int, int) = vtbl->draw;
@@ -492,12 +496,12 @@ void Font::draw(int x, int y, char *str, int drawFirst)
 
             if (Shadow != 0)
             {
-                CharTab[i].Image->Image.Transparent =
+                CharTab[i].Image->Transparent =
                     reinterpret_cast<void *>(1);
-                CharTab[i].Image->Image.TransType = 2;
-                CharTab[i].Image->Image.R = 0xFF;
-                CharTab[i].Image->Image.G = 0xFF;
-                CharTab[i].Image->Image.B = 0xFF;
+                CharTab[i].Image->TransType = 2;
+                CharTab[i].Image->R = 0xFF;
+                CharTab[i].Image->G = 0xFF;
+                CharTab[i].Image->B = 0xFF;
 
                 SlicedImage2 *sprite = CharTab[i].Image;
                 FontToolsImageVTable *vtbl = FontTools_GetImageVTable(sprite);
@@ -1131,7 +1135,7 @@ found:
 
 // GCC emitted this private `CClass::~CClass` copy last in the owner's
 // text, so it stays at the end of the translation unit.
-static void FontTools_ClassDestructor(CClass *base, int __in_chrg)
+static void __DOT__6CClass_8005C228(CClass *base, int __in_chrg)
 {
     base->vtable = &__vt_base_4Font;
     if (__in_chrg & 1)

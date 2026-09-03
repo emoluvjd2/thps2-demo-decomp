@@ -20,49 +20,50 @@ static inline void PreManager_Destroy(PREManager *manager) {
 typedef char pre_manager_size_must_be_324[
     (sizeof(PREManager) == 324) ? 1 : -1];
 
-extern "C"
-{
-    // String literals (absolute addresses in .rodata)
-    static char PRE_full_msg[]; // 0x800B290C "PRE: All slots full\n" (approx)
-    static char PRE_open_err[]; // 0x800B2928 "PRE: could not open %s\n" (approx)
-    extern char PRE_fmt_s[];    // 0x800EA6C8 "%s" format string
-    extern char PRE_null_arr[]; // 0x800DA6C4 null byte for name clear (absolute)
-}
+// String literals (absolute addresses in .rodata)
+static char PRE_full_msg[]; // 0x800B290C "PRE: All slots full\n" (approx)
+static char PRE_open_err[]; // 0x800B2928 "PRE: could not open %s\n" (approx)
+#define PREAPI_DECLARE_OWNER_ADDRESS_VIEWS
+#include "PREAPI.h"
 
 #define PREMGR_OWNER_DECLARATION
 #include "PREMGR.h"
 
-extern "C" {
 /** PRE archive manager singleton owned by this translation unit. */
 PREManager *PREMgr
     __attribute__((section(".sdata"))) = 0;
-}
 
 // Small-data order in this owner is PREMgr, PRE_null_arr, PRE_fmt_s, then
 // both vtables, so the recovered definitions follow the string owners.
-extern "C" {
+namespace PreAddressViewOwners
+{
+extern "C"
+{
 /** Empty name and filename-copy format stored beside the singleton. */
-static char PRE_null_arr_owner[4] asm("PRE_null_arr")
+static char PRE_null_arr[4]
     __attribute__((section(".sdata"))) = {0, 0, 0, 0};
-static char PRE_fmt_s_owner[4] asm("PRE_fmt_s")
+static char PRE_fmt_s[4]
     __attribute__((section(".sdata"))) = "%s";
+}
 }
 
 // GCC 2.x emits a private copy of `CClass::~CClass` beside a private base
 // vtable in every owner that derives from CClass.  `MAIN.SYM` records 25 such
 // `_._6CClass` copies and names no base vtable, so both are file-local here.
 // The filesystem-safe spelling keeps the per-address target assembly reachable.
-static void Pre_ClassDestructor(CClass *self, int flags)
-    asm("__DOT__6CClass_8005AC28");
+extern "C" {
+static void __DOT__6CClass_8005AC28(CClass *self, int flags);
+}
 
 // C++ forbids taking a destructor's address, so the public vtable slot uses an
 // addressable declaration of the symbol this owner already defines.
-extern "C" void Pre_DestructorAbi(PREManager *self, int flags)
+struct PREManager;
+void Pre_DestructorAbi(PREManager *manager, int inCharge)
     asm("_._10PREManager");
 
 // Consecutive eight-byte-aligned small-data words per vtable rather than
 // arrays, so -G8 still yields the target's `addiu $vX, $gp, off` form.
-extern "C" int __vt_10PREManager
+int __vt_10PREManager
     __attribute__((section(".sdata"), aligned(8))) = 0;
 static int Pre_VTableIndex __attribute__((section(".sdata"))) = 0;
 static void (*Pre_VTableDtor)(PREManager *, int)
@@ -72,13 +73,18 @@ static int Pre_BaseVTableWord
     __attribute__((section(".sdata"), aligned(8))) = 0;
 static int Pre_BaseVTableIndex __attribute__((section(".sdata"))) = 0;
 static void (*Pre_BaseVTableDtor)(CClass *, int)
-    __attribute__((section(".sdata"))) = Pre_ClassDestructor;
+    __attribute__((section(".sdata"))) = __DOT__6CClass_8005AC28;
 
 // Additional external functions
 
 // === Extern "C" forward declarations ===
-extern "C" PREManager *PreManager_Construct(PREManager *)
-    asm("__10PREManager");
+struct PREManager;
+namespace PreManagerConstructorAbi
+{
+/** Addressable constructor entry used by PRE_Init. */
+extern "C" PREManager *__10PREManager(PREManager *manager);
+}
+#define PreManager_Construct PreManagerConstructorAbi::__10PREManager
 #include "FILEIO.h"
 #include <STDIO.H>
 #include <STRINGS.H>
@@ -382,20 +388,15 @@ inpre_not_found:
     return 0;
 }
 
-extern "C" {
-
-
 /** Diagnostics emitted when no PRE slot or allocation is available. */
 static char PRE_full_msg[28]
     __attribute__((section(".rdata"))) = "\nOut of PREManager slots";
 static char PRE_open_err[28]
     __attribute__((section(".rdata"))) = "\nMemory error loading %s";
 
-}
-
 // GCC emitted this private `CClass::~CClass` copy last in the owner's
 // text, so it stays at the end of the translation unit.
-static void Pre_ClassDestructor(CClass *self, int flags)
+static void __DOT__6CClass_8005AC28(CClass *self, int flags)
 {
     self->vtable = &Pre_BaseVTableWord;
     if (flags & 1)

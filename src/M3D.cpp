@@ -27,13 +27,8 @@ struct CBody;
 #include "SCAMERA.h"
 #include "TRIG.h"
 
-/** Source vertex layout used by the shared transformed-vertex workspace. */
-struct SVertex {
-    s16 X;
-    s16 Y;
-    s16 z;
-    u16 Outcode;
-};
+#define VERTICES_OWNER_DECLARATION
+#include "VERTICES.h"
 
 /** Pulsing-colour keyframe entry. */
 struct SRGBI {
@@ -51,7 +46,8 @@ struct STexWibFaceInfo {
     STexWibVertInfo p3;
 };
 
-extern "C" int EnvRegions __attribute__((section(".data")));
+#define ENVREGIONS_SCALAR_ABSOLUTE_DECLARATION
+#include "ENVREGIONS.h"
 #define ENVIROLIST_ABSOLUTE_DECLARATION
 #include "ENVIROLIST.h"
 #include "GLEVEL.h"
@@ -165,7 +161,7 @@ static inline CSuper *M3d_GetSuper(Item *pItem) {
     return (CSuper *)pItem;
 }
 
-// === External declarations (C linkage) ===
+// === External declarations ===
 #include "PDOUBLEBUFFER.h"
 /**
  * MAIN.SYM places these definitions in the final .sdata output, but target
@@ -174,8 +170,6 @@ static inline CSuper *M3d_GetSuper(Item *pItem) {
  * move either symbol.
  */
 #include "CAMERASELECTION.h"
-
-extern "C" {
 
 #include "M3DDEFAULTLIGHT.h"
 
@@ -261,14 +255,9 @@ int Fast = 0;
 int Dewibble = 0;
 int BasePhase = 0;
 
-}
-
-// Flat-linkage renderer assembly interfaces.
-extern "C" {
+// Shared animation-frame lookup owned by BIT.
 #define QUICKANIMLOOKUP_CONSUMER_DECLARATION
-#define QUICKANIMLOOKUP_WITHIN_C_LINKAGE
 #include "QUICKANIMLOOKUP.h"
-}
 
 #include "M3DASM.h"
 #define M3DMATHS_TYPED_API
@@ -482,7 +471,7 @@ void M3d_Line(int x0, int y0, int x1, int y1, int Color, int z) {
  * @param pFaceX  FaceX to operate on.
  * @param Num Number of packed faces to process.
  * @param color Base RGB value used for each wireframe edge.
- * @return 0
+ * @return No defined value; the target integer function falls through.
  */
 int Wireframe_ProcessPolys(unsigned int * pFaceX, int Num, int color) {
     if (ForceWireFrameColor) {
@@ -490,9 +479,9 @@ int Wireframe_ProcessPolys(unsigned int * pFaceX, int Num, int color) {
     }
 
     SProjectedVertex *pVertices = ProjectedVertices;
-    int FaceR = 0;
-    int FaceG = 0;
-    int FaceB = 0;
+    int FaceR;
+    int FaceG;
+    int FaceB;
 
     for (int i = 0; i < Num;
         i++, pFaceX += (*(u16 *)((u8 *)pFaceX + 2) & 0xFFFC) >> 2) {

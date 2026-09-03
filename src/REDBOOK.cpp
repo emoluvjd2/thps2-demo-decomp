@@ -23,11 +23,8 @@ struct Redbook_CdResponse {
 typedef char Redbook_CdResponse_size_must_be_9[
     sizeof(Redbook_CdResponse) == 9 ? 1 : -1];
 
-extern "C" {
 #define SPOOLQUEUE_CONSUMER_DECLARATION
-#define SPOOLQUEUE_WITHIN_C_LINKAGE
 #include "SPOOLQUEUE.h"
-}
 
 /** Locate the CdlLOC payload embedded in a CD command response. */
 static inline CdlLOC *Redbook_ResponsePosition(unsigned char *result)
@@ -57,10 +54,10 @@ int XAGroupStartingSector[1] __attribute__((section(".sdata"))) = {0};
 int Redbook_XACurrentPriority __attribute__((section(".sdata"))) = -1;
 int Redbook_XAStartSector __attribute__((section(".sdata"))) = 0;
 int Redbook_XACompleteTimer __attribute__((section(".sdata"))) = 0;
-int Redbook_XACheckSectorOnVSync __attribute__((section(".sdata"))) = 0;
-int Redbook_XAModeSet __attribute__((section(".sdata"))) = 0;
+bool Redbook_XACheckSectorOnVSync __attribute__((section(".sdata"))) = false;
+bool Redbook_XAModeSet __attribute__((section(".sdata"))) = false;
 int Redbook_XAPaused __attribute__((section(".sdata"))) = 0;
-int Redbook_XAValid __attribute__((section(".sdata"))) = 0;
+bool Redbook_XAValid __attribute__((section(".sdata"))) = false;
 int Redbook_XACurrentGroup __attribute__((section(".sdata"))) = 0;
 int Redbook_XACurrentChannel __attribute__((section(".sdata"))) = 0;
 int Redbook_XATryAgain __attribute__((section(".sdata"))) = 0;
@@ -81,6 +78,7 @@ u8 CdControlComeback[8] __attribute__((section(".sdata"))) = {0};
 
 static void Redbook_InitialRand(int a);
 static int Redbook_Rnd(int n);
+bool Redbook_XAPlay(int group, int channel);
 
 static int RandSeed;
 static int RandA;
@@ -347,14 +345,12 @@ bool Redbook_XAPlay(int group, int channel) {
 
     {
         /*
-         * Not improving with current approaches (2 real, 98.2%).  The only
-         * divergence is target #75/#76: the original materializes the constant
-         * 1 before the `CdControlComeback` address and this body emits them in
-         * the opposite order -- two independent instructions, a pure scheduler
-         * tie-break.  Three attempts made it worse or did nothing: unwinding the
-         * adjacent `asm("$6")` pin (2 -> 12 real; the pin is load-bearing),
-         * naming the result-buffer argument (no change), and naming the constant
-         * (2 -> 96 real).  Leave the plain form.
+         * The sole residue is target #75/#76: the original materializes 1
+         * before the `CdControlComeback` address, while GCC schedules those
+         * independent instructions in the opposite order.  The complete
+         * experiment ledger proves the earlier $a2 table-base bindings are
+         * load-bearing; unwinding them fixes this pair but damages the exact
+         * prologue.  Keep this plain SDK call shape.
          */
         filter.file = 1;
         filter.chan = channel;

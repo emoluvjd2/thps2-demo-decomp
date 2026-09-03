@@ -11,9 +11,6 @@ struct CBruce;
 struct CCar;
 struct SVideoInfo;
 
-/** Global traffic-car sound volume percentage. */
-extern "C" int CarVol;
-
 #define BITSTATE_DECLARE_BIT_COUNT
 #include "BITSTATE.h"
 #define VIDEOINFO_DECLARE_GVINFO1

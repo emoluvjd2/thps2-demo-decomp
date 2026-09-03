@@ -44,7 +44,8 @@ typedef char M3dElips_Vec_size_must_be_6[(sizeof(Vec) == 6) ? 1 : -1];
 
 #include <LIBGPU.H>
 
-extern "C" int M3dElips_MinDotProd;
+#define M3DELIPS_DECLARE_MIN_DOT_PROD_VIEW
+#include "M3DELIPS.h"
 #include "CURRENTCAMERA.h"
 #include "PROJECTEDVERTICES.h"
 #define BITSTATE_DECLARE_SHADOW_TEXTURE

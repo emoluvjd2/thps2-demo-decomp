@@ -90,12 +90,8 @@ struct TrickTextEffect {
  */
 extern "C" FallingTextEffect *FallingTextEffect_ConstructAbi(
     FallingTextEffect *effect) asm("__17FallingTextEffect");
-extern "C" void FallingTextEffect_DestroyAbi(
-    FallingTextEffect *effect, int inCharge) asm("_._17FallingTextEffect");
 extern "C" TrickTextEffect *TrickTextEffect_ConstructAbi(
     TrickTextEffect *effect) asm("__15TrickTextEffect");
-extern "C" void TrickTextEffect_DestroyAbi(
-    TrickTextEffect *effect, int inCharge) asm("_._15TrickTextEffect");
 
 typedef char TextEffect_size_must_be_8[
     (sizeof(TextEffect) == 8) ? 1 : -1];
@@ -105,3 +101,19 @@ typedef char FallingTextEffect_size_must_be_288[
     (sizeof(FallingTextEffect) == 288) ? 1 : -1];
 
 #endif // TEXTEFFECTS_INC_H
+
+#ifdef TEXTEFFECTS_DECLARE_BASE_DESTRUCTOR_ABI
+#if !defined(TEXTEFFECTS_BASE_LIFECYCLE_TYPE) || \
+    !defined(TEXTEFFECTS_BASE_DESTRUCTOR_NAME)
+#error "Select the TextEffect base destructor receiver and source name"
+#endif
+
+/** Destroy the embedded TextEffect base with an explicit in-charge flag. */
+void TEXTEFFECTS_BASE_DESTRUCTOR_NAME(
+    TEXTEFFECTS_BASE_LIFECYCLE_TYPE *effect, int inCharge)
+    asm("_._10TextEffect");
+
+#undef TEXTEFFECTS_BASE_DESTRUCTOR_NAME
+#undef TEXTEFFECTS_BASE_LIFECYCLE_TYPE
+#undef TEXTEFFECTS_DECLARE_BASE_DESTRUCTOR_ABI
+#endif

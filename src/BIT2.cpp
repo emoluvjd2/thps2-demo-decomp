@@ -12,7 +12,6 @@
 #include "UTILS.h"
 #include "globals.h"
 
-struct CBody;
 struct SAnimFrame;
 
 /** Base state shared by the line effects owned by BIT2. */
@@ -38,6 +37,10 @@ struct CBit {
     void DeleteFrom(void *list);
     /** Mark this bit for removal. */
     void Die();
+    /** Advance this bit for one frame. */
+    void Move();
+    /** Allocate zero-initialized storage from the transient-bit heap. */
+    static void *operator new(unsigned int size);
     /** Releases transient-bit storage through the owning allocator. */
     static void operator delete(void *p);
 };
@@ -119,15 +122,16 @@ typedef char Bit2_CBody_position_prefix_size_must_be_16[
 #include "BITSTATE.h"
 #define BITSTATE_DECLARE_G_POLY_LINE_LIST
 #include "BITSTATE.h"
-extern "C" int Bit2_ZeroVectorFirstComponent asm("ZeroVector")
-    __attribute__((section(".data")));
+#define ZEROVECTOR_SCALAR_DECLARATION
+#include "ZEROVECTOR.h"
+#undef ZEROVECTOR_SCALAR_DECLARATION
 
 /** Typed dependencies owned by BIT and VECTOR. */
-extern "C" CMotionBlur *Bit2_ConstructMotionBlur(
-    CMotionBlur *, const CVector &, CVector &, char *, int, int, int)
-    asm("__11CMotionBlurRC7CVectorR7CVectorPciii");
-extern "C" void Bit2_AddVectors(
-    CVector *, const CVector *, const CVector *) asm("__pl__FRC7CVectorT0");
+#define BIT_DECLARE_MOTION_BLUR_CONSTRUCTOR
+#include "BIT.h"
+#define Bit2_ConstructMotionBlur \
+    BitMotionBlurConstructorABI::__11CMotionBlurRC7CVectorR7CVectorPciii
+#include "CVECTOROPS.h"
 
 /**
  * A short-lived generated line attached to a moving body while grinding.
@@ -171,7 +175,7 @@ typedef char Bit2_CSmokeGenerator_size_must_be_96[(sizeof(CSmokeGenerator) == 96
 /** Returns the full vector stored at the linker-visible `ZeroVector` base. */
 static inline const CVector &Bit2_ZeroVector()
 {
-    return *reinterpret_cast<const CVector *>(&Bit2_ZeroVectorFirstComponent);
+    return *reinterpret_cast<const CVector *>(&ZeroVector);
 }
 
 /** Returns the proven CItem-position prefix of a body. */
@@ -179,14 +183,17 @@ static inline const CVector &Bit2_BodyPosition(const CBody *body)
 {
     return reinterpret_cast<const CBodyPositionPrefix *>(body)->CItem.mPos;
 }
-extern "C" {
-
-extern char Bit2_MotionBlurAnimation[] asm("DAT_800d98b8");
+#define BIT2_DECLARE_MOTION_BLUR_ANIMATION_VIEW
+#include "BIT2.h"
 
 /** Animation name used by the motion-blur bit effect. */
-static char Bit2_MotionBlurAnimationOwner[8] asm("DAT_800d98b8")
+namespace Bit2AddressViewOwners
+{
+extern "C"
+{
+static char DAT_800d98b8[8]
     __attribute__((section(".sdata"))) = "Smoke";
-
+}
 }
 
 /*
@@ -199,15 +206,11 @@ static char Bit2_MotionBlurAnimationOwner[8] asm("DAT_800d98b8")
  * than an array, so -G8 keeps emitting the target's `addiu $vX, $gp, off`
  * instead of an absolute lui/addiu pair.
  */
-extern "C" {
-void Bit2_CBitMove(CBit *) asm("Move__4CBit");
+/** Addressable destructor entries used by this owner's five manual vtables. */
 void Bit2_GrindSparkDtorAbi(CGrindSpark *, int) asm("_._11CGrindSpark");
-void Bit2_GrindSparkMove(CGrindSpark *) asm("Move__11CGrindSpark");
 void Bit2_GLineDtorAbi(CGLine *, int) asm("_._6CGLine");
 void Bit2_SmokeGeneratorDtorAbi(CSmokeGenerator *, int)
     asm("_._15CSmokeGenerator");
-void Bit2_SmokeGeneratorMove(CSmokeGenerator *)
-    asm("Move__15CSmokeGenerator");
 void Bit2_GPolyLineDtorAbi(CGPolyLine *, int) asm("_._10CGPolyLine");
 void Bit2_PolyLineDtorAbi(CPolyLine *, int) asm("_._9CPolyLine");
 
@@ -216,13 +219,15 @@ int __vt_11CGrindSpark
 static int Bit2_GrindSparkVTableIndex = 0;
 static void (*Bit2_GrindSparkVTableDtor)(CGrindSpark *, int) =
     &Bit2_GrindSparkDtorAbi;
-static void (*Bit2_GrindSparkVTableMove)(CGrindSpark *) = &Bit2_GrindSparkMove;
+static void (*Bit2_GrindSparkVTableMove)(CGrindSpark *) =
+    (void (*)(CGrindSpark *))&CGrindSpark::Move;
 
 int __vt_6CGLine
     __attribute__((section(".sdata"), aligned(8))) = 0;
 static int Bit2_GLineVTableIndex = 0;
 static void (*Bit2_GLineVTableDtor)(CGLine *, int) = &Bit2_GLineDtorAbi;
-static void (*Bit2_GLineVTableMove)(CBit *) = &Bit2_CBitMove;
+static void (*Bit2_GLineVTableMove)(CBit *) =
+    (void (*)(CBit *))&CBit::Move;
 
 int __vt_15CSmokeGenerator
     __attribute__((section(".sdata"), aligned(8))) = 0;
@@ -230,22 +235,23 @@ static int Bit2_SmokeVTableIndex = 0;
 static void (*Bit2_SmokeVTableDtor)(CSmokeGenerator *, int) =
     &Bit2_SmokeGeneratorDtorAbi;
 static void (*Bit2_SmokeVTableMove)(CSmokeGenerator *) =
-    &Bit2_SmokeGeneratorMove;
+    (void (*)(CSmokeGenerator *))&CSmokeGenerator::Move;
 
 int __vt_10CGPolyLine
     __attribute__((section(".sdata"), aligned(8))) = 0;
 static int Bit2_GPolyLineVTableIndex = 0;
 static void (*Bit2_GPolyLineVTableDtor)(CGPolyLine *, int) =
     &Bit2_GPolyLineDtorAbi;
-static void (*Bit2_GPolyLineVTableMove)(CBit *) = &Bit2_CBitMove;
+static void (*Bit2_GPolyLineVTableMove)(CBit *) =
+    (void (*)(CBit *))&CBit::Move;
 
 int __vt_9CPolyLine
     __attribute__((section(".sdata"), aligned(8))) = 0;
 static int Bit2_PolyLineVTableIndex = 0;
 static void (*Bit2_PolyLineVTableDtor)(CPolyLine *, int) =
     &Bit2_PolyLineDtorAbi;
-static void (*Bit2_PolyLineVTableMove)(CBit *) = &Bit2_CBitMove;
-}
+static void (*Bit2_PolyLineVTableMove)(CBit *) =
+    (void (*)(CBit *))&CBit::Move;
 
 /** Sets the semitransparency bit on one packed line-segment command. */
 static inline void Bit2_SetSegmentSemiTransparent(
@@ -442,13 +448,13 @@ void CSmokeGenerator::Move()
             yoff = -yoff;
             upvel.vy = yoff << 12;
             CMotionBlur *foo = static_cast<CMotionBlur *>(
-                Bit_AllocateStorage(sizeof(CMotionBlur)));
+                CBit::operator new(sizeof(CMotionBlur)));
             if (foo != 0) {
                 int r2 = Rnd(mScaleRandom);
                 int animLen = mScaleBase + r2;
                 foo = Bit2_ConstructMotionBlur(
-                    foo, mPos, upvel,
-                    Bit2_MotionBlurAnimation, animLen, 0, 10);
+                    foo, &mPos, &upvel,
+                    DAT_800d98b8, animLen, 0, 10);
             }
             foo->mFrigDeltaZ = defaultAge;
             int randFrame = Rnd(0x1000);
@@ -544,8 +550,7 @@ CGrindSpark::CGrindSpark(CBody *pParent, CVector &pos, int vel, int gravity, int
     mOldPos = pos;
     mPos = pos;
 
-    CVector end;
-    Bit2_AddVectors(&end, &pos, &Bit2_BodyPosition(mpParent));
+    CVector end = pos + Bit2_BodyPosition(mpParent);
     mEnd = end;
     mStart = mEnd;
     mCodeBGR0 = 0x52000080;

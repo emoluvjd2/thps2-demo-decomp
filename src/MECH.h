@@ -3,6 +3,13 @@
 #define MECH_INC_H
 
 struct CBruce;
+struct CBruceCtorSlice;
+
+/** Construct a skater in caller-provided gameplay storage. */
+namespace CBruceConstructorABI
+{
+extern "C" CBruceCtorSlice *__6CBruce(CBruceCtorSlice *bruce);
+}
 
 /** One checksum/count entry in the skater's recent-event history. */
 struct SHistory {
@@ -54,3 +61,20 @@ extern "C" CBruce *pCurrentPlayer MECH_SHARED_STATE_DECL_ATTR; // 0x800D9B08
 void SFX_Grunt(CBruce *pSkater);
 
 #endif // MECH_INC_H
+
+#ifdef MECH_DECLARE_PHYSICS_OWNER_ABI
+#ifndef MECH_PHYSICS_OWNER_RECEIVER
+#error MECH_DECLARE_PHYSICS_OWNER_ABI requires a receiver type
+#endif
+namespace PhysicsOwnerAbi
+{
+/** Transition the owner-local skater view to a new physics state. */
+extern "C" void StateTransition__6CBruce13EPhysicsStatei(
+    MECH_PHYSICS_OWNER_RECEIVER *bruce, int state, int line);
+/** Run side-collision handling through the target CBruce entry. */
+extern "C" void CheckSideCollisions__6CBruce(
+    MECH_PHYSICS_OWNER_RECEIVER *bruce);
+}
+#undef MECH_PHYSICS_OWNER_RECEIVER
+#undef MECH_DECLARE_PHYSICS_OWNER_ABI
+#endif

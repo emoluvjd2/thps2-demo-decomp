@@ -162,31 +162,38 @@ typedef char CBruceRailOwner_minimum_size_check[
 #include "MIPS.h"
 
 // === External function declarations ===
-extern void CVector_AddRefs_rail(CVector *, const CVector &, const CVector &)
-    asm("__pl__FRC7CVectorT0");
-extern void CVector_SubRefs_rail(CVector *, const CVector &, const CVector &)
-    asm("__mi__FRC7CVectorT0");
-extern CVector CVector_NegateValue_rail(const CVector &)
-    asm("__mi__C7CVector");
-CVector operator+(const CVector &, const CVector &);
-CVector operator-(const CVector &, const CVector &);
+namespace RailVectorAbi
+{
+extern "C" void __pl__FRC7CVectorT0(
+    CVector *, const CVector &, const CVector &);
+}
+#define CVector_AddRefs_rail RailVectorAbi::__pl__FRC7CVectorT0
+#define M3DMATHS_ABI_ONLY
+#define M3DMATHS_DECLARE_VECTOR_SUBTRACT
+#define M3DMATHS_VECTOR_SUBTRACT_DECLARATION \
+    extern void CVector_SubRefs_rail( \
+        CVector *, const CVector &, const CVector &)
+#include "M3DMATHS.h"
+#undef M3DMATHS_ABI_ONLY
+#include "CVECTOROPS.h"
 
 // === Extern "C" gp-relative globals ===
 // GCC 2.x emits a private copy of `CClass::~CClass` beside a private base
 // vtable in every owner that derives from CClass.  `MAIN.SYM` records 25 such
 // `_._6CClass` copies and names no base vtable, so both are file-local here.
-// The filesystem-safe spelling keeps the per-address target assembly reachable.
-static void Rail_ClassDestructor(CClass *self, int flags)
-    asm("__DOT__6CClass_80051EDC");
+// The address-qualified target spelling is also a legal private C identifier.
+extern "C" {
+static void __DOT__6CClass_80051EDC(CClass *self, int flags);
+}
 
 // C++ forbids taking a destructor's address, so the public vtable slot uses an
 // addressable declaration of the symbol this owner already defines.
-extern "C" void Rail_DestructorAbi(CRail *self, int flags)
+void Rail_DestructorAbi(CRail *self, int flags)
     asm("_._5CRail");
 
 // Three consecutive eight-byte-aligned small-data words per vtable rather than
 // arrays, so -G8 still yields the target's `addiu $vX, $gp, off` form.
-extern "C" int __vt_5CRail
+int __vt_5CRail
     __attribute__((section(".sdata"), aligned(8))) = 0;
 static int Rail_VTableIndex = 0;
 static void (*Rail_VTableDtor)(CRail *, int) = Rail_DestructorAbi;
@@ -194,7 +201,8 @@ static void (*Rail_VTableDtor)(CRail *, int) = Rail_DestructorAbi;
 static int Rail_BaseVTableWord
     __attribute__((section(".sdata"), aligned(8))) = 0;
 static int Rail_BaseVTableIndex = 0;
-static void (*Rail_BaseVTableDtor)(CClass *, int) = Rail_ClassDestructor;
+static void (*Rail_BaseVTableDtor)(CClass *, int) =
+    __DOT__6CClass_80051EDC;
 
 // === External function declarations ===
 // Const-qualified view of the same object.  The lookup-table base read in
@@ -202,7 +210,7 @@ static void (*Rail_BaseVTableDtor)(CClass *, int) = Rail_ClassDestructor;
 // declaration cc1plus keeps a may-alias edge from `this->mBBox*` to the global
 // load and pins it just before its use.  A const object is RTX_UNCHANGING, so
 // the edge disappears and the load lands where the original has it.
-extern "C" short **const OffsetList_c asm("OffsetList")
+extern short **const OffsetList_c asm("OffsetList")
     __attribute__((section(".data")));
 #include "MECHLIST.h"
 
@@ -873,26 +881,25 @@ CRail::CRail(int node_index)
  */
 CRail::~CRail()
 {
-    CRail *self = this;
-    CClass *base = self;
+    CClass *base = this;
     CRail *head = RailList;
-    RAIL_VTABLE_ALIAS(self) = &__vt_5CRail;
-    if (head == self)
+    RAIL_VTABLE_ALIAS(this) = &__vt_5CRail;
+    if (head == this)
     {
-        RailList = self->mpNext;
+        RailList = mpNext;
     }
     {
-        CRail *previous = self->mpPrevious;
+        CRail *previous = mpPrevious;
         if (previous != 0)
         {
-            previous->mpNext = self->mpNext;
+            previous->mpNext = mpNext;
         }
     }
     {
-        CRail *next = self->mpNext;
+        CRail *next = mpNext;
         if (next != 0)
         {
-            next->mpPrevious = self->mpPrevious;
+            next->mpPrevious = mpPrevious;
         }
     }
     base->vtable = &Rail_BaseVTableWord;
@@ -1082,8 +1089,7 @@ void Rail_Update(void)
                             }
                             else
                             {
-                                pSkater->mRailDir =
-                                    CVector_NegateValue_rail(SegDir);
+                                pSkater->mRailDir = -SegDir;
                                 pSkater->mRail_Direction = -1;
                                 if (RailPos == SegFrom)
                                 {
@@ -1224,11 +1230,13 @@ void Rail_Update(void)
 
 // GCC emitted this private `CClass::~CClass` copy last in the owner's
 // text, so it stays at the end of the translation unit.
-static void Rail_ClassDestructor(CClass *self, int flags)
+extern "C" {
+static void __DOT__6CClass_80051EDC(CClass *self, int flags)
 {
     self->vtable = &Rail_BaseVTableWord;
     if (flags & 1)
     {
         CClass::operator delete(self);
     }
+}
 }

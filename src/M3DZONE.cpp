@@ -34,18 +34,18 @@ struct SZone
 typedef char M3dZone_zone_size_must_be_1632[
     (sizeof(SZone) == 1632) ? 1 : -1];
 
+#define M3DCOLIJMASKS_ABSOLUTE_DECLARATION
+#define M3DCOLIJMASKS_WITHIN_C_LINKAGE
+#include "M3DCOLIJMASKS.h"
+#define BODYLISTS_DECLARE_ENVIRONMENTAL_OBJECT_LIST
+#include "BODYLISTS.h"
+#define ENVREGIONS_ABSOLUTE_DECLARATION
+#define ENVREGIONS_WITHIN_C_LINKAGE
+#include "ENVREGIONS.h"
+
 extern "C"
 {
-    extern SZone Zones[1];
-
-    extern unsigned int M3dColij_OneMask __attribute__((section(".data")));
-    extern unsigned int M3dColij_ZeroMask __attribute__((section(".data")));
-    #define BODYLISTS_DECLARE_ENVIRONMENTAL_OBJECT_LIST
-    #define BODYLISTS_WITHIN_C_LINKAGE
-    #include "BODYLISTS.h"
-    extern int EnvRegions[2] __attribute__((section(".data")));
-
-    unsigned int SetSp(unsigned int newSp);
+#include <LIBAPI.H>
 }
 
 #include "M3DMATHS.h"

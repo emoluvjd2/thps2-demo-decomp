@@ -12,47 +12,31 @@ enum EPackInitType {
     PACK640x480 = 1,
 };
 
-/** PACK-owned allocator lists, limits, and usage counters. */
-extern "C" EPackInitType LastPackInitType;       // 0x800DA364
-
 /*
- * PACK accesses these owner definitions through $gp.  Their collaborating
- * translation units materialize the same addresses directly.
+ * PACK owns these small-data definitions.  Consumers materialize their target
+ * addresses directly, while the owner must retain its $gp-relative view.
  */
 #ifdef PACK_OWNER_DECLARATIONS
-#define PACK_STATE_DECL_ATTR
+#define PACK_SHARED_STATE_DECL_ATTR
 #else
-#define PACK_STATE_DECL_ATTR __attribute__((section(".data")))
+#define PACK_SHARED_STATE_DECL_ATTR __attribute__((section(".data")))
 #endif
 
-extern "C" int Pack_NoBottom PACK_STATE_DECL_ATTR;       // 0x800DA358
-extern "C" int Pack_NoRight PACK_STATE_DECL_ATTR;       // 0x800DA35C
-extern "C" int Pack_Width;       // 0x800DA360
-extern "C" TSPack *Pack_pFree;       // 0x800DA34C
-extern "C" TSPack *Pack_pFull;       // 0x800DA350
-extern "C" int TotSlots;       // 0x800DA354
-extern "C" int TotalPackUsage PACK_STATE_DECL_ATTR;       // 0x800DA368
-extern "C" int ZapCalls;       // 0x800DA36C
+/** Suppress allocations that touch the bottom edge of the VRAM pack area. */
+extern "C" int Pack_NoBottom PACK_SHARED_STATE_DECL_ATTR;
 
-#undef PACK_STATE_DECL_ATTR
+/** Suppress allocations that touch the right edge of the VRAM pack area. */
+extern "C" int Pack_NoRight PACK_SHARED_STATE_DECL_ATTR;
 
-/** Allocate one pack-list entry. */
-TSPack *Pack_GetSlot(void);
+/** Total heap bytes currently charged to VRAM pack-list entries. */
+extern "C" int TotalPackUsage PACK_SHARED_STATE_DECL_ATTR;
 
-/** Release one pack-list entry. */
-void Pack_KillSlot(TSPack *pToFree);
+#undef PACK_SHARED_STATE_DECL_ATTR
 
-TSPack *Pack_New(TSPack **ppHead);
-TSPack *Pack_NewFree(int X, int Y, int W, int H);
-TSPack *Pack_NewFull(int X, int Y, int W, int H);
-void Pack_Remove(TSPack **pHead, TSPack *pRemove);
 void Pack_Init640x480(void);
 TSPack *Pack_Pack(int Type, int WW, int H, int *X, int *Y, int BPP,
                   int Aligned, unsigned int checksum);
 void Pack_Unpack(short X, short Y);
-TSPack *Pack_MergeAdjacent(TSPack *p_first, TSPack *p_second);
-int Pack_Merge(TSPack *p_merge);
-void Pack_Zap(int x, int y, int w, int h);
 void Pack_DefragmentFully(void);
 
 #endif // PACK_H

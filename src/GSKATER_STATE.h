@@ -4,6 +4,6 @@
 struct CBruce;
 
 /** Active gameplay skaters; storage is owned by MAIN.cpp. */
-extern "C" CBruce *GSkater[];
+extern CBruce *GSkater[];
 
 #endif // GSKATER_STATE_INC_H

@@ -9,9 +9,7 @@
 #include <LIBGPU.H>
 
 #define PAL_ENTRY_LAYOUT
-#define PAL_ENTRY_LAYOUT_ONLY
 #include "PAL.h"
-#undef PAL_ENTRY_LAYOUT_ONLY
 #undef PAL_ENTRY_LAYOUT
 
 /** Palette sizes and Q20 fixed-point limits used by this owner. */
@@ -29,10 +27,6 @@ enum CreateColorConstants {
     HSVValueWordCount = sizeof(HSV_VALUE) / sizeof(int),
     SaturationWordOffsetFromValue = -1
 };
-
-// PAL does not yet expose these two functions through its public header.
-void Pal_CopyToMemory(tag_S_Pal *pPal, void *pBuffer);
-void Pal_StoreFromMemory(tag_S_Pal *pPal, void *pBuffer);
 
 /**
  * Saturation response curve used by the character color editor.

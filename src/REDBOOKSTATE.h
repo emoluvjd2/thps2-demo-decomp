@@ -11,12 +11,12 @@
 
 #ifdef REDBOOKSTATE_DECLARE_VSYNC_SECTOR_CHECK
 /** Whether the VSync path should validate the current XA sector. */
-extern "C" int Redbook_XACheckSectorOnVSync REDBOOKSTATE_DECL_ATTR;
+extern bool Redbook_XACheckSectorOnVSync REDBOOKSTATE_DECL_ATTR;
 #endif
 
 #ifdef REDBOOKSTATE_DECLARE_XA_MODE_SET
 /** Whether XA playback mode has already been configured. */
-extern "C" int Redbook_XAModeSet REDBOOKSTATE_DECL_ATTR;
+extern bool Redbook_XAModeSet REDBOOKSTATE_DECL_ATTR;
 #endif
 
 #undef REDBOOKSTATE_DECLARE_VSYNC_SECTOR_CHECK

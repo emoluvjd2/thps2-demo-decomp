@@ -53,9 +53,6 @@ void Video_InitOnce(void);
 /** Initialize the replay subsystem for one level. */
 void Video_Init(void);
 
-/** Synchronize recorded objects by the requested number of frames. */
-void Video_SyncObs(int numFrames);
-
 /** Synchronize recorded objects when the active replay requires it. */
 void Video_SyncObsIfNeeded(void);
 

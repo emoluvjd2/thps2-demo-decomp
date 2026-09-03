@@ -1,3 +1,10 @@
+#if defined(PAD_DECLARE_BUFFER_DESTRUCTOR_ABI)
+struct PadBuffer;
+/** Addressable deleting-destructor entry used by the shell pad-buffer table. */
+static void Shell_PadBufferDestructor(PadBuffer *buffer, int inCharge)
+    asm("_._9PadBuffer");
+#endif
+
 #if defined(PAD_BUTTON_LAYOUT_ONLY) && !defined(PAD_BUTTON_LAYOUT)
 #error PAD_BUTTON_LAYOUT_ONLY requires PAD_BUTTON_LAYOUT
 #endif
@@ -149,36 +156,18 @@ typedef char SControl_size_must_be_364[(sizeof(SControl) == 364) ? 1 : -1];
 typedef char ControllerData_size_must_be_8[(sizeof(ControllerData) == 8) ? 1 : -1];
 typedef char ControllerBuffer_size_must_be_34[(sizeof(ControllerBuffer) == 34) ? 1 : -1];
 
-extern "C" int Pad_IdleTime;
-extern "C" int XCenterL;
-extern "C" int XCenterR;
-extern "C" int XMaxL;
-extern "C" int XMaxR;
-extern "C" int XMinL;
-extern "C" int XMinR;
-extern "C" int YCenterL;
-extern "C" int YCenterR;
-extern "C" int YMaxL;
-extern "C" int YMaxR;
-extern "C" int YMinL;
-extern "C" int YMinR;
-
-extern "C" struct SControl Pad[2];
-extern "C" struct ControllerBuffer controllers[2];
-extern "C" struct ControllerData theControllers[8];
+/** Shared gameplay input state for the two supported controllers. */
+extern struct SControl Pad[2];
 
 
 void Pad_InitAtStart(void);
 void Pad_LockAnalog(void);
 void Pad_ClearAllOne(int pad);
 void Pad_ClearAll(void);
-void Pad_Clear(SControl *p_pad);
 void Pad_ClearTriggers(SControl *p_pad);
 void Pad_ActuatorOn(unsigned char index, unsigned short time,
                     unsigned char motor, unsigned char motor_value);
 void Pad_ActuatorOff(unsigned char index, unsigned char motor);
-void Pad_Button(SButton *p_but, int state);
-int Pad_Analog(int x, int min, int max, int center);
 int Pad_Update(void);
 void Pad_Restore(void);
 void Pad_Remap(void);

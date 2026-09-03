@@ -22,35 +22,44 @@ int LowMemory = 0;
 
 static unsigned int CriticalBigHeapUsage = 0;
 static unsigned int UniqueIndentifier = 0;
-static char HeapSizesTextData[] asm("DAT_800da4a4")
+namespace MemAddressViewOwners
+{
+extern "C"
+{
+static char DAT_800da4a4[]
     __attribute__((section(".sdata"), aligned(4))) = "Heap sizes: ";
-static char NewlineTextData[] asm("DAT_800da4b4")
+static char DAT_800da4b4[]
     __attribute__((section(".sdata"), aligned(4))) = "\n";
+}
+}
 
 int ReturnAddress = 12345;
 int Used[2] __attribute__((section(".sdata"))) = {0};
 SBlockHeader *FirstFreeBlock[2] __attribute__((section(".sdata"))) = {0};
 
 /** Per-heap usage format stored in MEM's target read-only contribution. */
-static const char HeapUsageTextData[] asm("s_Heap__d___ld_bytes__800b28bc")
-    __attribute__((section(".rdata"), aligned(4))) =
-        "Heap %d: %ld bytes, ";
+struct MemHeapUsageFormat {
+    char text[sizeof("Heap %d: %ld bytes, ")];
+};
 
-// === External declarations (C linkage) ===
+namespace MemAddressViewOwners
+{
 extern "C"
 {
-    // Scalar views retain the allocator's original per-field relocations while
-    // typed pointer arithmetic below expresses the interleaved heap layout.
-    extern unsigned int MemBottom; // HeapDefs[0][0], with an 8-byte heap stride
-    extern unsigned int MemTop;    // HeapDefs[0][1], with an 8-byte heap stride
-    extern int MemUsed;             // Used[0], with a 4-byte heap stride
-    extern int MemTopUsed;          // Used[1]
-    // Keep these address-only views opaque so cc1plus does not fold the
-    // owner definitions into literals or choose small-data addressing.
-    extern char HeapSizesText[] asm("DAT_800da4a4");
-    extern char HeapUsageText[] asm("s_Heap__d___ld_bytes__800b28bc");
-    extern char NewlineText[] asm("DAT_800da4b4");
+static const MemHeapUsageFormat s_Heap__d___ld_bytes__800b28bc
+    __attribute__((section(".rdata"), aligned(4))) =
+        {"Heap %d: %ld bytes, "};
 }
+}
+
+// Scalar views retain the allocator's original per-field relocations while
+// typed pointer arithmetic below expresses the interleaved heap layout.
+#define MEM_HEAP_SCALARS_DECLARATION
+#include "MEM.h"
+// Keep these address-only views opaque so cc1plus does not fold the owner
+// definitions into literals or choose small-data addressing.
+extern char DAT_800da4a4[];
+extern char DAT_800da4b4[];
 
 static void Bang(unsigned char r, unsigned char g, unsigned char b);
 
@@ -136,7 +145,7 @@ void Mem_Init(void)
 {
     int i;
 
-    printf(HeapSizesText);
+    printf(DAT_800da4a4);
 
     for (i = 0; i < 2; i++) {
         FirstFreeBlock[i] = 0;
@@ -148,11 +157,11 @@ void Mem_Init(void)
             HeapDefs[i][1] - HeapDefs[i][0] - sizeof(SBlockHeader);
         AddToFreeList(pAllFreeMem, i);
 
-        printf(HeapUsageText,
+        printf(MemAddressViewOwners::s_Heap__d___ld_bytes__800b28bc.text,
                i, HeapDefs[i][1] - HeapDefs[i][0]);
     }
 
-    printf(NewlineText);
+    printf(DAT_800da4b4);
     CriticalBigHeapUsage =
         (98 * (HeapDefs[1][1] - HeapDefs[1][0])) / 100;
 }

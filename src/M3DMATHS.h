@@ -1,3 +1,15 @@
+#if defined(M3DMATHS_DECLARE_VECTOR_SUBTRACT)
+#if !defined(M3DMATHS_VECTOR_SUBTRACT_DECLARATION)
+#error M3DMATHS_DECLARE_VECTOR_SUBTRACT requires a full declaration
+#endif
+/** Subtract two vectors through GCC's lowered aggregate-return ABI. */
+M3DMATHS_VECTOR_SUBTRACT_DECLARATION
+    asm("__mi__FRC7CVectorT0");
+#undef M3DMATHS_VECTOR_SUBTRACT_DECLARATION
+#undef M3DMATHS_DECLARE_VECTOR_SUBTRACT
+#endif
+
+#ifndef M3DMATHS_ABI_ONLY
 #ifndef M3DMATHS_H
 #define M3DMATHS_H
 
@@ -40,3 +52,4 @@ void M3dMaths_RotMatrixYXZ(SVECTOR *angles, MATRIX *matrix);
 void M3dMaths_ScaleMatrix(Item *item, MATRIX *matrix);
 
 #endif // M3DMATHS_TYPED_API && !M3DMATHS_TYPED_API_DECLARATIONS
+#endif // !M3DMATHS_ABI_ONLY

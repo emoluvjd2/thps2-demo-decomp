@@ -2,19 +2,13 @@
 #ifndef FILEIO_INC_H
 #define FILEIO_INC_H
 
-#ifdef FILEIO_OWNER_DECLARATIONS
-#define FILEIO_ASYNC_STATE_DECL_ATTR
-#else
-#define FILEIO_ASYNC_STATE_DECL_ATTR __attribute__((section(".data")))
-#endif
-
+#ifndef FILEIO_OWNER_DECLARATIONS
 /** Current state of the asynchronous file transfer. */
-extern "C" int Loading FILEIO_ASYNC_STATE_DECL_ATTR;
+extern int Loading __attribute__((section(".data")));
 
 /** Prevents file I/O while the queued spooler changes transfer ownership. */
-extern "C" int SpoolerBlocksFileIO FILEIO_ASYNC_STATE_DECL_ATTR;
-
-#undef FILEIO_ASYNC_STATE_DECL_ATTR
+extern int SpoolerBlocksFileIO __attribute__((section(".data")));
+#endif
 
 /** Load a complete file into a newly allocated heap buffer. */
 char *FileIO_OpenLoad(char *pName);

@@ -31,27 +31,19 @@ enum {
     BIT_GLASS_STORAGE_SIZE = 120,
 };
 
-/** Allocate zero-initialized storage through CBit's owning allocator. */
-extern "C" void *Bit_AllocateStorage(unsigned int size)
-    asm("__nw__4CBitUi");
-
 /** Delete every active transient bit effect. */
 void Bit_DeleteAll(void);
 
 /** Construct a glass fragment in caller-provided CBit storage. */
-extern "C" CGlassBit *CGlassBit_Construct(
+namespace BitConstructorABI
+{
+extern "C" CGlassBit *__9CGlassBitRC7CVectorT1iUcUcUciii(
     CGlassBit *glass, const CVector &Pos, const CVector &Vel, int GroundY,
     unsigned char r, unsigned char g, unsigned char b,
-    int dx, int dy, int dz)
-    asm("__9CGlassBitRC7CVectorT1iUcUcUciii");
-
-/** Construct a wobbling glow in caller-provided CBit storage. */
-extern "C" CWobblyGlow *CWobblyGlow_Construct(
-    CWobblyGlow *glow, const CVector &position,
-    int innerRadius, int fringeRadius, int amplitude,
-    unsigned char r0, unsigned char g0, unsigned char b0,
-    unsigned char r1, unsigned char g1, unsigned char b1)
-    asm("__11CWobblyGlowRC7CVectoriiiUcUcUcUcUcUc");
+    int dx, int dy, int dz);
+}
+#define CGlassBit_Construct \
+    BitConstructorABI::__9CGlassBitRC7CVectorT1iUcUcUciii
 
 #ifdef BIT_OWNER_DECLARATIONS
 #define BITSTATE_OWNER_DECLARATIONS
@@ -122,7 +114,7 @@ extern "C" DR_TPAGE StoredTPagePrim;     // 0x800D9AEC
 #include "BITSTATE.h"
 
 // === Variables (absolute in this TU) ===
-extern "C" SAnimFrame *ButtonsAnim __attribute__((section(".data"))); // 0x800D8CA8
+#include "BUTTONSANIM.h"
 #include "CAMERASELECTION.h"
 #include "PDOUBLEBUFFER.h"
 
@@ -133,6 +125,85 @@ extern "C" SAnimFrame *ButtonsAnim __attribute__((section(".data"))); // 0x800D8
 #endif
 
 #endif // BIT_INC_H
+
+#if defined(BIT_DECLARE_VTABLE_ADDRESSES)
+/** One-word GP-relative address views of BIT's compiler-owned vtables. */
+extern int __vt_4CBit;
+extern int __vt_15CNonRenderedBit;
+extern int __vt_7CFT4Bit;
+extern int __vt_16CLinked2EndedBit;
+extern int __vt_6CPixel;
+extern int __vt_10CRibbonBit;
+extern int __vt_8CQuadBit;
+extern int __vt_8CFlatBit;
+extern int __vt_11CMotionBlur;
+extern int __vt_19CMotionBlurImmortal;
+extern int __vt_5CFrag;
+extern int __vt_6CSpark;
+extern int __vt_11CSimpleAnim;
+extern int __vt_11CSmokeTrail;
+extern int __vt_8CGenPoly;
+extern int __vt_9CChunkBit;
+extern int __vt_9CGlassBit;
+extern int __vt_5CGlow;
+extern int __vt_7CRibbon;
+extern int __vt_11CWobblyGlow;
+#undef BIT_DECLARE_VTABLE_ADDRESSES
+#endif
+
+#if defined(BIT_DECLARE_BASE_CONSTRUCTOR)
+struct CBit;
+namespace BitConstructorABI
+{
+/** Construct the common transient-bit base in caller-provided storage. */
+extern "C" CBit *__4CBit(CBit *bit);
+}
+#undef BIT_DECLARE_BASE_CONSTRUCTOR
+#endif
+
+#if defined(BIT_DECLARE_FT4_CONSTRUCTOR)
+struct CFT4Bit;
+namespace BitConstructorABI
+{
+/** Construct the common textured-quad bit base. */
+extern "C" CFT4Bit *__7CFT4Bit(CFT4Bit *bit);
+}
+#undef BIT_DECLARE_FT4_CONSTRUCTOR
+#endif
+
+#if defined(BIT_DECLARE_LINKED_2_ENDED_CONSTRUCTOR)
+struct CLinked2EndedBit;
+namespace BitConstructorABI
+{
+/** Construct a linked two-ended transient bit. */
+extern "C" CLinked2EndedBit *__16CLinked2EndedBit(
+    CLinked2EndedBit *bit);
+}
+#undef BIT_DECLARE_LINKED_2_ENDED_CONSTRUCTOR
+#endif
+
+#if defined(BIT_DECLARE_RIBBON_BIT_CONSTRUCTOR)
+struct CRibbonBit;
+namespace BitConstructorABI
+{
+/** Construct the common ribbon-bit base. */
+extern "C" CRibbonBit *__10CRibbonBit(CRibbonBit *bit);
+}
+#undef BIT_DECLARE_RIBBON_BIT_CONSTRUCTOR
+#endif
+
+#if defined(BIT_DECLARE_MOTION_BLUR_CONSTRUCTOR)
+struct CMotionBlur;
+struct CVector;
+namespace BitMotionBlurConstructorABI
+{
+/** Construct a motion-blur particle in caller-provided storage. */
+extern "C" CMotionBlur *__11CMotionBlurRC7CVectorR7CVectorPciii(
+    CMotionBlur *blur, CVector *position, CVector *velocity,
+    char *animation, int initialScale, int scaleDecay, int tintDecay);
+}
+#undef BIT_DECLARE_MOTION_BLUR_CONSTRUCTOR
+#endif
 
 // BLOOD and DUST are particle managers whose target-proven layouts are needed
 // only by their owners and by MECH's late destructor block.  Keep these slices
@@ -223,6 +294,9 @@ struct CBit {
     unsigned char mProtected;
     unsigned char mType;
     DustBitVtable *_vf;
+
+    /** Allocate zero-initialized storage from the transient-bit heap. */
+    static void *operator new(unsigned int size);
 };
 
 /** Textured four-point particle state embedded in a flat dust particle. */

@@ -61,9 +61,11 @@ int exp_flag = 0;
 int loop_flag = 0;
 int voicefree_flag = 0x00ffffff;
 char reverb_changed = 0;
-int SFX_ReverbDepthSetTimer = 0;
+unsigned int SFX_ReverbDepthSetTimer = 0;
 
 /** Shared scratch scalar used by baddy sound playback. */
+#define SFXV_OWNER_DECLARATION
+#include "SFXV.h"
 int SFX_v = 0;
 
 /**
@@ -89,6 +91,9 @@ static int allocateVoice(void);
 static unsigned int translateLevelSpecificAliasToIndex(unsigned short alias);
 static unsigned int translateGlobalAliasToIndex(unsigned short alias);
 static unsigned int sfxMalloc(unsigned int size);
+int SFX_OpenVABFile(char *filename, void **soundBuffer);
+void SFX_ParseSFXFile(char *name, unsigned int *entries,
+                      unsigned short *aliases, int maxEntries, int mask);
 
 // === Function implementations (address order) ===
 

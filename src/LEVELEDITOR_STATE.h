@@ -8,7 +8,7 @@
 #endif
 
 /** Active theme index used while rebuilding a generated level. */
-extern "C" int GenerateThemeNumber LEVELEDITOR_STATE_DECL_ATTR; // 0x800DBF48
+extern int GenerateThemeNumber LEVELEDITOR_STATE_DECL_ATTR; // 0x800DBF48
 
 #undef LEVELEDITOR_STATE_DECL_ATTR
 

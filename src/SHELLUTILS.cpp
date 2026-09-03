@@ -13,6 +13,9 @@
 
 #include "PAL256.h"
 
+/** Return caller-owned storage for an ordinary placement construction. */
+inline void *operator new(unsigned int, void *storage) { return storage; }
+
 /** Render-buffer fields addressed by shell primitive submission. */
 struct SDoubleBuffer {
     u32 Draw[23];
@@ -61,6 +64,14 @@ struct SlicedImage {
     int is_packed;
     int m_removed_from_memory;
 
+    /** Build a sliced image from caller-owned source pixels. */
+    SlicedImage(char *pImg, int w, int h, int slicew, int sliceh,
+                int bpp, u16 clut);
+    /** Allocate through the original CClass arena. */
+    static void *operator new(unsigned int size) throw()
+    {
+        return ::CClass::operator new(size);
+    }
     /** Release the image's VRAM slices, palette slot, and backing pixels. */
     ~SlicedImage();
     /** Release image storage through the original CClass allocator. */
@@ -186,12 +197,8 @@ typedef char shell_vertical_dialog_size_must_be_820[
 #include "PACK.h"
 
 // These scalar ABI views preserve the target's absolute vtable addressing.
-extern int Shell_EraseSpriteVtable asm("__vt_11EraseSprite");
-extern int Shell_VerticalDialogVtable asm("__vt_14VerticalDialog");
-extern int Shell_SpriteVtable asm("__vt_6Sprite");
-extern int Shell_SlicedImageVtable asm("__vt_11SlicedImage");
-extern int Shell_VerticalMenuVtable asm("__vt_12VerticalMenu");
-extern "C" int Shell_CClassBaseVtable asm("DAT_800da7e0");
+#define SPRITE_DECLARE_SCALAR_VTABLE_ADDRESSES
+#include "SPRITE.h"
 
 #include <STDIO.H>
 #include <STRINGS.H>
@@ -228,58 +235,37 @@ enum ShellPolyF4Offset {
     ShellPolyF4Y3Offset = 22
 };
 
-// === Free function declarations ===
-int Load8BitBMP2(char *pData, char **data, int *ww, int *hh, unsigned short *clut);
-int Load8BitBMP(char *file, char **data, int *ww, int *hh, unsigned short *clut);
-void DrawColoredBox(int x, int y, int w, int h, unsigned char r, unsigned char g, unsigned char b);
-void SetClippingBox(int x, int y, int w, int h);
-void ResetOT(void);
-void DrawIt(RECT *r, int x, int y, int bpp, int clut);
-
 // === Extern "C" forward declarations ===
-extern "C" {
-SlicedImage *Shell_SlicedImageConstructor(
-    SlicedImage *, char *, int, int, int, int, int, u16)
-    asm("__11SlicedImagePciiiiiUs");
-void Shell_SlicedImageUnpack(SlicedImage *)
-    asm("unpack__11SlicedImage");
-Sprite *Shell_SpriteBitmapConstructor(
-    Sprite *, char *, int, int, int) asm("__6SpritePciii");
-Sprite *Shell_SpriteRectConstructor(
-    Sprite *, int, int, int, int, int = 0, int = 0, int = 0)
-    asm("__6Spriteiiiiiii");
-}
-static void Shell_PadBufferDestructor(PadBuffer *, int)
-    asm("_._9PadBuffer");
+#define SPRITE_DECLARE_SLICED_IMAGE_UNPACK_ABI
+#include "SPRITE.h"
+#undef SPRITE_DECLARE_SLICED_IMAGE_UNPACK_ABI
+#define Shell_SlicedImageUnpack \
+    SlicedImageMethodABI::unpack__11SlicedImage
+#define PAD_DECLARE_BUFFER_DESTRUCTOR_ABI
+#include "PAD.h"
+#undef PAD_DECLARE_BUFFER_DESTRUCTOR_ABI
 /** ABI-slot aliases for manual vtables; the natural destructors define them. */
-extern "C" {
-void Shell_SlicedImageDestructorSlot(SlicedImage *, int)
-    asm("_._11SlicedImage");
-void Shell_SpriteDestructorSlot(Sprite *, int)
-    asm("_._6Sprite");
-void Shell_EraseSpriteDestructorSlot(EraseSprite *, int)
-    asm("_._11EraseSprite");
-void Shell_VerticalMenuDestructorSlot(VerticalMenu *, int)
-    asm("_._12VerticalMenu");
-void Shell_VerticalDialogDestructorSlot(VerticalDialog *, int)
-    asm("_._14VerticalDialog");
-void Shell_VerticalMenuDrawVtable(int)
-    asm("draw__12VerticalMenu");
-void Shell_VerticalDialogDrawVtable(int)
-    asm("draw__14VerticalDialog");
-}
-static void Shell_CClassDestructor(CClass *, int)
-    asm("__DOT__6CClass_80060EC4");
+#define SPRITE_DECLARE_SLICED_IMAGE_DESTRUCTOR_ABI
+#define SPRITE_DECLARE_SPRITE_DESTRUCTOR_ABI
+#define SPRITE_DECLARE_ERASE_SPRITE_DESTRUCTOR_ABI
+#define SPRITE_DECLARE_VERTICAL_MENU_DESTRUCTOR_ABI
+#define SPRITE_DECLARE_VERTICAL_DIALOG_DESTRUCTOR_ABI
+#include "SPRITE.h"
+#undef SPRITE_DECLARE_VERTICAL_DIALOG_DESTRUCTOR_ABI
+#undef SPRITE_DECLARE_VERTICAL_MENU_DESTRUCTOR_ABI
+#undef SPRITE_DECLARE_ERASE_SPRITE_DESTRUCTOR_ABI
+#undef SPRITE_DECLARE_SPRITE_DESTRUCTOR_ABI
+#undef SPRITE_DECLARE_SLICED_IMAGE_DESTRUCTOR_ABI
 
 extern "C" {
+static void __DOT__6CClass_80060EC4(CClass *, int);
 
 /** Current and midpoint shell ordering-table entries. */
 int OT_entry __attribute__((section(".sdata"))) = 0x1000;
 static int OT_half __attribute__((section(".sdata"))) = 0;
 
 /** Ordering-table bounds diagnostic retained with its original padding. */
-static char Shell_OTEntryDiagnostic_owner[16]
-    asm("s_OT_entry_is__d_800da768")
+static char s_OT_entry_is__d_800da768[16]
     __attribute__((section(".sdata"))) = "\nOT_entry is %d";
 
 /** Shared PadBuffer input-suppression flag. */
@@ -287,49 +273,55 @@ int PadBuffer::mIgnoreTwo
     __attribute__((section(".sdata"))) = 0;
 
 /** Shell class dispatch tables in their original small-data order. */
-int Shell_VerticalDialogVtable_owner[4] asm("__vt_14VerticalDialog")
+namespace ShellVtableOwners {
+int __vt_14VerticalDialog[4]
     __attribute__((section(".sdata"), aligned(8))) = {
         0, 0,
         (int)&Shell_VerticalDialogDestructorSlot,
-        (int)&Shell_VerticalDialogDrawVtable,
+        (int)(void (*)(VerticalDialog *))&VerticalDialog::draw,
 };
-int Shell_VerticalMenuVtable_owner[4] asm("__vt_12VerticalMenu")
+int __vt_12VerticalMenu[4]
     __attribute__((section(".sdata"))) = {
         0, 0,
         (int)&Shell_VerticalMenuDestructorSlot,
-        (int)&Shell_VerticalMenuDrawVtable,
+        (int)(void (*)(VerticalMenu *))&VerticalMenu::draw,
 };
+}
 static int Shell_PadBufferVtable_owner[4]
     __attribute__((section(".sdata"))) = {
         0, 0,
         (int)&Shell_PadBufferDestructor,
         0,
 };
-int Shell_EraseSpriteVtable_owner[4] asm("__vt_11EraseSprite")
+namespace ShellVtableOwners {
+int __vt_11EraseSprite[4]
     __attribute__((section(".sdata"))) = {
         0, 0,
         (int)&Shell_EraseSpriteDestructorSlot,
         0,
 };
-int Shell_SpriteVtable_owner[4] asm("__vt_6Sprite")
+int __vt_6Sprite[4]
     __attribute__((section(".sdata"))) = {
         0, 0,
         (int)&Shell_SpriteDestructorSlot,
         0,
 };
-int Shell_SlicedImageVtable_owner[4] asm("__vt_11SlicedImage")
+int __vt_11SlicedImage[4]
     __attribute__((section(".sdata"))) = {
         0, 0,
         (int)&Shell_SlicedImageDestructorSlot,
         0,
 };
-static int Shell_CClassVtable_owner[3] asm("DAT_800da7e0")
+static int DAT_800da7e0[3]
     __attribute__((section(".sdata"))) = {
         0, 0,
-        (int)&Shell_CClassDestructor,
+        (int)&__DOT__6CClass_80060EC4,
 };
+}
 
 /** Nonzero while the shell is rendering through its high-resolution path. */
+#define HIRESMODE_OWNER_DECLARATION
+#include "HIRESMODE.h"
 int HiresMode __attribute__((section(".sdata"))) = 0;
 
 }
@@ -606,7 +598,7 @@ void SetClippingBox(int x, int y, int w, int h)
     int highMask = 0xFF000000;
     SDoubleBuffer *db = pDoubleBuffer;
     /** These reads must remain ordered before the ordering-table pointer load. */
-    register int entry asm("$6") = *(volatile int *)&OT_entry;
+    int entry = *(volatile int *)&OT_entry;
     int tag = *(volatile int *)clipAddress;
     register int ot asm("$4") = (int)db->OrderingTable;
     int otPtr = (entry << 2) + ot;
@@ -659,11 +651,12 @@ void ResetOT(void)
  * @param arg_clut  Palette CLUT identifier.
  * @return `this` pointer (GCC 2.x ctor convention).
  */
-SlicedImage *Shell_SlicedImageConstructor(
-    SlicedImage *self, char *pImg, int w, int h, int slicew, int sliceh,
+SlicedImage::SlicedImage(
+    char *pImg, int w, int h, int slicew, int sliceh,
     int arg_bpp, u16 arg_clut)
 {
-    self->CClass.vtable = &Shell_SlicedImageVtable;
+    SlicedImage *self = this;
+    self->CClass.vtable = &__vt_11SlicedImage;
     self->is_packed = 0;
     self->bpp = arg_bpp;
     self->clut = arg_clut;
@@ -744,7 +737,6 @@ SlicedImage *Shell_SlicedImageConstructor(
 
     Mem_Delete(pImg);
     self->m_removed_from_memory = 0;
-    return self;
 }
 
 /**
@@ -758,7 +750,7 @@ SlicedImage *Shell_SlicedImageConstructor(
  */
 SlicedImage::~SlicedImage()
 {
-    CClass.vtable = &Shell_SlicedImageVtable;
+    CClass.vtable = &__vt_11SlicedImage;
     if (is_packed != 0)
     {
         Shell_SlicedImageUnpack(this);
@@ -778,7 +770,7 @@ check_type:
     {
         Mem_Delete(slicedBuffer);
     }
-    CClass.vtable = &Shell_CClassBaseVtable;
+    CClass.vtable = &DAT_800da7e0;
 }
 
 /**
@@ -1026,7 +1018,7 @@ void SlicedImage::draw(int x, int y, int UsePanelOT, int r, int g, int b,
 
     if ((unsigned int)OT_entry >= 0x2000)
     {
-        printf(Shell_OTEntryDiagnostic_owner, OT_entry);
+        printf(s_OT_entry_is__d_800da768, OT_entry);
     }
 
     if (UsePanelOT != 0)
@@ -1317,33 +1309,30 @@ void SlicedImage::removeBlack()
 }
 
 /**
- * Sprite bitmap construction ABI entry
+ * Sprite::Sprite(char *, int, int, int)
  *
  * Address:   0x8005FA98
  * Mangled:   __6SpritePciii
  * Demangled: Sprite::(char *, int, int, int)
  *            Load an 8bpp BMP into a SlicedImage-backed Sprite.
  *
- * @param self  Constructed object.
  * @param file  BMP filename to load.
  * @param pack  Whether to pack the image into VRAM immediately.
  * @param slicew  Slice width, or 0 to keep it unsliced.
  * @param sliceh  Slice height, or 0 to keep it unsliced.
- * @return `this` pointer (GCC 2.x ctor convention).
  */
-Sprite *Shell_SpriteBitmapConstructor(
-    Sprite *self, char *file, int pack, int slicew, int sliceh)
+Sprite::Sprite(char *file, int pack, int slicew, int sliceh)
 {
     char *buf;
     int w;
     int h;
     u16 clut;
 
-    self->CClass.vtable = &Shell_SpriteVtable;
+    CClass.vtable = &__vt_6Sprite;
     Load8BitBMP(file, &buf, &w, &h, &clut);
-    self->m_bpp = 8;
-    self->m_w = w;
-    self->m_h = h;
+    m_bpp = 8;
+    m_w = w;
+    m_h = h;
     if (slicew * 2 >= w)
     {
         slicew = 0;
@@ -1353,32 +1342,25 @@ Sprite *Shell_SpriteBitmapConstructor(
         sliceh = 0;
     }
 
-    SlicedImage *image =
-        (SlicedImage *)::CClass::operator new(sizeof(SlicedImage));
-    if (image != 0)
-    {
-        image = Shell_SlicedImageConstructor(
-            image, buf, w, h, slicew, sliceh, self->m_bpp, clut);
-    }
-    self->m_image = image;
+    SlicedImage *image = new SlicedImage(
+        buf, w, h, slicew, sliceh, m_bpp, clut);
+    m_image = image;
     buf = 0;
-    self->m_packed = pack;
+    m_packed = pack;
     if (pack != 0)
     {
         image->pack();
     }
-    return self;
 }
 
 /**
- * Sprite screen-rectangle construction ABI entry
+ * Sprite::Sprite(int, int, int, int, int, int, int)
  *
  * Address:   0x8005FB8C
  * Mangled:   __6Spriteiiiiiii
  * Demangled: Sprite::(int, int, int, int, int, int, int)
  *            Capture a rectangular screen area into a 16bpp SlicedImage-backed Sprite.
  *
- * @param self  Constructed object.
  * @param x  X coordinate.
  * @param y  Y coordinate.
  * @param w  Width.
@@ -1386,19 +1368,17 @@ Sprite *Shell_SpriteBitmapConstructor(
  * @param pack  Whether to pack the captured image into VRAM immediately.
  * @param slicew  Slice width, or 0 to keep it unsliced.
  * @param sliceh  Slice height, or 0 to keep it unsliced.
- * @return `this` pointer (GCC 2.x ctor convention).
  */
-Sprite *Shell_SpriteRectConstructor(
-    Sprite *self, int x, int y, int w, int h,
-    int pack, int slicew, int sliceh)
+Sprite::Sprite(int x, int y, int w, int h,
+               int pack, int slicew, int sliceh)
 {
     RECT r;
     int bpp = 0x10;
 
-    self->CClass.vtable = &Shell_SpriteVtable;
-    self->m_bpp = bpp;
-    self->m_w = w;
-    self->m_h = h;
+    CClass.vtable = &__vt_6Sprite;
+    m_bpp = bpp;
+    m_w = w;
+    m_h = h;
     r.x = (short)x;
     r.y = (short)y;
     r.w = (short)w;
@@ -1416,21 +1396,15 @@ Sprite *Shell_SpriteRectConstructor(
     StoreImage(&r, buf);
     DrawSync(0);
 
-    SlicedImage *image =
-        (SlicedImage *)::CClass::operator new(sizeof(SlicedImage));
-    if (image != 0)
-    {
-        image = Shell_SlicedImageConstructor(
-            image, (char *)buf, w, h, slicew, sliceh, bpp, 0);
-    }
-    self->m_image = image;
+    SlicedImage *image = new SlicedImage(
+        (char *)buf, w, h, slicew, sliceh, bpp, 0);
+    m_image = image;
     image->removeBlack();
-    self->m_packed = pack;
+    m_packed = pack;
     if (pack != 0)
     {
-        self->m_image->pack();
+        m_image->pack();
     }
-    return self;
 }
 
 /**
@@ -1444,7 +1418,7 @@ Sprite *Shell_SpriteRectConstructor(
  */
 Sprite::~Sprite()
 {
-    CClass.vtable = &Shell_SpriteVtable;
+    CClass.vtable = &__vt_6Sprite;
     SlicedImage *image = m_image;
     if (image != 0)
     {
@@ -1453,7 +1427,7 @@ Sprite::~Sprite()
         VtFunc func = (VtFunc)vtable[2];
         func(image, 3);
     }
-    CClass.vtable = &Shell_CClassBaseVtable;
+    CClass.vtable = &DAT_800da7e0;
 }
 
 /**
@@ -1493,9 +1467,9 @@ void Sprite::draw(int x, int y, int UsePanelOT, int r, int g, int b)
  */
 EraseSprite::~EraseSprite()
 {
-    CClass.vtable = &Shell_EraseSpriteVtable;
+    CClass.vtable = &__vt_11EraseSprite;
     Mem_Delete(mData);
-    CClass.vtable = &Shell_CClassBaseVtable;
+    CClass.vtable = &DAT_800da7e0;
 }
 
 /**
@@ -1521,7 +1495,7 @@ VerticalMenu::VerticalMenu(int top, int bottom, int spacing, char **items,
 {
     int tot_h = 0;
 
-    CClass.vtable = &Shell_VerticalMenuVtable;
+    CClass.vtable = &__vt_12VerticalMenu;
     item_spacing = spacing;
     num_items = num;
     font_scale = Mess_GetFontScale();
@@ -1629,7 +1603,7 @@ VerticalMenu::~VerticalMenu()
 {
     /** GCC 2.x needs the target's existing dispatch registers for these slots. */
     typedef int (*VtFunc)(Sprite *, int);
-    CClass.vtable = &Shell_VerticalMenuVtable;
+    CClass.vtable = &__vt_12VerticalMenu;
     if (mDontDeleteSprites == 0)
     {
         Sprite *sprite = mTri1;
@@ -1681,7 +1655,7 @@ VerticalMenu::~VerticalMenu()
         } while (i < numItems);
     }
 
-    CClass.vtable = &Shell_CClassBaseVtable;
+    CClass.vtable = &DAT_800da7e0;
 }
 
 /**
@@ -1772,8 +1746,7 @@ void VerticalMenu::draw()
         Sprite *tri = (Sprite *)::CClass::operator new(sizeof(Sprite));
         if (tri != 0)
         {
-            tri = Shell_SpriteRectConstructor(
-                tri,
+            tri = ::new (tri) Sprite(
                 list[selected].x -
                     (((list[selected].w >> 1) * font_scale_big) / font_scale) -
                     52,
@@ -1791,8 +1764,7 @@ void VerticalMenu::draw()
         Sprite *tri2 = (Sprite *)::CClass::operator new(sizeof(Sprite));
         if (tri2 != 0)
         {
-            tri2 = Shell_SpriteRectConstructor(
-                tri2,
+            tri2 = ::new (tri2) Sprite(
                 list[selected].x +
                     (((list[selected].w >> 1) * font_scale_big) / font_scale) +
                     8,
@@ -2015,7 +1987,7 @@ down_done:
  */
 VerticalDialog::~VerticalDialog()
 {
-    CClass.vtable = &Shell_VerticalDialogVtable;
+    CClass.vtable = &__vt_14VerticalDialog;
 }
 
 /**
@@ -2069,7 +2041,7 @@ void VerticalDialog::draw()
  */
 static void Shell_PadBufferDestructor(PadBuffer *self, int flag)
 {
-    self->CClass.vtable = &Shell_CClassBaseVtable;
+    self->CClass.vtable = &DAT_800da7e0;
     if (flag & 1)
         ::CClass::operator delete(self);
 }
@@ -2080,9 +2052,9 @@ static void Shell_PadBufferDestructor(PadBuffer *self, int flag)
  * Address: 0x80060EC4
  * Mangled: _._6CClass
  */
-static void Shell_CClassDestructor(CClass *self, int flag)
+static void __DOT__6CClass_80060EC4(CClass *self, int flag)
 {
-    self->vtable = &Shell_CClassBaseVtable;
+    self->vtable = &DAT_800da7e0;
     if (flag & 1)
         ::CClass::operator delete(self);
 }

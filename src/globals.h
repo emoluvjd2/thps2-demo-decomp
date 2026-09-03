@@ -54,6 +54,8 @@ struct CVector  {
     int operator==(const CVector &vector);
     /** Report whether any fixed-point component differs. */
     int operator!=(const CVector &vector);
+    /** Return the component-wise negation of this vector. */
+    CVector operator-() const;
     CVector &operator+=(const CVector &vector);
     CVector &operator-=(const CVector &vector);
     CVector &operator*=(const int &scale);

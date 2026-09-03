@@ -14,11 +14,6 @@
 #include "VIDEO.h"
 #include "STATS.h"
 
-#ifdef __cplusplus
-extern "C"
-{
-#endif
-
     // Primitive types
     typedef unsigned char u8;
     typedef unsigned short u16;
@@ -163,7 +158,6 @@ extern "C"
         short h;
     };
 
-#define STARTUPGAMESTATE_WITHIN_C_LINKAGE
 #include "STARTUPGAMESTATE.h"
 
 struct SFrontBackground {
@@ -175,69 +169,32 @@ struct SFrontBackground {
     int Altitude;
 };
 
-#ifdef __cplusplus
-}
-#endif
-
 // === Variables (gp-relative in this TU) ===
 #define FRONTFLOWSTATE_OWNER_DECLARATION
 #define FRONTFLOWSTATE_DECLARE_BACKOUT
 #include "FRONTFLOWSTATE.h"
-extern "C" SAnimFrame *ButtonsAnim;        // 0x800D8CA8
-extern "C" int Cheat_AllTapes;             // 0x800D8F40
 #define DEMOTIMER_OWNER_DECLARATION
 #include "DEMOTIMER.h"
-extern "C" int Front_OnTime;               // 0x800D8F74
-extern "C" int GCompoSounded;              // 0x800D8F4C
-extern "C" int GHighScoreInitialCursorPos; // 0x800D8C14
-extern "C" int GHighScoreLineIndex;        // 0x800D8C10
-extern "C" int GHorseContinue;             // 0x800D8BF8
-extern "C" int GHorseScale;                // 0x800D8F48
-extern "C" int GHorseSounded;              // 0x800D8F44
 #define FRONTFLOWSTATE_OWNER_DECLARATION
 #define FRONTFLOWSTATE_DECLARE_ROLL_CREDITS
 #include "FRONTFLOWSTATE.h"
-#define SOFTRESETSTATE_OWNER_DECLARATION
-#include "SOFTRESETSTATE.h"
-extern "C" int GStart1;                    // 0x800D8F7C
-extern "C" int GStart2;                    // 0x800D8F80
-extern "C" unsigned int JudgeTimer;        // 0x800D8F84
-extern "C" unsigned int LadderTimer;       // 0x800D8F88
-extern "C" int NextHorseLetters[2];        // 0x800D8F60
-extern "C" int NextHorseMode;              // 0x800D8F50
-extern "C" int NextHorsePlayer;            // 0x800D8F54
-extern "C" int NextHorseRestart;           // 0x800D8F5C
-extern "C" int NextHorseScore;             // 0x800D8F58
 #define SOUNDLEVELS_OWNER_DECLARATIONS
 #define SOUNDLEVELS_DECLARE_SFXLEVEL
 #include "SOUNDLEVELS.h"
-#define STARTSCREEN_OWNER_DECLARATION
-#include "STARTSCREEN.h"
-extern "C" int StatsMode;                  // 0x800D8F78
 #define FRONTSTATUS_OWNER_DECLARATION
 #include "FRONTSTATUS.h"
-extern "C" unsigned int WinLoseTimer;      // 0x800D8F8C
 #define SOUNDLEVELS_DECLARE_XALEVEL
 #include "SOUNDLEVELS.h"
 #undef SOUNDLEVELS_OWNER_DECLARATIONS
-extern "C" CMenu *pEHMenu;                  // 0x800D8CC4
-extern "C" CMenu *pERMMenu;                 // 0x800D8CC8
-extern "C" CMenu *pESMenu;                  // 0x800D8CB4
-extern "C" const unsigned int *pSizeData;  // 0x800D8C90
-extern "C" CMenu *pSoundMenu;               // 0x800D8CCC
-extern "C" CMenu *pVS2Menu;                 // 0x800D8CBC
-extern "C" CMenu *pVS3Menu;                 // 0x800D8CC0
-extern "C" CMenu *pVSMenu;                  // 0x800D8CB8
 #define YESNOMENU_OWNER_DECLARATION
 #include "YESNOMENU.h"
 
 // === Variables (absolute in this TU) ===
-extern "C" int Cheat_GameInfo __attribute__((section(".data")));    // 0x800D9650
-extern "C" int Cheat_RestartSkip __attribute__((section(".data"))); // 0x800D964C
+#define FRONTCHEATS_ABSOLUTE_DECLARATION
+#include "FRONTCHEATS.h"
 #include "CURRENTGAMELEVEL.h"
 // MAIN owns the shared GBailsList pointer.
 #include "GLEVEL.h"
-extern "C" GamePreferences GPreferences;                            // 0x800B4F80
 #define VIDEOINFO_DECLARE_GVINFO1
 #define VIDEOINFO_DECLARE_GVINFO2
 #include "VIDEOINFO.h"
@@ -245,7 +202,7 @@ extern "C" GamePreferences GPreferences;                            // 0x800B4F8
 #include "OTENTRY.h"
 // CREDITS owns the TU-local SKATER_Y_POS word.
 #include "PDOUBLEBUFFER.h"
-extern "C" Sprite *pPausedSprite __attribute__((section(".data"))); // 0x800D98AC
+#include "PAUSEDSPRITE.h"
 
 
 #include "globals.h"
@@ -456,11 +413,13 @@ struct FrontCMenuVTable
     void (*destroyClass)(CClass *self, int flags);
 };
 
-extern "C" void Front_CMenuDestructorAbi(CMenu *, int) asm("_._5CMenu");
-static void Front_CClassDestructorAbi(CClass *, int)
-    asm("__DOT__6CClass_8002D678");
-extern "C" FrontCMenuVTable Front_CMenuVTable asm("__vt_5CMenu");
-extern "C" int Front_CMenuVTableAddress asm("__vt_5CMenu");
+void Front_CMenuDestructorAbi(CMenu *, int) asm("_._5CMenu");
+extern "C" {
+static void __DOT__6CClass_8002D678(CClass *, int);
+}
+#define FRONT_CMENU_VTABLE_ABI_TYPE FrontCMenuVTable
+#define FRONT_DECLARE_CMENU_VTABLE_ADDRESS_VIEWS
+#include "FRONT.h"
 
 typedef char Front_CMenu_vtable_size_must_be_28[
     (sizeof(FrontCMenuVTable) == 28) ? 1 : -1];
@@ -468,17 +427,15 @@ typedef char Front_CMenu_vtable_size_must_be_28[
 /** Invoke the deleting-destructor slot shared by front-end menu objects. */
 static inline void Front_DestroyMenu(CMenu *menu)
 {
-    FrontCMenuVTable *vtable =
-        reinterpret_cast<FrontCMenuVTable *>(menu->CClass.vtable);
-    vtable->destroyMenu(menu, 3);
+    reinterpret_cast<FrontCMenuVTable *>(menu->CClass.vtable)
+        ->destroyMenu(menu, 3);
 }
 
 /** Invoke the same deleting-destructor prefix on a collected tape. */
 static inline void Front_DestroyTape(CTape *tape)
 {
-    FrontCMenuVTable *vtable =
-        reinterpret_cast<FrontCMenuVTable *>(tape->mVTable);
-    vtable->destroyMenu(reinterpret_cast<CMenu *>(tape), 3);
+    reinterpret_cast<FrontCMenuVTable *>(tape->mVTable)
+        ->destroyMenu(reinterpret_cast<CMenu *>(tape), 3);
 }
 
 struct Sprite2;
@@ -572,9 +529,6 @@ static inline void Front_DisplayPolymorphic(
     view->vtable->Display(object, x, y);
 }
 
-extern "C" Sprite *Front_ConstructSprite(
-    Sprite *sprite, char *file, int pack, int sliceWidth,
-    int sliceHeight) asm("__6SpritePciii");
 /** Display-buffer slice needed to append front-end cursor primitives. */
 struct SDoubleBuffer {
     RECT DrawClip;
@@ -594,30 +548,26 @@ typedef char Front_SFrontBackground_size_must_be_36[
  * this contribution at 0x800D8BF8-0x800D8F18; keeping the declarations in
  * address order also preserves the string targets used by FrontBackgrounds.
  */
-extern "C"
-{
-    int GHorseContinue __attribute__((section(".sdata"))) = 0;
-    int MIDILEVEL __attribute__((section(".sdata"))) = 0x4000;
-    int SFXLEVEL __attribute__((section(".sdata"))) = 0x4000;
-    int XALEVEL __attribute__((section(".sdata"))) = 0x7f;
-    #define FRONTTIMERS_TITLE_TIMEOUT_OWNER_DECLARATION
-    #define FRONTTIMERS_WITHIN_C_LINKAGE
-    #include "FRONTTIMERS.h"
-    int TitleTimeout __attribute__((section(".sdata"))) = 0x14;
-    int GRollCredits __attribute__((section(".sdata"))) = 0;
-    int GHighScoreLineIndex __attribute__((section(".sdata"))) = -1;
-    int GHighScoreInitialCursorPos __attribute__((section(".sdata"))) = 0;
-    int GSoftResetEnabled __attribute__((section(".sdata"))) = 1;
-    EPausedStatus Status __attribute__((section(".sdata"))) = STATUS_NORMAL;
-    static int DemoFlashTimer __attribute__((section(".sdata"))) = 0x30;
-    static char DemoString[]
-        __attribute__((section(".sdata"), aligned(4))) = "demo mode";
-    static char HorseLabel1[]
-        __attribute__((section(".sdata"), aligned(4))) = "PLAYER 1";
-    static char HorseLabel2[]
-        __attribute__((section(".sdata"), aligned(4))) = "PLAYER 2";
-    int CurrentFrontBackground __attribute__((section(".sdata"))) = 0;
-}
+int GHorseContinue __attribute__((section(".sdata"))) = 0;
+int MIDILEVEL __attribute__((section(".sdata"))) = 0x4000;
+int SFXLEVEL __attribute__((section(".sdata"))) = 0x4000;
+int XALEVEL __attribute__((section(".sdata"))) = 0x7f;
+#define FRONTTIMERS_TITLE_TIMEOUT_OWNER_DECLARATION
+#include "FRONTTIMERS.h"
+int TitleTimeout __attribute__((section(".sdata"))) = 0x14;
+int GRollCredits __attribute__((section(".sdata"))) = 0;
+int GHighScoreLineIndex __attribute__((section(".sdata"))) = -1;
+int GHighScoreInitialCursorPos __attribute__((section(".sdata"))) = 0;
+int GSoftResetEnabled __attribute__((section(".sdata"))) = 1;
+EPausedStatus Status __attribute__((section(".sdata"))) = STATUS_NORMAL;
+static int DemoFlashTimer __attribute__((section(".sdata"))) = 0x30;
+static char DemoString[]
+    __attribute__((section(".sdata"), aligned(4))) = "demo mode";
+static char HorseLabel1[]
+    __attribute__((section(".sdata"), aligned(4))) = "PLAYER 1";
+static char HorseLabel2[]
+    __attribute__((section(".sdata"), aligned(4))) = "PLAYER 2";
+int CurrentFrontBackground __attribute__((section(".sdata"))) = 0;
 
 static char FrontRoofLib[] __attribute__((section(".sdata"), aligned(4))) =
     "roof_lib";
@@ -634,43 +584,43 @@ static char FrontSewerSizes[] __attribute__((section(".sdata"), aligned(4))) =
 static char FrontNoBackground[] __attribute__((section(".sdata"), aligned(4))) =
     "";
 
-extern "C"
-{
-    const unsigned int *pSizeData __attribute__((section(".sdata"))) = 0;
-    int GamePaused __attribute__((section(".sdata"))) = 0;
-}
+const unsigned int *pSizeData __attribute__((section(".sdata"))) = 0;
+int GamePaused __attribute__((section(".sdata"))) = 0;
 
 static int WobbleAmplitude __attribute__((section(".sdata"))) = 0;
 static int WobbleT __attribute__((section(".sdata"))) = 0;
 static int UpDownAutoRepeatTimer __attribute__((section(".sdata"))) = 0;
 
-extern "C"
-{
-    #define FRONTTIMERS_LEFT_RIGHT_TIMER_OWNER_DECLARATION
-    #define FRONTTIMERS_WITHIN_C_LINKAGE
-    #include "FRONTTIMERS.h"
-    int LeftRightAutoRepeatTimer __attribute__((section(".sdata"))) = 0;
-    SAnimFrame *ButtonsAnim __attribute__((section(".sdata"))) = 0;
-    int VoiceLevelGotFocus __attribute__((section(".sdata"))) = 0;
+#define FRONTTIMERS_LEFT_RIGHT_TIMER_OWNER_DECLARATION
+#include "FRONTTIMERS.h"
+int LeftRightAutoRepeatTimer __attribute__((section(".sdata"))) = 0;
+SAnimFrame *ButtonsAnim __attribute__((section(".sdata"))) = 0;
+int VoiceLevelGotFocus __attribute__((section(".sdata"))) = 0;
 
-    CMenu *pYesNoMenu __attribute__((section(".sdata"))) = 0;
-    CMenu *pESMenu __attribute__((section(".sdata"))) = 0;
-    CMenu *pVSMenu __attribute__((section(".sdata"))) = 0;
-    CMenu *pVS2Menu __attribute__((section(".sdata"))) = 0;
-    CMenu *pVS3Menu __attribute__((section(".sdata"))) = 0;
-    CMenu *pEHMenu __attribute__((section(".sdata"))) = 0;
-    CMenu *pERMMenu __attribute__((section(".sdata"))) = 0;
-    CMenu *pSoundMenu __attribute__((section(".sdata"))) = 0;
-}
+CMenu *pYesNoMenu __attribute__((section(".sdata"))) = 0;
+CMenu *pESMenu __attribute__((section(".sdata"))) = 0;
+CMenu *pVSMenu __attribute__((section(".sdata"))) = 0;
+CMenu *pVS2Menu __attribute__((section(".sdata"))) = 0;
+CMenu *pVS3Menu __attribute__((section(".sdata"))) = 0;
+CMenu *pEHMenu __attribute__((section(".sdata"))) = 0;
+CMenu *pERMMenu __attribute__((section(".sdata"))) = 0;
+CMenu *pSoundMenu __attribute__((section(".sdata"))) = 0;
 
 /*
- * Owner aliases let FRONT's functions retain the original incomplete-array
- * addressing view while the object exports the canonical data symbols.
+ * Target-named owners export the canonical data symbols.  Objects larger
+ * than FRONT's -G8 threshold are addressed directly; smaller objects retain
+ * incomplete-array views where their target code uses absolute addresses.
  */
-static RECT Front_DbSkyColorBak[] asm("Db_SkyColorBak")
+namespace FrontAddressViewOwners
+{
+extern "C"
+{
+static RECT Db_SkyColorBak[]
     __attribute__((section(".sdata"))) = {
         {0, 0, 512, 511},
     };
+}
+}
 
 static int GaugeOn __attribute__((section(".sdata"))) = 0;
 static unsigned int TotalProgress __attribute__((section(".sdata"))) = 0;
@@ -688,18 +638,21 @@ extern "C"
     static CMenu *pPausedMenu __attribute__((section(".sdata"))) = 0;
     static CMenu *pRestartsMenu __attribute__((section(".sdata"))) = 0;
 
-    static char Front_GrafLabel1Owner[] asm("GrafLabel1")
+    namespace FrontAddressViewOwners
+    {
+    static char GrafLabel1[]
         __attribute__((section(".sdata"), aligned(4))) = "TAGS";
-    static char Front_GrafLabel2Owner[] asm("GrafLabel2")
+    static char GrafLabel2[]
         __attribute__((section(".sdata"), aligned(4))) = "STEALS";
-    static char Front_GrafLabel3Owner[] asm("GrafLabel3")
+    static char GrafLabel3[]
         __attribute__((section(".sdata"), aligned(4))) = "HIGH";
-    static char Front_GrafLabel4Owner[] asm("GrafLabel4")
+    static char GrafLabel4[]
         __attribute__((section(".sdata"), aligned(4))) = "WINS";
-    static char Front_GrafLabel5Owner[] asm("GrafLabel5")
+    static char GrafLabel5[]
         __attribute__((section(".sdata"), aligned(4))) = "LOSSES";
-    static char Front_GrafLabel6Owner[] asm("GrafLabel6")
+    static char GrafLabel6[]
         __attribute__((section(".sdata"), aligned(4))) = "STREAK";
+    }
 
     /**
      * FRONT's compiler-coalesced display-string pool.
@@ -736,8 +689,11 @@ extern "C"
         char GameStateFormat[12];
     };
 
-    static char Front_GrafScore[4] asm("GrafFmt")
+    namespace FrontAddressViewOwners
+    {
+    static char GrafFmt[4]
         __attribute__((section(".sdata"), aligned(4))) = "%d";
+    }
     static char Front_GrafPlayer1Match[16]
         __attribute__((section(".sdata"), aligned(4))) = "PLAYER 1 MATCH";
     static char Front_GrafPlayer2Match[16]
@@ -787,8 +743,11 @@ extern "C"
     static char Front_GrafGameStateFormat[12]
         __attribute__((section(".sdata"), aligned(4))) = "gs = %d\n";
 
-    static char Front_RestartCompFrigOwner[] asm("_restart_comp_string")
+    namespace FrontAddressViewOwners
+    {
+    static char _restart_comp_string[]
         __attribute__((section(".sdata"), aligned(4))) = "RE_START_FRIG";
+    }
 }
 
 static int StartSelectPressed asm("StartSelectPressed.98")
@@ -801,28 +760,31 @@ static char FrontEditorPrefix[]
 
 extern "C"
 {
-    static char Front_s2demo2[] asm("s_s2demo2_bmp_800d8e78")
+    namespace FrontAddressViewOwners
+    {
+    static char s_s2demo2_bmp_800d8e78[]
         __attribute__((section(".sdata"), aligned(4))) = "s2demo2.bmp";
-    static char Front_skate2Vab[] asm("s_skate2_vab_800d8e84")
+    static char s_skate2_vab_800d8e84[]
         __attribute__((section(".sdata"), aligned(4))) = "skate2.vab";
-    static char Front_scorePanel[] asm("s_scorep_bmp_800d8e90")
+    static char s_scorep_bmp_800d8e90[]
         __attribute__((section(".sdata"), aligned(4))) = "scorep.bmp";
-    static char Front_specialPanel[] asm("s_special_bmp_800d8e9c")
+    static char s_special_bmp_800d8e9c[]
         __attribute__((section(".sdata"), aligned(4))) = "special.bmp";
-    static char Front_specialBar[] asm("s_spec_bar_bmp_800d8ea8")
+    static char s_spec_bar_bmp_800d8ea8[]
         __attribute__((section(".sdata"), aligned(4))) = "spec_bar.bmp";
-    static char Front_pausedPanel[] asm("s_paused_bmp_800d8eb8")
+    static char s_paused_bmp_800d8eb8[]
         __attribute__((section(".sdata"), aligned(4))) = "paused.bmp";
-    static char Front_bitsRegion[] asm("DAT_800d8ec4")
+    static char DAT_800d8ec4[]
         __attribute__((section(".sdata"), aligned(4))) = "bits";
-    static char Front_itemsRegion[] asm("s_items_800d8ecc")
+    static char s_items_800d8ecc[]
         __attribute__((section(".sdata"), aligned(4))) = "items";
-    static char Front_medalsRegion[] asm("s_SkMedals_800d8ed4")
+    static char s_SkMedals_800d8ed4[]
         __attribute__((section(".sdata"), aligned(4))) = "SkMedals";
-    static char Front_skaterAnimation[] asm("s_sk2anim_800d8ee0")
+    static char s_sk2anim_800d8ee0[]
         __attribute__((section(".sdata"), aligned(4))) = "sk2anim";
-    static char Front_editorLevelFormat[] asm("s_SkEd_d_800d8ee8")
+    static char s_SkEd_d_800d8ee8[]
         __attribute__((section(".sdata"), aligned(4))) = "SkEd%d";
+    }
     /*
      * The derived DAT_* aliases currently point at unrelated target addresses,
      * so retain their proven bytes under owner-local names without publishing
@@ -832,16 +794,25 @@ extern "C"
     {
         char Text[4];
     };
-    static FrontEditorLevelSuffixBytes FrontEditorLevelSuffix
-        asm("DAT_800d8ef0") __attribute__((section(".sdata"))) = {{'a', 'c', 'k', '\0'}};
-    static char Front_promptPanel[] asm("s_s2prmpt1_bmp_800d8ef4")
+    namespace FrontAddressViewOwners
+    {
+    static FrontEditorLevelSuffixBytes DAT_800d8ef0
+        __attribute__((section(".sdata"))) = {{'a', 'c', 'k', '\0'}};
+    }
+    namespace FrontAddressViewOwners
+    {
+    static char s_s2prmpt1_bmp_800d8ef4[]
         __attribute__((section(".sdata"), aligned(4))) = "s2prmpt1.bmp";
-    static char Front_continuePrompt[] asm("s_to_continue_800d8f04")
+    static char s_to_continue_800d8f04[]
         __attribute__((section(".sdata"), aligned(4))) = "to continue";
-    static int FrontPromptClipTopLeft asm("DAT_800d8f10")
+    }
+    namespace FrontAddressViewOwners
+    {
+    static int DAT_800d8f10
         __attribute__((section(".sdata"))) = 0x00cb00a3;
-    static int FrontPromptClipBottomRight asm("DAT_800d8f14")
+    static int DAT_800d8f14
         __attribute__((section(".sdata"))) = 0x002300ba;
+    }
 }
 
 /*
@@ -850,40 +821,40 @@ extern "C"
  * 0x800D8F18-0x800D8F90.  Keeping the vtable and globals together preserves
  * their original owner, offsets, and export surface.
  */
-extern "C"
+namespace FrontCMenuVTableOwner
 {
-    FrontCMenuVTable Front_CMenuVTable asm("__vt_5CMenu")
-        __attribute__((section(".sdata"))) = {
-            0,
-            0,
-            Front_CMenuDestructorAbi,
-            0,
-            0,
-            0,
-            Front_CClassDestructorAbi,
-        };
-    int BackOut = 0;
-    int StartScreen = 0;
-    int DemoTimer = 0;
-    int Cheat_AllTapes = 0;
-    int GHorseSounded = 0;
-    int GHorseScale = 0;
-    int GCompoSounded = 0;
-    int NextHorseMode = 0;
-    int NextHorsePlayer = 0;
-    int NextHorseScore = 0;
-    int NextHorseRestart = 0;
-    int NextHorseLetters[2] = {0, 0};
-    SONG_POS Paused_SongPos
-        __attribute__((section(".sdata"))) = {0, 0, 0};
-    int Front_OnTime = 0;
-    int StatsMode = 0;
-    int GStart1 = 0;
-    int GStart2 = 0;
-    unsigned int JudgeTimer = 0;
-    unsigned int LadderTimer = 0;
-    unsigned int WinLoseTimer = 0;
+FrontCMenuVTable __vt_5CMenu
+    __attribute__((section(".sdata"))) = {
+        0,
+        0,
+        Front_CMenuDestructorAbi,
+        0,
+        0,
+        0,
+        __DOT__6CClass_8002D678,
+    };
 }
+int BackOut = 0;
+int StartScreen = 0;
+int DemoTimer = 0;
+int Cheat_AllTapes = 0;
+int GHorseSounded = 0;
+int GHorseScale = 0;
+int GCompoSounded = 0;
+int NextHorseMode = 0;
+int NextHorsePlayer = 0;
+int NextHorseScore = 0;
+int NextHorseRestart = 0;
+int NextHorseLetters[2] = {0, 0};
+SONG_POS Paused_SongPos
+    __attribute__((section(".sdata"))) = {0, 0, 0};
+int Front_OnTime = 0;
+int StatsMode = 0;
+int GStart1 = 0;
+int GStart2 = 0;
+unsigned int JudgeTimer = 0;
+unsigned int LadderTimer = 0;
+unsigned int WinLoseTimer = 0;
 
 typedef char Front_GrafFmt_size_must_be_292[
     (sizeof(FrontDisplayStringPool) == 292) ? 1 : -1];
@@ -912,70 +883,111 @@ struct FrontReadOnlyLiteralPool
 typedef char Front_ReadOnlyLiteralPool_size_must_be_312[
     (sizeof(FrontReadOnlyLiteralPool) == 312) ? 1 : -1];
 
-/** FRONT's compiler-coalesced state-and-literal read-only prefix. */
-struct FrontReadOnlyPrefix
+/** Exact-sized owner wrapper for the public default save-game symbol. */
+struct FrontDefaultGameStateOwner
 {
-    SSaveGame DefaultState;
-    FrontReadOnlyLiteralPool Literals;
+    SSaveGame State;
 };
 
-typedef char Front_ReadOnlyPrefix_size_must_be_448[
-    (sizeof(FrontReadOnlyPrefix) == 448) ? 1 : -1];
+typedef char Front_DefaultGameStateOwner_size_must_be_136[
+    (sizeof(FrontDefaultGameStateOwner) == 136) ? 1 : -1];
+
+typedef char Front_ReadOnlyContribution_size_must_be_448[
+    (sizeof(FrontDefaultGameStateOwner) +
+     sizeof(FrontReadOnlyLiteralPool) == 448) ? 1 : -1];
 
 /**
  * Default state followed by FRONT's original source-literal contribution.
  *
- * The assembly name preserves the public `DefaultGameState` symbol at offset
- * zero while the owner overlay keeps the following unnamed bytes ordered.
+ * C linkage preserves the public `DefaultGameState` symbol at offset zero.
+ * Its type and size come directly from MAIN.SYM; the source-literal pool is
+ * the immediately following owner-local contribution.
  */
-extern "C" FrontReadOnlyPrefix Front_ReadOnlyPrefixOwner
-    asm("DefaultGameState") __attribute__((section(".rdata"))) = {
+namespace FrontReadOnlyPrefixOwner
+{
+extern "C"
+{
+FrontDefaultGameStateOwner DefaultGameState
+    __attribute__((section(".rdata"))) = {
+  {
+    0,
     {
+        "skul_t",
+        "Re_Start_School",
         0,
-        {
-            "skul_t",
-            "Re_Start_School",
-            0,
-            0,
-            0,
-            1,
-            0,
-            {0, 0, 0, 0, 0, 0, 0, 0},
-            100,
-            3,
-            5,
-        },
-        {
-            1,
-            0x2000,
-            0x30,
-            0xb4,
-            1,
-            4,
-            8,
-            2,
-            1,
-            4,
-            8,
-            2,
-        },
+        0,
+        0,
+        1,
+        0,
+        {0, 0, 0, 0, 0, 0, 0, 0},
+        100,
+        3,
+        5,
     },
     {
-        "PLAYER 1 SET SCORE",
-        "PLAYER 2 SET SCORE",
-        "You didn't make the cut...",
-        "Try again to earn a passcode",
-        "for the {Big Score Competition!}",
-        "Congrats! Enter your score and passcode",
-        "online at {activision.com}. You could win",
-        "huge prizes in the {Big Score Competition!}",
-        "NO SCORE   SWITCH",
-        "Loading some sprites\n",
+        1,
+        0x2000,
+        0x30,
+        0xb4,
+        1,
+        4,
+        8,
+        2,
+        1,
+        4,
+        8,
+        2,
     },
+  },
 };
+}
+
+static FrontReadOnlyLiteralPool DefaultGameStateLiterals
+    __attribute__((section(".rdata"))) = {
+    "PLAYER 1 SET SCORE",
+    "PLAYER 2 SET SCORE",
+    "You didn't make the cut...",
+    "Try again to earn a passcode",
+    "for the {Big Score Competition!}",
+    "Congrats! Enter your score and passcode",
+    "online at {activision.com}. You could win",
+    "huge prizes in the {Big Score Competition!}",
+    "NO SCORE   SWITCH",
+    "Loading some sprites\n",
+};
+}
+
+/** Address one FRONT literal through the public state symbol and full addend. */
+static inline char *Front_Player1SetScoreText()
+{
+    return reinterpret_cast<char *>(
+        &FrontReadOnlyPrefixOwner::DefaultGameState) + 136;
+}
+
+/** Address one FRONT literal through the public state symbol and full addend. */
+static inline char *Front_Player2SetScoreText()
+{
+    return reinterpret_cast<char *>(
+        &FrontReadOnlyPrefixOwner::DefaultGameState) + 156;
+}
+
+/** Address one FRONT literal through the public state symbol and full addend. */
+static inline char *Front_NoScoreSwitchText()
+{
+    return reinterpret_cast<char *>(
+        &FrontReadOnlyPrefixOwner::DefaultGameState) + 400;
+}
+
+/** Address one FRONT literal through the public state symbol and full addend. */
+static inline char *Front_LoadingSpritesText()
+{
+    return reinterpret_cast<char *>(
+        &FrontReadOnlyPrefixOwner::DefaultGameState) + 420;
+}
 
 /** Typed state view of the read-only prefix's public leading symbol. */
-extern "C" SSaveGame DefaultGameState;
+#define FRONT_DECLARE_DEFAULT_GAME_STATE_VIEW
+#include "FRONT.h"
 
 /*
  * FRONT's complete 0x340-byte mutable-data contribution.  Every object below
@@ -983,46 +995,46 @@ extern "C" SSaveGame DefaultGameState;
  * is needed because the natural alignments reproduce the two-byte DemoName
  * tail pad.
  */
-extern "C"
-{
-    CTape *GTape[5] __attribute__((section(".data"))) = {};
-    unsigned char Front_HorseFallingTextStorage[sizeof(FallingTextEffect)]
-        asm("GHorseFallingText") __attribute__((section(".data"))) = {};
-    SFrontBackground FrontBackgrounds[3]
-        __attribute__((section(".data"))) = {
-            {
-                FrontRoofLib,
-                FrontRoofEnv,
-                FrontRoofSizes,
-                {0x1cce, -0x49d, 0x14d4, 0},
-                0x6d0,
-                0x300,
-            },
-            {
-                FrontSewerLib,
-                FrontSewerEnv,
-                FrontSewerSizes,
-                {-0x2c10, 0x2ab2, 0x150fd, 0},
-                0xdd0,
-                0x900,
-            },
-            {
-                FrontNoBackground,
-                FrontNoBackground,
-                FrontNoBackground,
-                {0, 0, 0, 0},
-                0,
-                0,
-            },
-        };
-    SSaveGame LastGameState __attribute__((section(".data"))) = {};
-    SSaveGame StartupGameState __attribute__((section(".data"))) = {};
-    char DemoName[30] __attribute__((section(".data"))) = {};
-    int StatsLeft[8] __attribute__((section(".data"))) = {};
-    int StatsRight[8] __attribute__((section(".data"))) = {};
-    char soundBuf[24] __attribute__((section(".data"))) = {};
-    char musicBuf[24] __attribute__((section(".data"))) = {};
-}
+#include "GTAPE.h"
+CTape *GTape[5] __attribute__((section(".data"))) = {};
+unsigned char GHorseFallingText[sizeof(FallingTextEffect)]
+    __attribute__((section(".data"))) = {};
+SFrontBackground FrontBackgrounds[3]
+    __attribute__((section(".data"))) = {
+        {
+            FrontRoofLib,
+            FrontRoofEnv,
+            FrontRoofSizes,
+            {0x1cce, -0x49d, 0x14d4, 0},
+            0x6d0,
+            0x300,
+        },
+        {
+            FrontSewerLib,
+            FrontSewerEnv,
+            FrontSewerSizes,
+            {-0x2c10, 0x2ab2, 0x150fd, 0},
+            0xdd0,
+            0x900,
+        },
+        {
+            FrontNoBackground,
+            FrontNoBackground,
+            FrontNoBackground,
+            {0, 0, 0, 0},
+            0,
+            0,
+        },
+    };
+SSaveGame LastGameState __attribute__((section(".data"))) = {};
+SSaveGame StartupGameState __attribute__((section(".data"))) = {};
+#define DEMONAME_OWNER_DECLARATION
+#include "DEMONAME.h"
+char DemoName[30] __attribute__((section(".data"))) = {};
+int StatsLeft[8] __attribute__((section(".data"))) = {};
+int StatsRight[8] __attribute__((section(".data"))) = {};
+char soundBuf[24] __attribute__((section(".data"))) = {};
+char musicBuf[24] __attribute__((section(".data"))) = {};
 
 /**
  * Recover the target-proven class identity from FRONT's inert global storage.
@@ -1034,11 +1046,12 @@ extern "C"
 static inline FallingTextEffect &Front_HorseFallingText()
 {
     return *reinterpret_cast<FallingTextEffect *>(
-        Front_HorseFallingTextStorage);
+        GHorseFallingText);
 }
 
 // === Free function declarations ===
 void LoadingScreen_Main(void);
+unsigned int Front_CalculateGameChecksum(SSaveGame &game);
 void Horse_Reset(void);
 void Horse_DisplayWords(int *pNumLetters);
 static void InitStatsSwisch(void);
@@ -1067,13 +1080,13 @@ static int musicVol;
 
 // === External globals (absolute) — additional ===
 // 0x800B73B8 is GameText+0x1C0, not a standalone CommonMenuStr object.
-extern "C" char GrafLabel1[];                                // 0x800D8D08 — graffiti stat label 1
-extern "C" char GrafLabel2[];                                // 0x800D8D10 — graffiti stat label 2
-extern "C" char GrafLabel3[];                                // 0x800D8D18 — graffiti stat label 3
-extern "C" char GrafLabel4[];                                // 0x800D8D20 — graffiti stat label 4
-extern "C" char GrafLabel5[];                                // 0x800D8D28 — graffiti stat label 5
-extern "C" char GrafLabel6[];                                // 0x800D8D30 — graffiti stat label 6
-extern "C" char GrafFmt[];                                  // 0x800D8D38 — graffiti stat format pool
+extern char GrafLabel1[];                                // 0x800D8D08 — graffiti stat label 1
+extern char GrafLabel2[];                                // 0x800D8D10 — graffiti stat label 2
+extern char GrafLabel3[];                                // 0x800D8D18 — graffiti stat label 3
+extern char GrafLabel4[];                                // 0x800D8D20 — graffiti stat label 4
+extern char GrafLabel5[];                                // 0x800D8D28 — graffiti stat label 5
+extern char GrafLabel6[];                                // 0x800D8D30 — graffiti stat label 6
+extern char GrafFmt[];                                  // 0x800D8D38 — graffiti stat format pool
 struct FrontSinCos
 {
     short Sin;
@@ -1082,7 +1095,7 @@ struct FrontSinCos
 #define RCOSSIN_DECL_TYPE FrontSinCos
 #define RCOSSIN_SCALAR_VIEW
 #include "RCOSSIN.h"
-extern "C" RECT Db_SkyColorBak[];                            // 0x800D8CD0 — sky color backup
+extern RECT Db_SkyColorBak[];                            // 0x800D8CD0 — sky color backup
 
 // === External function declarations (for Front_Update) ===
 #define FRONT_MEMCARD_API
@@ -1093,11 +1106,13 @@ void Competition_Init(void);
 // A scalar source view retains the target's gp-relative address formation;
 // referencing the typed owner object directly changes Front_Update by
 // 1,873 instructions and 47 relocations under GCC 2.91.
-extern "C" int Front_PausedSongPositionWord asm("Paused_SongPos");
+#define PAUSEDSONGPOS_DECLARE_SCALAR_ADDRESS_VIEW
+#include "PAUSEDSONGPOS.h"
 
 static inline SONG_POS *Front_PausedSongPosition()
 {
-    return reinterpret_cast<SONG_POS *>(&Front_PausedSongPositionWord);
+    return reinterpret_cast<SONG_POS *>(
+        &FrontPausedSongPositionAddressView::Paused_SongPos);
 }
 void Competition_JudgeLogic(void);
 void Competition_LadderLogic(void);
@@ -1117,8 +1132,7 @@ void Competition_EndGameLogic(EPausedStatus &, int &);
 // rfront.obj owns struct SVideoRestart GVideoRestart at 0x800B5138; no GVideoRestart_abs alias is needed.
 // 0x800C8EB0 is FaceCache+0x798, not a standalone MechPlayers object.
 // 0x800B5110 is GPreferences+0x190, not a standalone HighScoreTable object.
-extern "C" char *CheatRestarts[];
-extern "C" char *HorseRestarts[];
+#include "RESTARTNAMETABLES.h"
 
 // === External function declarations (for Front_Display) ===
 void Competition_JudgeDisplay(void);
@@ -1133,7 +1147,7 @@ void Bit_Init(void);
 #include "CREATE.h"
 #include "RAIL.h"
 // === External globals (absolute) for Front_LoadGame ===
-extern "C" int __vt_4Font[];
+extern int __vt_4Font[];
 
 /** Copy a font value while installing the original Font dispatch table. */
 inline Font::Font(const Font &source)
@@ -1162,26 +1176,13 @@ inline Font::Font(const Font &source)
     OldB = source.OldB;
 }
 
-extern "C" char s_s2demo2_bmp_800d8e78[];
-extern "C" char s_skate2_vab_800d8e84[];
-extern "C" char s_scorep_bmp_800d8e90[];
-extern "C" char s_special_bmp_800d8e9c[];
-extern "C" char s_spec_bar_bmp_800d8ea8[];
-extern "C" char s_paused_bmp_800d8eb8[];
-extern "C" char DAT_800d8ec4[];
-extern "C" char s_items_800d8ecc[];
-extern "C" char s_SkMedals_800d8ed4[];
-extern "C" char s_sk2anim_800d8ee0[];
-extern "C" char s_SkEd_d_800d8ee8[];
-extern "C" FrontEditorLevelSuffixBytes FrontEditorLevelSuffixValue[]
-    asm("DAT_800d8ef0") __attribute__((section(".data")));
-extern "C" char s_s2prmpt1_bmp_800d8ef4[];
-extern "C" char s_to_continue_800d8f04[];
-extern "C" RECT FrontPromptClipRectValue[] asm("DAT_800d8f10")
+extern char DAT_800d8ec4[];
+extern char s_items_800d8ecc[];
+extern char s_sk2anim_800d8ee0[];
+extern char s_SkEd_d_800d8ee8[];
+extern FrontEditorLevelSuffixBytes DAT_800d8ef0[]
     __attribute__((section(".data")));
-
-// === String constants (absolute, in .data/.rodata) ===
-extern "C" char RestartCompFrig_str[] asm("_restart_comp_string"); // at 0x800D8E5C
+extern RECT DAT_800d8f10[] __attribute__((section(".data")));
 
 // === Function implementations (address order) ===
 
@@ -1457,7 +1458,7 @@ zero:
  */
 CMenu::CMenu(int x, int y, unsigned char Justification, int HiScale, int LowScale, int LineSep)
 {
-    CClass.vtable = &Front_CMenuVTableAddress;
+    CClass.vtable = &FrontCMenuVTableAddressView::__vt_5CMenu;
     mX = x;
     mY = y;
     mJustification = Justification;
@@ -1482,7 +1483,7 @@ CMenu::CMenu(int x, int y, unsigned char Justification, int HiScale, int LowScal
 /** Restores the deleting-destructor vtable before the compiler-owned cleanup. */
 CMenu::~CMenu()
 {
-    CClass.vtable = &Front_CMenuVTableAddress + 4;
+    CClass.vtable = &FrontCMenuVTableAddressView::__vt_5CMenu + 4;
     // cc1plus generates the trailing `if (__in_chrg & 1) operator delete(this)`
     // branch automatically for the in-charge dtor variant.
 }
@@ -2421,13 +2422,13 @@ void Front_Display(void)
                 if (GHorsePlayer == 0)
                 {
                     Mess_DrawText(0x100, 0x78,
-                                  Front_ReadOnlyPrefixOwner.Literals.Player1SetScore,
+                                  Front_Player1SetScoreText(),
                                   0, 0, 0x100, 0);
                 }
                 else
                 {
                     Mess_DrawText(0x100, 0x78,
-                                  Front_ReadOnlyPrefixOwner.Literals.Player2SetScore,
+                                  Front_Player2SetScoreText(),
                                   0, 0, 0x100, 0);
                 }
             }
@@ -2786,7 +2787,6 @@ void Front_Display(void)
 
                 switch (GGame)
                 {
-                {
                     char Score[40];
 
                 case 8:
@@ -2851,7 +2851,7 @@ void Front_Display(void)
                         {
                             Mess_DrawText(
                                 0x100, 0x50,
-                                Front_ReadOnlyPrefixOwner.Literals.NoScoreSwitch,
+                                Front_NoScoreSwitchText(),
                                 0, 0, 0x100, 0);
                         }
                         NextHorsePlayer ^= 1;
@@ -3038,7 +3038,7 @@ void Front_Display(void)
                         else
                         {
                             Mess_DrawText(0x100, 0x80,
-                                          GrafFmt + 0xe8,
+                                      GrafFmt + 0xe8,
                                           0, 0, 0x100, 0);
                             NextHorseScore =
                                 GSkater[0]->mPanelData.mLandedTotal;
@@ -3084,7 +3084,6 @@ void Front_Display(void)
                                       0, 0, 0x100, 0);
                     }
                     break;
-                }
                 }
             }
 
@@ -3392,7 +3391,7 @@ void Front_SwitchOnEndLevelMenu(void)
 
     GState = 0;
 
-    printf(RestartCompFrig_str - 0xC, palFlag);
+    printf(FrontAddressViewOwners::_restart_comp_string - 0xC, palFlag);
     CheckSum_Encode(GSkater[0]->mPanelData.mTotalScore,
                     static_cast<u8>(Rnd(0xff) + 1), palFlag);
 
@@ -3578,7 +3577,7 @@ void RestartCompFrig(void)
     if (GLevel == 8)
     {
         int t = RestartNode;
-        Trig_SetRestart(RestartCompFrig_str);
+        Trig_SetRestart(FrontAddressViewOwners::_restart_comp_string);
         Trig_ExecuteRestart();
         RestartNode = t;
     }
@@ -3671,23 +3670,21 @@ void Front_Update(void)
         {
             {
                 CBruce *pSkater = GSkater[0];
-                int currentFrame = XFrames;
-                pSkater->mJumpInhibit = currentFrame;
+                pSkater->mJumpInhibit = XFrames;
                 GamePaused = 1;
                 CBruce *pSkater2 = GSkater[1];
                 if (pSkater2 != 0)
                 {
-                    pSkater2->mJumpInhibit = currentFrame;
+                    pSkater2->mJumpInhibit = XFrames;
                 }
             }
             {
                 CBruce *pSkater = GSkater[0];
-                int currentFrame = XFrames;
-                pSkater->mRailInhibit = currentFrame;
+                pSkater->mRailInhibit = XFrames;
                 CBruce *pSkater2 = GSkater[1];
                 if (pSkater2 != 0)
                 {
-                    pSkater2->mRailInhibit = currentFrame;
+                    pSkater2->mRailInhibit = XFrames;
                 }
             }
             Mess_DeleteAll();
@@ -3781,7 +3778,8 @@ void Front_Update(void)
         pPausedMenu->Update();
         if (Activated != 0)
         {
-            if (pPausedMenu->ChoiceIs(GameText.pEndRun) != 0)
+            LocalText *menuText = &GameText;
+            if (pPausedMenu->ChoiceIs(menuText->pEndRun) != 0)
             {
                 SoundEffect = 5;
                 Game_Over();
@@ -3789,7 +3787,7 @@ void Front_Update(void)
                 GState = 1;
                 GSpin = 1;
             }
-            if (pPausedMenu->ChoiceIs(GameText.pContinue) != 0)
+            if (pPausedMenu->ChoiceIs(menuText->pContinue) != 0)
             {
                 SoundEffect = 5;
                 SwitchOffPauseMode = 1;
@@ -3797,7 +3795,7 @@ void Front_Update(void)
 
             if (pPausedMenu->ChoiceIs(
                     ((Levels[GLevel].isCompetition != 0) && (GGame == 1))
-                        ? GameText.pRestart
+                        ? menuText->pRestart
                         : GameText.pRetry) != 0)
             {
                 SwitchOffPauseMode = 1;
@@ -3805,24 +3803,25 @@ void Front_Update(void)
                 EndCode = ENDCODE_TWEAKJUMP;
                 Competition_Init();
             }
-            if (pPausedMenu->ChoiceIs(GameText.pSkipToRestart) != 0)
+            menuText = &GameText;
+            if (pPausedMenu->ChoiceIs(menuText->pSkipToRestart) != 0)
             {
                 SoundEffect = 5;
                 Status = STATUS_SKIPTORESTART;
             }
-            if (pPausedMenu->ChoiceIs(GameText.pQuit) != 0)
+            if (pPausedMenu->ChoiceIs(menuText->pQuit) != 0)
             {
                 SoundEffect = 5;
-                pYesNoMenu->SetLine(pYesNoMenu->FindEntry(GameText.pNo));
+                pYesNoMenu->SetLine(pYesNoMenu->FindEntry(menuText->pNo));
                 Status = STATUS_REALLYQUIT;
             }
-            if (pPausedMenu->ChoiceIs(GameText.pChangeSoundLevels) != 0)
+            if (pPausedMenu->ChoiceIs(menuText->pChangeSoundLevels) != 0)
             {
                 Status = STATUS_SETSOUNDLEVELS;
                 SoundEffect = 5;
                 Redbook_XARemember(Front_PausedSongPosition());
             }
-            if (pPausedMenu->ChoiceIs(GameText.pEndGame) != 0)
+            if (pPausedMenu->ChoiceIs(menuText->pEndGame) != 0)
             {
                 SoundEffect = 5;
                 Front_OnTime = 0;
@@ -3849,21 +3848,20 @@ void Front_Update(void)
             int i = 0;
             if (i < NumCheatRestarts)
             {
-                char **restart = CheatRestarts;
                 do
                 {
                     char head[4];
-                    char *name = *restart;
-                    head[0] = name[0];
-                    head[1] = name[1];
-                    head[2] = name[2];
+                    head[0] = CheatRestarts[i][0];
+                    head[1] = CheatRestarts[i][1];
+                    head[2] = CheatRestarts[i][2];
                     head[3] = 0;
                     if (Utils_CompareStrings(
-                            head, RestartCompFrig_str + 0x18, 0xffffffff) == 0)
+                            head,
+                            FrontAddressViewOwners::_restart_comp_string + 0x18,
+                            0xffffffff) == 0)
                     {
-                        pRestartsMenu->AddEntry(*restart);
+                        pRestartsMenu->AddEntry(CheatRestarts[i]);
                     }
-                    restart++;
                     i++;
                 } while (i < NumCheatRestarts);
             }
@@ -3873,11 +3871,11 @@ void Front_Update(void)
         pRestartsMenu->Update();
         if (Activated != 0)
         {
-            CMenu *menu = pRestartsMenu;
-            Trig_SetRestart(menu->mEntry[menu->mLine].pString);
+            Trig_SetRestart(
+                pRestartsMenu->mEntry[pRestartsMenu->mLine].pString);
             if (pRestartsMenu != 0)
             {
-                Front_DestroyMenu(static_cast<CMenu *>(pRestartsMenu));
+                Front_DestroyMenu(pRestartsMenu);
             }
             SwitchOffPauseMode = 1;
             pRestartsMenu = 0;
@@ -3888,7 +3886,7 @@ void Front_Update(void)
         {
             if (pRestartsMenu != 0)
             {
-                Front_DestroyMenu(static_cast<CMenu *>(pRestartsMenu));
+                Front_DestroyMenu(pRestartsMenu);
             }
             pRestartsMenu = 0;
             Status = STATUS_PAUSEDMENU;
@@ -3902,7 +3900,8 @@ void Front_Update(void)
         pYesNoMenu->Update();
         if (Activated != 0)
         {
-            if (pYesNoMenu->ChoiceIs(GameText.pYes) != 0)
+            char *yesText = GameText.pYes;
+            if (pYesNoMenu->ChoiceIs(yesText) != 0)
             {
                 EndCode = ENDCODE_PLAYERQUIT;
                 SwitchOffPauseMode = 1;
@@ -4061,22 +4060,24 @@ void Front_Update(void)
                     GameText.pSelectLevel) != 0)
             {
                 StartScreen = 1;
+                Status = STATUS_ENDLEVELFADESCREEN;
             }
             else if (pESMenu->ChoiceIs(
                          GameText.pEquipmentSelect) != 0)
             {
                 StartScreen = 2;
+                Status = STATUS_ENDLEVELFADESCREEN;
             }
             else if (pESMenu->ChoiceIs(
                          GameText.pLevelHints) != 0)
             {
                 StartScreen = 6;
+                Status = STATUS_ENDLEVELFADESCREEN;
             }
             else
             {
                 break;
             }
-            Status = STATUS_ENDLEVELFADESCREEN;
         }
         break;
     }
@@ -4250,17 +4251,14 @@ void Front_Update(void)
         }
         SFX_PlayX(5, 0x2000, 0);
         int i = 0;
-        CTape **tape = GTape;
         do
         {
-            CTape *obj = *tape;
-            if (obj != 0)
+            if (GTape[i] != 0)
             {
-                Front_DestroyTape(obj);
+                Front_DestroyTape(GTape[i]);
             }
-            *tape = 0;
+            GTape[i] = 0;
             i++;
-            tape++;
         } while (i < 5);
         Status = STATUS_TAPESAVE;
         pYesNoMenu->SetLine(pYesNoMenu->FindEntry(GameText.pYes));
@@ -4385,11 +4383,9 @@ void Front_Update(void)
     case STATUS_STARTHORSE:
     {
         CBruce *pSkater = GSkater[0];
-        int currentFrame = XFrames;
-        int activated = Activated;
         GHorseClearInput2 = 1;
-        pSkater->mJumpInhibit = currentFrame;
-        if (activated != 0)
+        pSkater->mJumpInhibit = XFrames;
+        if (Activated != 0)
         {
             SwitchOffPauseMode = 1;
         }
@@ -4685,7 +4681,7 @@ void Front_Update(void)
                     RestartCompFrig();
                     if (pPausedMenu != 0)
                     {
-                        Front_DestroyMenu(static_cast<CMenu *>(pPausedMenu));
+                        Front_DestroyMenu(pPausedMenu);
                     }
                     pPausedMenu = 0;
                     if ((EndCode != ENDCODE_PLAYERQUIT) &&
@@ -5013,21 +5009,19 @@ switch_end:
     // Tear down pause mode after a state requests gameplay to resume.
     if (SwitchOffPauseMode != 0)
     {
-        CMenu *menu = pPausedMenu;
         GamePaused = 0;
         GClear1 = 0;
         GClear2 = 0;
         Status = STATUS_NORMAL;
-        if (menu != 0)
+        if (pPausedMenu != 0)
         {
-            Front_DestroyMenu(menu);
+            Front_DestroyMenu(pPausedMenu);
         }
         {
-            int ec = EndCode;
             pPausedMenu = 0;
-            if (ec != ENDCODE_PLAYERQUIT &&
-                ec != ENDCODE_ENDLEVELDOSAVE &&
-                ec != ENDCODE_ENDLEVELNOSAVE)
+            if (EndCode != ENDCODE_PLAYERQUIT &&
+                EndCode != ENDCODE_ENDLEVELDOSAVE &&
+                EndCode != ENDCODE_ENDLEVELNOSAVE)
             {
                 SFX_Unpause();
             }
@@ -5152,19 +5146,20 @@ void Front_LoadGame(SSaveGame *pGame)
     // filler.  An empty volatile asm anchors the entry block so the saves are
     // emitted first and the addiu lands in the delay slot, as in the original.
     __asm__ __volatile__("");
-    Front_DisplayScreen(s_s2demo2_bmp_800d8e78);
+    Front_DisplayScreen(
+        FrontAddressViewOwners::s_s2demo2_bmp_800d8e78);
 
     TrigFileName = pGame->State.TrigFileName;
 
     Utils_InitialRand(0x12a6cc58);
     FileIO_SetSectorsPerFrame(0x7d0);
-    SFX_Init(s_skate2_vab_800d8e84);
+    SFX_Init(FrontAddressViewOwners::s_skate2_vab_800d8e84);
 
     // Level setup from Levels table
     SFX_SpoolInLevelSFX(Levels[GLevel].pVab);
 
     SFX_SetReverbType(0);
-    printf(Front_ReadOnlyPrefixOwner.Literals.LoadingSprites);
+    printf(Front_LoadingSpritesText());
 
     // Create sprites (score, special, bar, paused)
     {
@@ -5172,8 +5167,9 @@ void Front_LoadGame(SSaveGame *pGame)
             ::CClass::operator new(sizeof(Sprite)));
         if (spr != 0)
         {
-            spr = Front_ConstructSprite(
-                spr, s_scorep_bmp_800d8e90, 1, 0x100, 0x100);
+            spr = ::new (spr) Sprite(
+                FrontAddressViewOwners::s_scorep_bmp_800d8e90,
+                1, 0x100, 0x100);
         }
         pScoreSprite = spr;
     }
@@ -5182,8 +5178,9 @@ void Front_LoadGame(SSaveGame *pGame)
             ::CClass::operator new(sizeof(Sprite)));
         if (spr != 0)
         {
-            spr = Front_ConstructSprite(
-                spr, s_special_bmp_800d8e9c, 1, 0x100, 0x100);
+            spr = ::new (spr) Sprite(
+                FrontAddressViewOwners::s_special_bmp_800d8e9c,
+                1, 0x100, 0x100);
         }
         pSpecialSprite = spr;
     }
@@ -5192,14 +5189,16 @@ void Front_LoadGame(SSaveGame *pGame)
             ::CClass::operator new(sizeof(Sprite)));
         if (spr != 0)
         {
-            spr = Front_ConstructSprite(
-                spr, s_spec_bar_bmp_800d8ea8, 1, 0x100, 0x100);
+            spr = ::new (spr) Sprite(
+                FrontAddressViewOwners::s_spec_bar_bmp_800d8ea8,
+                1, 0x100, 0x100);
         }
         pBarSprite = spr;
     }
     {
         Sprite2 *spr = new Sprite2(
-            s_paused_bmp_800d8eb8, 1, 0x40, 0x100);
+            FrontAddressViewOwners::s_paused_bmp_800d8eb8,
+            1, 0x40, 0x100);
         pPausedSprite = reinterpret_cast<Sprite *>(spr);
         spr->JustX = 1;
     }
@@ -5219,7 +5218,8 @@ void Front_LoadGame(SSaveGame *pGame)
 
     if (Levels[GLevel].isCompetition != 0 && GGame == 1)
     {
-        region = Spool_PSX(s_SkMedals_800d8ed4, 0, 0, 1);
+        region = Spool_PSX(
+            FrontAddressViewOwners::s_SkMedals_800d8ed4, 0, 0, 1);
     }
     CurrentMedalsFileRegion = static_cast<u8>(region);
 
@@ -5302,7 +5302,7 @@ void Front_LoadGame(SSaveGame *pGame)
         }
         *reinterpret_cast<FrontEditorLevelSuffixBytes *>(
             pGame->State.RestartName) =
-            FrontEditorLevelSuffixValue[0];
+            DAT_800d8ef0[0];
     }
     else
     {
@@ -5335,7 +5335,8 @@ void Front_LoadGame(SSaveGame *pGame)
         promptFont.JustY = 3;
 
         PromptScreenElement *pElement = new PromptScreenElement(
-            s_s2prmpt1_bmp_800d8ef4, s_to_continue_800d8f04,
+            FrontAddressViewOwners::s_s2prmpt1_bmp_800d8ef4,
+            FrontAddressViewOwners::s_to_continue_800d8f04,
             promptFontPointer, 0xbd, 0xda, -1, -1);
 
         unsigned int oldDb_SkyColor = Db_SkyColor;
@@ -5345,7 +5346,7 @@ void Front_LoadGame(SSaveGame *pGame)
         int flash = 0;
         while (Pad[0].X.Triggered == 0)
         {
-            RECT newClipRect = FrontPromptClipRectValue[0];
+            RECT newClipRect = DAT_800d8f10[0];
             Db_FlipClear();
 
             oldClipRect = pDoubleBuffer->DrawClip;
@@ -5389,15 +5390,15 @@ void Front_LoadGame(SSaveGame *pGame)
  * itself non-trivial causes GCC 2.x to name this wrapper after
  * `GHorseContinue` instead of the target's `LoadingScreen_Main` identity.
  */
-extern "C" void Front_GlobalDestroy_LoadingScreen_Main(void)
+void Front_GlobalDestroy_LoadingScreen_Main(void)
     asm("_GLOBAL_.D.LoadingScreen_Main__Fv");
 void Front_GlobalDestroy_LoadingScreen_Main(void)
 {
-    FallingTextEffect_DestroyAbi(&Front_HorseFallingText(), 2);
+    Front_HorseFallingText().~FallingTextEffect();
 }
 
-/** Construct the global HORSE effect through its typed constructor ABI. */
-extern "C" void Front_GlobalInit_LoadingScreen_Main(void)
+/** Invoke the global HORSE effect constructor. */
+void Front_GlobalInit_LoadingScreen_Main(void)
     asm("_GLOBAL_.I.LoadingScreen_Main__Fv");
 void Front_GlobalInit_LoadingScreen_Main(void)
 {
@@ -5422,11 +5423,13 @@ static void (*volatile Front_GlobalDtorSlot)(void)
  * @param self   Implicit CClass `this` pointer.
  * @param flags  GCC 2.x in-charge flags; bit zero requests operator delete.
  */
-static void Front_CClassDestructorAbi(CClass *self, int flags)
+extern "C" {
+static void __DOT__6CClass_8002D678(CClass *self, int flags)
 {
-    self->vtable = &Front_CMenuVTableAddress + 4;
+    self->vtable = &FrontCMenuVTableAddressView::__vt_5CMenu + 4;
     if (flags & 1)
     {
         ::CClass::operator delete(self);
     }
+}
 }

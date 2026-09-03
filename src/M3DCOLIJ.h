@@ -204,8 +204,8 @@ extern "C" int FaceCacheStart;       // 0x800DC548
 extern "C" u16 Inquiry;       // 0x800DC524
 extern "C" int ItemCacheIndex;       // 0x800DC53C
 extern "C" int ItemCacheStart;       // 0x800DC540
-extern "C" unsigned int M3dColij_OneMask;       // 0x800DC564
-extern "C" unsigned int M3dColij_ZeroMask;       // 0x800DC560
+#define M3DCOLIJMASKS_OWNER_DECLARATION
+#include "M3DCOLIJMASKS.h"
 extern "C" CBody *pBodyHit;       // 0x800DC56C
 
 // === Variables (absolute in this TU) ===

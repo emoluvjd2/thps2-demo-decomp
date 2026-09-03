@@ -51,8 +51,7 @@ char *pNumberStrings __attribute__((section(".sdata"))) = 0;
 
 // === External function declarations ===
 #include "SPOOL.h"
-CVector operator-(const CVector &left, const CVector &right);
-CVector operator>>(const CVector &vector, const int &shift);
+#include "CVECTOROPS.h"
 
 /** Copy the packed color and UV words into one Psy-Q font primitive. */
 static inline void Font_SetPolyAppearance(POLY_FT4 *apoly,
@@ -71,7 +70,11 @@ static inline void Font_SetPolyAppearance(POLY_FT4 *apoly,
 }
 
 // === Owner-local globals ===
+
+/** FONT-owned small-glyph lookup table, defined after its text users. */
 extern unsigned char Mapping[128];
+
+/** FONT-owned transient decimal-formatting storage. */
 extern char NumberStrings[512];
 
 // === Function implementations (address order) ===
@@ -337,6 +340,8 @@ unsigned char Mapping[128] __attribute__((section(".data"))) = {
 };
 
 /** Character-to-frame mapping for the large message font. */
+#define BIGFONTMAPPING_OWNER_DECLARATION
+#include "BIGFONTMAPPING.h"
 unsigned char BigFont_Mapping[256] __attribute__((section(".data"))) = {
     0x2a, 0x2a, 0x2a, 0x2a, 0x2a, 0x2a, 0x2a, 0x2a,
     0x2a, 0x2a, 0x2a, 0x2a, 0x2a, 0x2a, 0x2a, 0x2a,

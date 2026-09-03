@@ -66,3 +66,19 @@ POLY_F4 *Panel_DrawFlatShadedPoly(
     unsigned char red, unsigned char green, unsigned char blue, int sort);
 
 #endif // PANEL_PRIMITIVE_API && !THPS2_PANEL_PRIMITIVE_API_EMITTED
+
+#ifdef PANEL_DECLARE_DATA_CONSTRUCTOR_ABI
+#if !defined(PANEL_DATA_CONSTRUCTOR_RECEIVER) || \
+    !defined(PANEL_DATA_CONSTRUCTOR_PLAYER)
+#error "Select the panel constructor receiver and player view"
+#endif
+
+/** Construct one panel-data object through its target ABI entry. */
+extern "C" PANEL_DATA_CONSTRUCTOR_RECEIVER *__10CPanelDataP6CBruce(
+    PANEL_DATA_CONSTRUCTOR_RECEIVER *panel,
+    PANEL_DATA_CONSTRUCTOR_PLAYER *player);
+
+#undef PANEL_DATA_CONSTRUCTOR_PLAYER
+#undef PANEL_DATA_CONSTRUCTOR_RECEIVER
+#undef PANEL_DECLARE_DATA_CONSTRUCTOR_ABI
+#endif

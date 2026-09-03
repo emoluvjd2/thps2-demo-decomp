@@ -13,10 +13,10 @@
 #endif
 
 /** X coordinate of the shared 256-colour palette allocation area. */
-extern "C" int Pal256X PAL256_DECL_ATTR;
+extern int Pal256X PAL256_DECL_ATTR;
 
 /** Y coordinate of the shared 256-colour palette allocation area. */
-extern "C" int Pal256Y PAL256_DECL_ATTR;
+extern int Pal256Y PAL256_DECL_ATTR;
 
 #undef PAL256_DECL_ATTR
 

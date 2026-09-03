@@ -6,7 +6,6 @@
 // Compiled with cc1plus (GCC 2.91.66-psx). Compiler auto-mangles symbol names.
 
 // Owner-local declarations attributed to LEVELSELECT2.cpp by MAIN.SYM.
-extern "C" {
 
 typedef unsigned char u8;
 typedef unsigned short u16;
@@ -44,8 +43,6 @@ struct SBlockHeader;
 struct ControllerData;
 struct SDoubleBuffer;
 
-}
-
 #include "M3D.h"
 #include "FRONTSCREENS.h"
 
@@ -53,9 +50,11 @@ struct SDoubleBuffer;
 #define FRONTEND2STATE_DECLARE_GAME_MODE
 #define FRONTEND2STATE_DECLARE_TWO_PLAYER
 #include "FRONTEND2STATE.h"
-extern "C" u16 GameFMV_EndX __attribute__((section(".data")));
-extern "C" s16 GameFMV_StartX __attribute__((section(".data")));
-extern "C" s16 GameFMV_StartY __attribute__((section(".data")));
+#define GAMEFMVSTATE_ABSOLUTE_DECLARATION
+#define GAMEFMVSTATE_DECLARE_END_X
+#define GAMEFMVSTATE_DECLARE_START_X
+#define GAMEFMVSTATE_DECLARE_START_Y
+#include "GAMEFMVSTATE.h"
 // LevelGenerator owns the shared GridCellWidth object.
 
 #define SCREENTOOLS_AGGREGATE_LAYOUT
@@ -81,18 +80,9 @@ struct SkaterNameScreenElement;
 struct SlicedImage2;
 struct Sprite2;
 struct VideoScreenElement;
-/** Pointer-only view of the shared asynchronous file manager. */
-struct Spooler {
-    static Spooler *SpoolMgr __attribute__((section(".data")));
-    int AddFile(char *filename, int ignoreExtension);
-    void *GetFile(int slot);
-    int IsFileLoaded(int slot);
-    int IsSetDone();
-    static void OrderHelper(int *order, int count, int first);
-    void Reset();
-    void Spooool();
-    void Update();
-};
+#define SPOOLER_ABSOLUTE_MANAGER_DECLARATION
+#include "SPOOLER.h"
+#undef SPOOLER_ABSOLUTE_MANAGER_DECLARATION
 
 #include "SCAMERA.h"
 
@@ -123,74 +113,74 @@ struct LevelSelectDoubleBuffer {
 #undef M3DMATHS_TYPED_API
 #include "IMAGE.h"
 /** Typed construction, screen-hierarchy, font, and spooler entry points. */
-ScreenElement *LevelSelect_ConstructScreenElement(
-    ScreenElement *element, int homeX, int homeY, int screenX, int screenY)
-    asm("__13ScreenElementiiii");
-void LevelSelect_UpdateScreenElement(ScreenElement *element)
-    asm("update__13ScreenElement");
-int LevelSelect_ScreenElementWidth(ScreenElement *element)
-    asm("width__13ScreenElement");
+#define SCREENTOOLS_DECLARE_SCREEN_ELEMENT_CONSTRUCTOR
+#define SCREENTOOLS_DECLARE_SCREEN_ELEMENT_LIST_CONSTRUCTOR
+#include "SCREENTOOLS.h"
+#define LevelSelect_ConstructScreenElement __13ScreenElementiiii
+#define LevelSelect_ConstructScreenElementList __17ScreenElementListiiii
+#define SCREENTOOLS_DECLARE_SCREEN_ELEMENT_LIST_DESTRUCTOR
+#include "SCREENTOOLS.h"
+#define SCREENTOOLS_DECLARE_SCREEN_ELEMENT_DESTRUCTOR
+#include "SCREENTOOLS.h"
 
-ScreenElementList *LevelSelect_ConstructScreenElementList(
-    ScreenElementList *list, int homeX, int homeY, int screenX, int screenY)
-    asm("__17ScreenElementListiiii");
-void LevelSelect_UpdateScreenElementList(ScreenElementList *list)
-    asm("update__17ScreenElementList");
-void LevelSelect_DrawScreenElementList(ScreenElementList *list, int x, int y)
-    asm("draw__17ScreenElementListii");
-void LevelSelect_DestroyScreenElementList(ScreenElementList *list, int inCharge)
-    asm("_._17ScreenElementList");
-void LevelSelect_DestroyScreenElement(ScreenElement *element, int inCharge)
-    asm("_._13ScreenElement");
+#define SCREENTOOLS_DECLARE_TEXT_SCREEN_ELEMENT_CONSTRUCTOR
+#include "SCREENTOOLS.h"
+#define LevelSelect_ConstructTextScreenElement \
+    __17TextScreenElementPcP4Fontiiii
+#define SCREENTOOLS_DECLARE_TEXT_SCREEN_ELEMENT_DESTRUCTOR
+#include "SCREENTOOLS.h"
+extern "C" void draw__17TextScreenElementii(
+    TextScreenElement *element, int x, int y);
+#define LevelSelect_DrawTextScreenElement draw__17TextScreenElementii
 
-TextScreenElement *LevelSelect_ConstructTextScreenElement(
-    TextScreenElement *element, char *text, Font *font,
-    int homeX, int homeY, int screenX, int screenY)
-    asm("__17TextScreenElementPcP4Fontiiii");
-void LevelSelect_DestroyTextScreenElement(TextScreenElement *element,
-                                          int inCharge)
-    asm("_._17TextScreenElement");
-void LevelSelect_DrawTextScreenElement(TextScreenElement *element,
-                                       int x, int y)
-    asm("draw__17TextScreenElementii");
-int LevelSelect_TextScreenElementWidth(TextScreenElement *element)
-    asm("width__17TextScreenElement");
-
-SpriteScreenElement *LevelSelect_ConstructSpriteScreenElement(
-    SpriteScreenElement *element, char *name,
-    int homeX, int homeY, int screenX, int screenY, int arg5, int arg6)
-    asm("__19SpriteScreenElementPciiiiii");
+#define SCREENTOOLS_DECLARE_SPRITE_SCREEN_ELEMENT_CONSTRUCTOR
+#include "SCREENTOOLS.h"
+#define LevelSelect_ConstructSpriteScreenElement \
+    __19SpriteScreenElementPciiiiii
 /** Typed aliases for constructors whose storage is allocated by CClass. */
-LevelSelectScreen *LevelSelect_ConstructLevelSelectScreen(
-    LevelSelectScreen *screen) asm("__17LevelSelectScreen");
-SkaterNameScreenElement *LevelSelect_ConstructSkaterNameScreenElement(
+namespace LevelSelectConstructorAbi
+{
+extern "C" LevelSelectScreen *__17LevelSelectScreen(
+    LevelSelectScreen *screen);
+extern "C" SkaterNameScreenElement *__23SkaterNameScreenElementbiiii(
     SkaterNameScreenElement *element, bool secondPlayer,
-    int homeX, int homeY, int screenX, int screenY)
-    asm("__23SkaterNameScreenElementbiiii");
-GlobeScreenElement *LevelSelect_ConstructGlobeScreenElement(
+    int homeX, int homeY, int screenX, int screenY);
+extern "C" GlobeScreenElement *__18GlobeScreenElementiiii(
     GlobeScreenElement *element,
-    int homeX, int homeY, int screenX, int screenY)
-    asm("__18GlobeScreenElementiiii");
-NameScreenElement *LevelSelect_ConstructNameScreenElement(
+    int homeX, int homeY, int screenX, int screenY);
+extern "C" NameScreenElement *__17NameScreenElementPcP4Fontiiii(
     NameScreenElement *element, char *text, Font *font,
-    int homeX, int homeY, int screenX, int screenY)
-    asm("__17NameScreenElementPcP4Fontiiii");
-CareerScreenElement *LevelSelect_ConstructCareerScreenElement(
-    CareerScreenElement *element, Font *font,
-    int homeX, int homeY, int screenX, int screenY)
-    asm("__19CareerScreenElementP4Fontiiii");
-LevelNameScreenElement *LevelSelect_ConstructLevelNameScreenElement(
+    int homeX, int homeY, int screenX, int screenY);
+extern "C" LevelNameScreenElement *__22LevelNameScreenElementiiii(
     LevelNameScreenElement *element,
-    int homeX, int homeY, int screenX, int screenY)
-    asm("__22LevelNameScreenElementiiii");
-VideoScreenElement *LevelSelect_ConstructVideoScreenElement(
+    int homeX, int homeY, int screenX, int screenY);
+extern "C" VideoScreenElement *__18VideoScreenElementiiii(
     VideoScreenElement *element,
-    int homeX, int homeY, int screenX, int screenY)
-    asm("__18VideoScreenElementiiii");
-GoalScreenElement *LevelSelect_ConstructGoalScreenElement(
+    int homeX, int homeY, int screenX, int screenY);
+extern "C" GoalScreenElement *__17GoalScreenElementiiii(
     GoalScreenElement *element,
-    int homeX, int homeY, int screenX, int screenY)
-    asm("__17GoalScreenElementiiii");
+    int homeX, int homeY, int screenX, int screenY);
+}
+
+#define LevelSelect_ConstructLevelSelectScreen \
+    LevelSelectConstructorAbi::__17LevelSelectScreen
+#define LevelSelect_ConstructSkaterNameScreenElement \
+    LevelSelectConstructorAbi::__23SkaterNameScreenElementbiiii
+#define LevelSelect_ConstructGlobeScreenElement \
+    LevelSelectConstructorAbi::__18GlobeScreenElementiiii
+#define LevelSelect_ConstructNameScreenElement \
+    LevelSelectConstructorAbi::__17NameScreenElementPcP4Fontiiii
+extern "C" CareerScreenElement *__19CareerScreenElementP4Fontiiii(
+    CareerScreenElement *element, Font *font,
+    int homeX, int homeY, int screenX, int screenY);
+#define LevelSelect_ConstructCareerScreenElement \
+    __19CareerScreenElementP4Fontiiii
+#define LevelSelect_ConstructLevelNameScreenElement \
+    LevelSelectConstructorAbi::__22LevelNameScreenElementiiii
+#define LevelSelect_ConstructVideoScreenElement \
+    LevelSelectConstructorAbi::__18VideoScreenElementiiii
+#define LevelSelect_ConstructGoalScreenElement \
+    LevelSelectConstructorAbi::__17GoalScreenElementiiii
 
 typedef char levelselect_item_size_must_be_36[
     (sizeof(Item) == 36) ? 1 : -1];
@@ -537,130 +527,77 @@ static int SelectedLevel __attribute__((section(".sdata"))) = 0;
 // === External object declarations ===
 #include "PDOUBLEBUFFER.h"
 
-// === Extern "C" forward declarations ===
+// === Resource-name address views ===
 /*
- * Keep the access declarations incomplete, as in the original source-facing
- * interface.  GCC 2 emits the target's absolute lui/addiu address formation
- * for these declarations even when a short string itself belongs in `.sdata`.
+ * Keep incomplete address views only for owners whose complete extent is at
+ * most the translation unit's -G8 threshold.  Larger arrays are addressed
+ * directly through their complete owner definitions below; both forms retain
+ * the target's small-data versus absolute-address split.
  */
-extern "C" char s_mainf_fnt_800dbdd8[];
-extern "C" char s_s2font2_fnt_800dbde4[];
-extern "C" char s_s2font1_fnt_800dbdf0[];
-extern "C" char s_ingame1_fnt_800dbdfc[];
-extern "C" char s_s2bgd3_bmp_800dbe08[];
-extern "C" char s_s2prmpt4_bmp_800dbe14[];
-extern "C" char s_select_800dbe24[];
-extern "C" char s_s2prmpt1_bmp_800dbe2c[];
-extern "C" char s_accept_800dbe3c[];
-extern "C" char s_s2prmpt2_bmp_800dbe44[];
-extern "C" char s_prompt_label_800dbe54[] asm("DAT_800dbe54");
-extern "C" char s_s2versus_bmp_800dbe5c[];
-extern "C" char s_globe_800dbe6c[];
-extern "C" char s_s2crossh_bmp_800dbe74[];
-extern "C" char s_mar_bmp_800dbe84[];
-extern "C" char s_levna_bmp_800dbe8c[];
-extern "C" char s_s2win5_bmp_800dbe98[];
-extern "C" char s_s2levl00_bmp_800dbea4[];
-extern "C" char s_s2levl0_d_bmp_800dbeb4[];
+extern char s_select_800dbe24[];
+extern char s_accept_800dbe3c[];
+extern char DAT_800dbe54[];
+extern char s_globe_800dbe6c[];
+extern char s_mar_bmp_800dbe84[];
 
-/** Owner-local font and image-name storage in its original `.sdata` order. */
-extern "C" {
-static char LevelSelectMainFontName[]
-    asm("s_mainf_fnt_800dbdd8")
+/**
+ * Owner-local font and image-name storage in its original `.sdata` order.
+ *
+ * Owners larger than eight bytes are used directly through this namespace;
+ * the five smaller owners retain incomplete external address views above so
+ * GCC preserves their target small-data addressing.  C linkage preserves the
+ * natural linker identifiers without source-level assembly aliases.
+ */
+namespace LevelSelectAddressViewOwners
+{
+extern "C"
+{
+static char s_mainf_fnt_800dbdd8[]
     __attribute__((section(".sdata"), aligned(4))) = "mainf.fnt";
-static char LevelSelectSecondFontName[]
-    asm("s_s2font2_fnt_800dbde4")
+static char s_s2font2_fnt_800dbde4[]
     __attribute__((section(".sdata"), aligned(4))) = "s2font2.fnt";
-static char LevelSelectFirstFontName[]
-    asm("s_s2font1_fnt_800dbdf0")
+static char s_s2font1_fnt_800dbdf0[]
     __attribute__((section(".sdata"), aligned(4))) = "s2font1.fnt";
-static char LevelSelectInGameFontName[]
-    asm("s_ingame1_fnt_800dbdfc")
+static char s_ingame1_fnt_800dbdfc[]
     __attribute__((section(".sdata"), aligned(4))) = "ingame1.fnt";
-static char LevelSelectBackgroundName[]
-    asm("s_s2bgd3_bmp_800dbe08")
+static char s_s2bgd3_bmp_800dbe08[]
     __attribute__((section(".sdata"), aligned(4))) = "s2bgd3.bmp";
-static char LevelSelectSelectPromptImageName[]
-    asm("s_s2prmpt4_bmp_800dbe14")
+static char s_s2prmpt4_bmp_800dbe14[]
     __attribute__((section(".sdata"), aligned(4))) = "s2prmpt4.bmp";
-static char LevelSelectSelectPromptText[]
-    asm("s_select_800dbe24")
+static char s_select_800dbe24[]
     __attribute__((section(".sdata"), aligned(4))) = "select";
-static char LevelSelectAcceptPromptImageName[]
-    asm("s_s2prmpt1_bmp_800dbe2c")
+static char s_s2prmpt1_bmp_800dbe2c[]
     __attribute__((section(".sdata"), aligned(4))) = "s2prmpt1.bmp";
-static char LevelSelectAcceptPromptText[]
-    asm("s_accept_800dbe3c")
+static char s_accept_800dbe3c[]
     __attribute__((section(".sdata"), aligned(4))) = "accept";
-static char LevelSelectBackPromptImageName[]
-    asm("s_s2prmpt2_bmp_800dbe44")
+static char s_s2prmpt2_bmp_800dbe44[]
     __attribute__((section(".sdata"), aligned(4))) = "s2prmpt2.bmp";
-static char LevelSelectBackPromptText[]
-    asm("DAT_800dbe54")
+static char DAT_800dbe54[]
     __attribute__((section(".sdata"), aligned(4))) = "back";
-static char LevelSelectVersusImageName[]
-    asm("s_s2versus_bmp_800dbe5c")
+static char s_s2versus_bmp_800dbe5c[]
     __attribute__((section(".sdata"), aligned(4))) = "s2versus.bmp";
-static char LevelSelectGlobeModelName[]
-    asm("s_globe_800dbe6c")
+static char s_globe_800dbe6c[]
     __attribute__((section(".sdata"), aligned(4))) = "globe";
-static char LevelSelectCrosshairImageName[]
-    asm("s_s2crossh_bmp_800dbe74")
+static char s_s2crossh_bmp_800dbe74[]
     __attribute__((section(".sdata"), aligned(4))) = "s2crossh.bmp";
-static char LevelSelectVideoMaskImageName[]
-    asm("s_mar_bmp_800dbe84")
+static char s_mar_bmp_800dbe84[]
     __attribute__((section(".sdata"), aligned(4))) = "mar.bmp";
-static char LevelSelectVideoNameplateImageName[]
-    asm("s_levna_bmp_800dbe8c")
+static char s_levna_bmp_800dbe8c[]
     __attribute__((section(".sdata"), aligned(4))) = "levna.bmp";
-static char LevelSelectVideoWindowImageName[]
-    asm("s_s2win5_bmp_800dbe98")
+static char s_s2win5_bmp_800dbe98[]
     __attribute__((section(".sdata"), aligned(4))) = "s2win5.bmp";
-static char LevelSelectGoalBaseImageName[]
-    asm("s_s2levl00_bmp_800dbea4")
+static char s_s2levl00_bmp_800dbea4[]
     __attribute__((section(".sdata"), aligned(4))) = "s2levl00.bmp";
-static char LevelSelectGoalImageFormat[]
-    asm("s_s2levl0_d_bmp_800dbeb4")
+static char s_s2levl0_d_bmp_800dbeb4[]
     __attribute__((section(".sdata"), aligned(4))) = "s2levl0%d.bmp";
+}
 }
 // === Additional extern declarations for destructors ===
 typedef void (*LevelSelectVirtualFunction)(void);
-extern "C" void LevelSelectScreenDestructorVtable(void)
-    asm("_._17LevelSelectScreen");
-extern "C" void LevelSelectScreenUpdateVtable(void)
-    asm("update__17LevelSelectScreen");
-extern "C" void LevelSelectScreenRefreshVtable(void)
-    asm("refresh__17LevelSelectScreen");
-extern "C" void SkaterNameScreenElementDestructorVtable(void)
-    asm("_._23SkaterNameScreenElement");
-
-// C-linkage views of owner-local C++ methods stored in the dispatch tables.
-extern "C" void LevelSelectGoalDestructorVtable(void)
-    asm("_._17GoalScreenElement");
-extern "C" void LevelSelectGoalUpdateVtable(void)
-    asm("update__17GoalScreenElement");
-extern "C" void LevelSelectGoalDrawVtable(void)
-    asm("draw__17GoalScreenElementii");
-extern "C" void LevelSelectVideoDestructorVtable(void)
-    asm("_._18VideoScreenElement");
-extern "C" void LevelSelectVideoUpdateVtable(void)
-    asm("update__18VideoScreenElement");
-extern "C" void LevelSelectVideoDrawVtable(void)
-    asm("draw__18VideoScreenElementii");
-extern "C" void LevelSelectNameDestructorVtable(void)
-    asm("_._17NameScreenElement");
-extern "C" void LevelSelectNameUpdateVtable(void)
-    asm("update__17NameScreenElement");
-extern "C" void LevelSelectLevelNameDestructorVtable(void)
-    asm("_._22LevelNameScreenElement");
-extern "C" void LevelSelectLevelNameUpdateVtable(void)
-    asm("update__22LevelNameScreenElement");
-extern "C" void LevelSelectGlobeDestructorVtable(void)
-    asm("_._18GlobeScreenElement");
-extern "C" void LevelSelectGlobeUpdateVtable(void)
-    asm("update__18GlobeScreenElement");
-extern "C" void LevelSelectGlobeDrawVtable(void)
-    asm("draw__18GlobeScreenElementii");
+#define FRONTSCREENS_DECLARE_LEVELSELECT_DESTRUCTOR_ABI
+#include "FRONTSCREENS.h"
+#define FRONTSCREENS_DECLARE_LEVELSELECT_OWNER_VTABLES
+#include "FRONTSCREENS.h"
 
 /**
  * Dispatch tables owned by the level-selection front end.
@@ -669,91 +606,103 @@ extern "C" void LevelSelectGlobeDrawVtable(void)
  * compiler-generated VideoScreenElement switch table follows these seven
  * tables in the same read-only section.
  */
-extern "C" {
-extern LevelSelectVirtualFunction const __vt_17GoalScreenElement[]
+LevelSelectVirtualFunction const __vt_17GoalScreenElement[]
     __attribute__((aligned(8))) = {
         0,
         0,
         (LevelSelectVirtualFunction)LevelSelectGoalDestructorVtable,
-        (LevelSelectVirtualFunction)LevelSelectGoalUpdateVtable,
-        (LevelSelectVirtualFunction)LevelSelectGoalDrawVtable,
-        (LevelSelectVirtualFunction)LevelSelect_ScreenElementWidth,
-        (LevelSelectVirtualFunction)ScreenElement_Refresh,
+        (LevelSelectVirtualFunction)(void (*)(GoalScreenElement *))
+            &GoalScreenElement::update,
+        (LevelSelectVirtualFunction)(void (*)(GoalScreenElement *, int, int))
+            &GoalScreenElement::draw,
+        (LevelSelectVirtualFunction)&ScreenElement::width,
+        (LevelSelectVirtualFunction)&ScreenElement::refresh,
         0,
     };
 
-extern LevelSelectVirtualFunction const __vt_18VideoScreenElement[]
+LevelSelectVirtualFunction const __vt_18VideoScreenElement[]
     __attribute__((aligned(8))) = {
         0,
         0,
         (LevelSelectVirtualFunction)LevelSelectVideoDestructorVtable,
-        (LevelSelectVirtualFunction)LevelSelectVideoUpdateVtable,
-        (LevelSelectVirtualFunction)LevelSelectVideoDrawVtable,
-        (LevelSelectVirtualFunction)LevelSelect_ScreenElementWidth,
-        (LevelSelectVirtualFunction)ScreenElement_Refresh,
+        (LevelSelectVirtualFunction)(void (*)(VideoScreenElement *))
+            &VideoScreenElement::update,
+        (LevelSelectVirtualFunction)(void (*)(VideoScreenElement *, int, int))
+            &VideoScreenElement::draw,
+        (LevelSelectVirtualFunction)&ScreenElement::width,
+        (LevelSelectVirtualFunction)&ScreenElement::refresh,
         0,
     };
 
-extern LevelSelectVirtualFunction const __vt_17NameScreenElement[]
+LevelSelectVirtualFunction const __vt_17NameScreenElement[]
     __attribute__((aligned(8))) = {
         0,
         0,
         (LevelSelectVirtualFunction)LevelSelectNameDestructorVtable,
-        (LevelSelectVirtualFunction)LevelSelectNameUpdateVtable,
+        (LevelSelectVirtualFunction)(void (*)(NameScreenElement *))
+            &NameScreenElement::update,
         (LevelSelectVirtualFunction)LevelSelect_DrawTextScreenElement,
-        (LevelSelectVirtualFunction)LevelSelect_TextScreenElementWidth,
-        (LevelSelectVirtualFunction)ScreenElement_Refresh,
+        (LevelSelectVirtualFunction)&TextScreenElement::width,
+        (LevelSelectVirtualFunction)&ScreenElement::refresh,
         0,
     };
 
-extern LevelSelectVirtualFunction const __vt_22LevelNameScreenElement[]
+LevelSelectVirtualFunction const __vt_22LevelNameScreenElement[]
     __attribute__((aligned(8))) = {
         0,
         0,
         (LevelSelectVirtualFunction)LevelSelectLevelNameDestructorVtable,
-        (LevelSelectVirtualFunction)LevelSelectLevelNameUpdateVtable,
-        (LevelSelectVirtualFunction)LevelSelect_DrawScreenElementList,
-        (LevelSelectVirtualFunction)LevelSelect_ScreenElementWidth,
-        (LevelSelectVirtualFunction)ScreenElement_Refresh,
+        (LevelSelectVirtualFunction)(void (*)(LevelNameScreenElement *))
+            &LevelNameScreenElement::update,
+        (LevelSelectVirtualFunction)(void (*)(ScreenElementList *, int, int))
+            &ScreenElementList::draw,
+        (LevelSelectVirtualFunction)&ScreenElement::width,
+        (LevelSelectVirtualFunction)&ScreenElement::refresh,
         0,
     };
 
-extern LevelSelectVirtualFunction const __vt_18GlobeScreenElement[]
+LevelSelectVirtualFunction const __vt_18GlobeScreenElement[]
     __attribute__((aligned(8))) = {
         0,
         0,
         (LevelSelectVirtualFunction)LevelSelectGlobeDestructorVtable,
-        (LevelSelectVirtualFunction)LevelSelectGlobeUpdateVtable,
-        (LevelSelectVirtualFunction)LevelSelectGlobeDrawVtable,
-        (LevelSelectVirtualFunction)LevelSelect_ScreenElementWidth,
-        (LevelSelectVirtualFunction)ScreenElement_Refresh,
+        (LevelSelectVirtualFunction)(void (*)(GlobeScreenElement *))
+            &GlobeScreenElement::update,
+        (LevelSelectVirtualFunction)(void (*)(GlobeScreenElement *, int, int))
+            &GlobeScreenElement::draw,
+        (LevelSelectVirtualFunction)&ScreenElement::width,
+        (LevelSelectVirtualFunction)&ScreenElement::refresh,
         0,
     };
 
-extern LevelSelectVirtualFunction const __vt_23SkaterNameScreenElement[]
+LevelSelectVirtualFunction const __vt_23SkaterNameScreenElement[]
     __attribute__((aligned(8))) = {
         0,
         0,
         (LevelSelectVirtualFunction)SkaterNameScreenElementDestructorVtable,
-        (LevelSelectVirtualFunction)LevelSelect_UpdateScreenElementList,
-        (LevelSelectVirtualFunction)LevelSelect_DrawScreenElementList,
-        (LevelSelectVirtualFunction)LevelSelect_ScreenElementWidth,
-        (LevelSelectVirtualFunction)ScreenElement_Refresh,
+        (LevelSelectVirtualFunction)(void (*)(ScreenElementList *))
+            &ScreenElementList::update,
+        (LevelSelectVirtualFunction)(void (*)(ScreenElementList *, int, int))
+            &ScreenElementList::draw,
+        (LevelSelectVirtualFunction)&ScreenElement::width,
+        (LevelSelectVirtualFunction)&ScreenElement::refresh,
         0,
     };
 
-extern LevelSelectVirtualFunction const __vt_17LevelSelectScreen[]
+LevelSelectVirtualFunction const __vt_17LevelSelectScreen[]
     __attribute__((aligned(8))) = {
         0,
         0,
         (LevelSelectVirtualFunction)LevelSelectScreenDestructorVtable,
-        (LevelSelectVirtualFunction)LevelSelectScreenUpdateVtable,
-        (LevelSelectVirtualFunction)LevelSelect_DrawScreenElementList,
-        (LevelSelectVirtualFunction)LevelSelect_ScreenElementWidth,
-        (LevelSelectVirtualFunction)LevelSelectScreenRefreshVtable,
+        (LevelSelectVirtualFunction)(void (*)(LevelSelectScreen *))
+            &LevelSelectScreen::update,
+        (LevelSelectVirtualFunction)(void (*)(ScreenElementList *, int, int))
+            &ScreenElementList::draw,
+        (LevelSelectVirtualFunction)&ScreenElement::width,
+        (LevelSelectVirtualFunction)(void (*)(LevelSelectScreen *))
+            &LevelSelectScreen::refresh,
         0,
     };
-}
 
 /** Invoke the deleting-destructor slot shared by CClass-derived objects. */
 static inline void LevelSelect_DeleteVirtual(void *object)
@@ -800,10 +749,14 @@ int LevelSelect2_Main(void)
     Spool_RemoveUnusedTextures();
     Pal_RemoveUnusedPalettes();
     Pack_DefragmentFully();
-    FontManager::LoadFont(s_mainf_fnt_800dbdd8);
-    FontManager::LoadFont(s_s2font2_fnt_800dbde4);
-    FontManager::LoadFont(s_s2font1_fnt_800dbdf0);
-    FontManager::LoadFont(s_ingame1_fnt_800dbdfc);
+    FontManager::LoadFont(
+        LevelSelectAddressViewOwners::s_mainf_fnt_800dbdd8);
+    FontManager::LoadFont(
+        LevelSelectAddressViewOwners::s_s2font2_fnt_800dbde4);
+    FontManager::LoadFont(
+        LevelSelectAddressViewOwners::s_s2font1_fnt_800dbdf0);
+    FontManager::LoadFont(
+        LevelSelectAddressViewOwners::s_ingame1_fnt_800dbdfc);
 
     LevelSelectScreen *pScreen =
         (LevelSelectScreen *)::CClass::operator new(sizeof(LevelSelectScreen));
@@ -843,10 +796,14 @@ int LevelSelect2_Main(void)
         PollHost();
     }
 
-    FontManager::UnloadFont(s_mainf_fnt_800dbdd8);
-    FontManager::UnloadFont(s_s2font2_fnt_800dbde4);
-    FontManager::UnloadFont(s_s2font1_fnt_800dbdf0);
-    FontManager::UnloadFont(s_ingame1_fnt_800dbdfc);
+    FontManager::UnloadFont(
+        LevelSelectAddressViewOwners::s_mainf_fnt_800dbdd8);
+    FontManager::UnloadFont(
+        LevelSelectAddressViewOwners::s_s2font2_fnt_800dbde4);
+    FontManager::UnloadFont(
+        LevelSelectAddressViewOwners::s_s2font1_fnt_800dbdf0);
+    FontManager::UnloadFont(
+        LevelSelectAddressViewOwners::s_ingame1_fnt_800dbdfc);
     Db_SkyColor = oldSkyColor;
 
     LevelSelect_DeleteVirtual(pScreen);
@@ -872,11 +829,15 @@ LevelSelectScreen::LevelSelectScreen()
     ::new (FontFromStorage(&mFont1)) Font;
     ::new (FontFromStorage(&mFont2)) Font;
 
-    Sprite2 *sprite = new Sprite2(s_s2bgd3_bmp_800dbe08, 1, 0, 0);
+    Sprite2 *sprite = new Sprite2(
+        LevelSelectAddressViewOwners::s_s2bgd3_bmp_800dbe08,
+        1, 0, 0);
     mBackground = sprite;
 
-    FontManager::GetFont(s_mainf_fnt_800dbdd8);
-    Font *sourceFont = FontManager::GetFont(s_s2font2_fnt_800dbde4);
+    FontManager::GetFont(
+        LevelSelectAddressViewOwners::s_mainf_fnt_800dbdd8);
+    Font *sourceFont = FontManager::GetFont(
+        LevelSelectAddressViewOwners::s_s2font2_fnt_800dbde4);
     *(LevelSelectFontAssignmentView *)&mFont2 =
         *(LevelSelectFontAssignmentView *)sourceFont;
 
@@ -892,17 +853,20 @@ LevelSelectScreen::LevelSelectScreen()
 
     PromptScreenElement *pPromptElement[3];
     PromptScreenElement *item = new PromptScreenElement(
-        s_s2prmpt4_bmp_800dbe14, s_select_800dbe24,
+        LevelSelectAddressViewOwners::s_s2prmpt4_bmp_800dbe14,
+        s_select_800dbe24,
         FontFromStorage(&mFont2), 115, 220, -1, 260);
     pPromptElement[0] = item;
 
     item = new PromptScreenElement(
-        s_s2prmpt1_bmp_800dbe2c, s_accept_800dbe3c,
+        LevelSelectAddressViewOwners::s_s2prmpt1_bmp_800dbe2c,
+        s_accept_800dbe3c,
         FontFromStorage(&mFont2), 228, 220, -1, 260);
     pPromptElement[1] = item;
 
     item = new PromptScreenElement(
-        s_s2prmpt2_bmp_800dbe44, s_prompt_label_800dbe54,
+        LevelSelectAddressViewOwners::s_s2prmpt2_bmp_800dbe44,
+        DAT_800dbe54,
         FontFromStorage(&mFont2), 333, 220, -1, 260);
     pPromptElement[2] = item;
 
@@ -1034,7 +998,7 @@ LevelSelectScreen::~LevelSelectScreen()
     LevelSelect_DeleteVirtual(mBackground);
     FontFromStorage(&mFont2)->~Font();
     FontFromStorage(&mFont1)->~Font();
-    LevelSelect_DestroyScreenElementList(&ScreenElementList, 0);
+    ScreenElementList_DestroyAbi(&ScreenElementList, 0);
 }
 
 /**
@@ -1047,7 +1011,7 @@ LevelSelectScreen::~LevelSelectScreen()
  */
 void LevelSelectScreen::draw()
 {
-    LevelSelect_DrawScreenElementList(&ScreenElementList, 0, 0);
+    ScreenElementList.draw(0, 0);
     LevelSelect_DrawVirtual(mBackground, 0, 0, 1);
 }
 
@@ -1095,7 +1059,7 @@ void LevelSelectScreen::update()
         mpGoal->SetLevel(SelectedLevel, 0);
     }
 
-    LevelSelect_UpdateScreenElementList(&ScreenElementList);
+    ScreenElementList.update();
 }
 
 /**
@@ -1176,7 +1140,8 @@ SkaterNameScreenElement::SkaterNameScreenElement(
         (int *)__vt_23SkaterNameScreenElement;
     ::new (font) Font;
 
-    Font *sourceFont = FontManager::GetFont(s_s2font1_fnt_800dbdf0);
+    Font *sourceFont = FontManager::GetFont(
+        LevelSelectAddressViewOwners::s_s2font1_fnt_800dbdf0);
     *(LevelSelectFontAssignmentView *)&mFont =
         *(LevelSelectFontAssignmentView *)sourceFont;
 
@@ -1219,7 +1184,8 @@ SkaterNameScreenElement::SkaterNameScreenElement(
         if (versus != 0)
         {
             versus = LevelSelect_ConstructSpriteScreenElement(
-                versus, s_s2versus_bmp_800dbe5c,
+                versus,
+                LevelSelectAddressViewOwners::s_s2versus_bmp_800dbe5c,
                 -76, -36, -1, -1, 0, 0);
         }
         ScreenElementList.addItem((ScreenElement *)versus);
@@ -1266,7 +1232,7 @@ SkaterNameScreenElement::~SkaterNameScreenElement()
     ScreenElementList.ScreenElement.CClass.vtable =
         (int *)__vt_23SkaterNameScreenElement;
     reinterpret_cast<Font *>(&mFont)->~Font();
-    LevelSelect_DestroyScreenElementList(&ScreenElementList, 0);
+    ScreenElementList_DestroyAbi(&ScreenElementList, 0);
 }
 
 /**
@@ -1316,7 +1282,9 @@ GlobeScreenElement::GlobeScreenElement(
     M3dInit_SetFoggingParams(10, 6000, 0x800);
     M3dInit_InitAtStart();
 
-    Sprite2 *crosshair = new Sprite2(s_s2crossh_bmp_800dbe74, 1, 0, 0);
+    Sprite2 *crosshair = new Sprite2(
+        LevelSelectAddressViewOwners::s_s2crossh_bmp_800dbe74,
+        1, 0, 0);
     mpCrosshair = crosshair;
     crosshair->JustX = 1;
     mpCrosshair->JustY = 1;
@@ -1341,7 +1309,7 @@ GlobeScreenElement::~GlobeScreenElement()
     ClearRegion(mGlobeRegion, 1, 0);
     PSXRegion[mGlobeRegion].Filename[0] = 0;
     LevelSelect_DeleteVirtual(mpCrosshair);
-    LevelSelect_DestroyScreenElement(&ScreenElement, 0);
+    ScreenElement_DestroyAbi(&ScreenElement, 0);
 
 }
 
@@ -1403,7 +1371,7 @@ void GlobeScreenElement::update()
     }
     int crossStep = crossDelta >> 2;
     self->mCrossY = crossY + crossStep;
-    LevelSelect_UpdateScreenElement(&self->ScreenElement);
+    self->ScreenElement.update();
 }
 
 /**
@@ -1503,7 +1471,8 @@ LevelNameScreenElement::LevelNameScreenElement(int homeX, int homeY, int screenX
     ::new (FontFromStorage(&mFont1)) Font;
     ::new (FontFromStorage(&mFont2)) Font;
 
-    Font *sourceFont = FontManager::GetFont(s_s2font1_fnt_800dbdf0);
+    Font *sourceFont = FontManager::GetFont(
+        LevelSelectAddressViewOwners::s_s2font1_fnt_800dbdf0);
     *(LevelSelectFontAssignmentView *)&mFont1 =
         *(LevelSelectFontAssignmentView *)sourceFont;
 
@@ -1565,7 +1534,7 @@ LevelNameScreenElement::~LevelNameScreenElement()
         (int *)__vt_22LevelNameScreenElement;
     FontFromStorage(&mFont2)->~Font();
     FontFromStorage(&mFont1)->~Font();
-    LevelSelect_DestroyScreenElementList(&ScreenElementList, 0);
+    ScreenElementList_DestroyAbi(&ScreenElementList, 0);
 
 }
 
@@ -1609,7 +1578,7 @@ void LevelNameScreenElement::SetLevel(int level)
  */
 void LevelNameScreenElement::update()
 {
-    LevelSelect_UpdateScreenElementList(&ScreenElementList);
+    ScreenElementList.update();
 
     switch (mState)
     {
@@ -1674,7 +1643,7 @@ NameScreenElement::~NameScreenElement()
 {
     TextScreenElement.ScreenElement.CClass.vtable =
         (int *)__vt_17NameScreenElement;
-    LevelSelect_DestroyTextScreenElement(&TextScreenElement, 0);
+    TextScreenElement_DestroyAbi(&TextScreenElement, 0);
 
 }
 
@@ -1752,7 +1721,9 @@ VideoScreenElement::VideoScreenElement(int homeX, int homeY, int screenX, int sc
     }
 
     {
-        Sprite2 *sprite = new Sprite2(s_levna_bmp_800dbe8c, 1, 0, 0);
+        Sprite2 *sprite = new Sprite2(
+            LevelSelectAddressViewOwners::s_levna_bmp_800dbe8c,
+            1, 0, 0);
         mVideoSprite[1] = sprite;
     }
 
@@ -1762,7 +1733,8 @@ VideoScreenElement::VideoScreenElement(int homeX, int homeY, int screenX, int sc
         if (item != 0)
         {
             item = LevelSelect_ConstructSpriteScreenElement(
-                item, s_s2win5_bmp_800dbe98,
+                item,
+                LevelSelectAddressViewOwners::s_s2win5_bmp_800dbe98,
                 0, 0, -1, -1, 0, 0);
         }
         ScreenElementList.addItem(&item->ScreenElement);
@@ -1837,7 +1809,7 @@ VideoScreenElement::~VideoScreenElement()
     LevelSelect_DeleteVirtual(mVideoSprite[1]);
     Mem_Delete(mVideoPoly);
     Pack_Unpack(mVideoVramX.lowSignedHalf, mVideoVramY.lowSignedHalf);
-    LevelSelect_DestroyScreenElementList(&ScreenElementList, 0);
+    ScreenElementList_DestroyAbi(&ScreenElementList, 0);
 
 }
 
@@ -1883,23 +1855,21 @@ void VideoScreenElement::draw(int x, int y)
         int level = mLevel;
         SLevel *entry = &table[level];
         signed char movie = entry->STR;
-        Sprite2 *sprite;
+        typedef void (*DrawFunction)(Sprite2 *, int, int, int);
         if (movie == -27)
         {
-            sprite = mVideoSprite[0];
+            Sprite2 *sprite = mVideoSprite[0];
+            int *vtable = sprite->CClass.vtable;
+            ((DrawFunction)vtable[5])(
+                sprite, video_x, video_y, 0);
         }
         else
         {
-            sprite = mVideoSprite[1];
+            Sprite2 *sprite = mVideoSprite[1];
+            int *vtable = sprite->CClass.vtable;
+            ((DrawFunction)vtable[5])(
+                sprite, video_x, video_y, 0);
         }
-
-        // Preserve the target's a1/a2 virtual-draw argument lifetimes.
-        register int drawArgX asm("$5") = video_x;
-        int *vtable = sprite->CClass.vtable;
-        register int drawArgY asm("$6") = video_y;
-        typedef void (*DrawFunction)(Sprite2 *, int, int, int);
-        ((DrawFunction)vtable[5])(
-            sprite, drawArgX, drawArgY, 0);
     }
 
     if (mState == 2)
@@ -1922,7 +1892,7 @@ void VideoScreenElement::draw(int x, int y)
         }
     }
 
-    LevelSelect_DrawScreenElementList(&ScreenElementList, x, y);
+    ScreenElementList.draw(x, y);
 }
 
 /**
@@ -2001,7 +1971,7 @@ void VideoScreenElement::update()
         break;
     }
     }
-    LevelSelect_UpdateScreenElementList(&ScreenElementList);
+    ScreenElementList.update();
 }
 
 /**
@@ -2033,7 +2003,8 @@ GoalScreenElement::GoalScreenElement(int homeX, int homeY, int screenX, int scre
         &ScreenElement, homeX, homeY, screenX, screenY);
     ScreenElement.CClass.vtable = (int *)__vt_17GoalScreenElement;
 
-    unsigned int size = FileIO_Open(s_s2levl00_bmp_800dbea4);
+    unsigned int size = FileIO_Open(
+        LevelSelectAddressViewOwners::s_s2levl00_bmp_800dbea4);
     unsigned char *bmpBuf = (unsigned char *)Mem_New(size, 1, 1);
     FileIO_Load(bmpBuf);
     FileIO_Sync();
@@ -2073,7 +2044,9 @@ GoalScreenElement::GoalScreenElement(int homeX, int homeY, int screenX, int scre
     do
     {
         int num = order[i];
-        sprintf(name, s_s2levl0_d_bmp_800dbeb4, num % 9 + 1);
+        sprintf(name,
+                LevelSelectAddressViewOwners::s_s2levl0_d_bmp_800dbeb4,
+                num % 9 + 1);
         mSpoolID[num] = Spooler::SpoolMgr->AddFile(name, 0);
         i++;
     } while (i < LevelSelectLevelCount);
@@ -2102,7 +2075,7 @@ GoalScreenElement::~GoalScreenElement()
         ptr++;
     } while (i < LevelSelectLevelCount);
     Spooler::SpoolMgr->Reset();
-    LevelSelect_DestroyScreenElement(&ScreenElement, 0);
+    ScreenElement_DestroyAbi(&ScreenElement, 0);
 
 }
 
@@ -2189,7 +2162,7 @@ void GoalScreenElement::update()
         break;
     }
 
-    LevelSelect_UpdateScreenElement(&ScreenElement);
+    ScreenElement.update();
 }
 
 /**

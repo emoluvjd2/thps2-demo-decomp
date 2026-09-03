@@ -64,35 +64,32 @@ static inline TrickTipsSkater *TrickTips_AsSkater(CBruce *skater)
     return reinterpret_cast<TrickTipsSkater *>(skater);
 }
 
-// === Extern "C" forward declarations ===
-extern "C" int TrickTipMonitorVtable asm("__vt_16CTrickTipMonitor");
-extern "C" int TrickTipMonitorCompleteVtable
-    asm("__vt_16CTrickTipMonitor_complete");
+// === Vtable forward declarations ===
+#define TRICKTIPS_DECLARE_MONITOR_VTABLE_ADDRESSES
+#include "TRICKTIPS.h"
 #include "MECHLIST.h"
 
 /** Deferred owner-local destructor bodies referenced by the two vtables. */
-struct TrickTipsDestructorBodies
-{
-    static void Monitor(CTrickTipMonitor *self, int __in_chrg)
-        asm("__DOT__16CTrickTipMonitor");
-
-    static void Base(CClass *self, int __in_chrg)
-        asm("__DOT__6CClass_80073FD8");
-};
+extern "C" {
+static inline void __DOT__16CTrickTipMonitor(
+    CTrickTipMonitor *self, int __in_chrg);
+static inline void __DOT__6CClass_80073FD8(
+    CClass *self, int __in_chrg);
+}
 
 /** Restore the private base vtable and optionally release the object. */
-inline void TrickTipsDestructorBodies::Base(CClass *self, int __in_chrg)
+inline void __DOT__6CClass_80073FD8(CClass *self, int __in_chrg)
 {
-    self->vtable = &TrickTipMonitorVtable;
+    self->vtable = &__vt_16CTrickTipMonitor;
     if (__in_chrg & 1)
         CClass::operator delete(self);
 }
 
 /** Destroy the complete monitor through its recovered owner-local vtable. */
-inline void TrickTipsDestructorBodies::Monitor(
+inline void __DOT__16CTrickTipMonitor(
     CTrickTipMonitor *self, int __in_chrg)
 {
-    self->CClass.vtable = &TrickTipMonitorVtable;
+    self->CClass.vtable = &__vt_16CTrickTipMonitor;
     if (__in_chrg & 1)
         CClass::operator delete(self);
 }
@@ -137,7 +134,6 @@ static TrickTipLongTextBlock TrickTipLongText
 };
 
 /** Labels prepended to trick-tip and reminder messages. */
-extern "C" {
 static char TrickTipLabel[] __attribute__((section(".sdata"), aligned(4))) =
     "TIP: ";
 char *TEXT_TIP __attribute__((section(".sdata"))) = TrickTipLabel;
@@ -145,13 +141,11 @@ static char TrickTipRememberLabel[]
     __attribute__((section(".sdata"), aligned(4))) = "REMEMBER: ";
 char *TEXT_REMEMBER __attribute__((section(".sdata"))) =
     TrickTipRememberLabel;
-}
 
 /**
  * Complete-object vtable installed by the static monitor constructor.
  */
-extern "C" int TrickTipMonitorCompleteVtable
-    asm("__vt_16CTrickTipMonitor_complete")
+int __vt_16CTrickTipMonitor_complete
     __attribute__((section(".sdata"), aligned(8))) = 0;
 struct TrickTipMonitorCompleteVtableTailLayout
 {
@@ -163,14 +157,14 @@ static TrickTipMonitorCompleteVtableTailLayout
     TrickTipMonitorCompleteVtableTail
     __attribute__((section(".sdata"), aligned(4))) = {
     0,
-    &TrickTipsDestructorBodies::Monitor,
+    &__DOT__16CTrickTipMonitor,
     0,
 };
 
 /**
  * Destruction-phase vtable installed before the CClass base destructor.
  */
-extern "C" int TrickTipMonitorVtable asm("__vt_16CTrickTipMonitor")
+int __vt_16CTrickTipMonitor
     __attribute__((section(".sdata"), aligned(4))) = 0;
 struct TrickTipMonitorVtableTailLayout
 {
@@ -180,7 +174,7 @@ struct TrickTipMonitorVtableTailLayout
 static TrickTipMonitorVtableTailLayout TrickTipMonitorVtableTail
     __attribute__((section(".sdata"), aligned(4))) = {
     0,
-    &TrickTipsDestructorBodies::Base,
+    &__DOT__6CClass_80073FD8,
 };
 
 /**
@@ -385,13 +379,13 @@ struct TrickTipMonitorStorage : CTrickTipMonitor
     /** Install the complete-object vtable during static construction. */
     TrickTipMonitorStorage()
     {
-        CClass.vtable = &TrickTipMonitorCompleteVtable;
+    CClass.vtable = &__vt_16CTrickTipMonitor_complete;
     }
 
     /** Restore the destruction-phase vtable before static teardown. */
     ~TrickTipMonitorStorage()
     {
-        CClass.vtable = &TrickTipMonitorVtable;
+    CClass.vtable = &__vt_16CTrickTipMonitor;
     }
 };
 

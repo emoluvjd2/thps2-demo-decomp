@@ -24,13 +24,14 @@ struct SCrowd {
     int Pitch;
 };
 
-extern "C" int Crowd_Bored;
+#define CROWD_OWNER_DECLARATIONS
+#include "CROWD.h"
+#undef CROWD_OWNER_DECLARATIONS
 #include "GLEVEL.h"
 
 #include "SFX.h"
 #include "STATS.h"
 #include "UTILS.h"
-#include "CROWD.h"
 
 SCrowd Crowd[1] __attribute__((section(".data"))) = {};
 
@@ -39,6 +40,9 @@ static char CrowdPitchFormat[16]
     __attribute__((section(".sdata"))) = "Pitch = %d \n";
 
 #include <STDIO.H>
+
+// === Owner-local function declarations ===
+void Crowd_Boo(int volume);
 
 
 // === Function implementations (address order) ===

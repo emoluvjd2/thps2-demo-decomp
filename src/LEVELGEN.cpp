@@ -258,19 +258,30 @@ public:
     void KillModel(int x, int z, int slot);
 };
 
-/** Typed owner-local construction and destruction entry points. */
-void LevelGenerator_destruct(LevelGenerator *, int)
-    asm("_._14LevelGenerator");
-EditorInModel *LevelGen_EditorInModelCtor(EditorInModel *)
-    asm("__13EditorInModel");
-RailInfo *LevelGen_RailInfoCtor(RailInfo *) asm("__8RailInfo");
-void LevelGen_RailInfoDestructor(RailInfo *, int) asm("_._8RailInfo");
-void LevelGen_InitEditorPolyBuffer(int)
-    asm("InitPolyBuf__13EditorInModelb");
-int LevelGen_SetEditorModelDataSize(EditorOutModel *, void *)
-    asm("SetModelDataSize__14EditorOutModelb");
-int LevelGen_CreateEditorModelData(EditorOutModel *, char *, void *)
-    asm("CreateModelData__14EditorOutModelPcb");
+/** Typed owner-local lifecycle and method ABI entry points. */
+#define LEVELGEN_DECLARE_DESTRUCTOR_ABI
+#define LEVELGEN_DESTRUCTOR_NAME LevelGenerator_destruct
+#define LEVELGEN_DESTRUCTOR_RECEIVER LevelGenerator
+#include "LEVELGEN.h"
+namespace LevelGenConstructorABI
+{
+#define GENOBJS_ABI_SELECTORS_ONLY
+#define GENOBJS_DECLARE_EDITOR_IN_MODEL_CONSTRUCTOR_ABI
+#define GENOBJS_EDITOR_IN_MODEL_CONSTRUCTOR_TYPE EditorInModel
+#define GENOBJS_DECLARE_LEVELGEN_EDITOR_METHOD_ABI
+#define GENOBJS_LEVELGEN_EDITOR_OUT_MODEL_TYPE EditorOutModel
+#include "GENOBJS.h"
+}
+#define RAILINFO_DECLARE_DESTRUCTOR
+#define RAILINFO_DESTRUCTOR_NAME LevelGen_RailInfoDestructor
+#define RAILINFO_DESTRUCTOR_RECEIVER RailInfo
+#include "RAILINFO.h"
+#define LevelGen_InitEditorPolyBuffer \
+    LevelGenConstructorABI::InitPolyBuf__13EditorInModelb
+#define LevelGen_SetEditorModelDataSize \
+    LevelGenConstructorABI::SetModelDataSize__14EditorOutModelb
+#define LevelGen_CreateEditorModelData \
+    LevelGenConstructorABI::CreateModelData__14EditorOutModelPcb
 
 // Natural C++ spellings for free-function imports used only by this owner.
 #include "SPOOL.h"
@@ -309,8 +320,14 @@ typedef char LevelGen_LevelGenerator_size_must_be_42548[(sizeof(LevelGenerator) 
 
 /** Editor grid dimensions and generated-region defaults. */
 int GridSize __attribute__((section(".sdata"))) = 24;
-static char LevelGen_OutputNameStorage[8] asm("DAT_800da664")
+namespace LevelGenAddressViewOwners
+{
+extern "C"
+{
+static char DAT_800da664[8]
     __attribute__((section(".sdata"))) = "edit";
+}
+}
 int LevelGenerator::OutRegion
     __attribute__((section(".sdata"))) = 0;
 int _14LevelGenerator_GridCellHeight
@@ -320,15 +337,17 @@ int _14LevelGenerator_GridCellWidth
 
 // The original compilation addresses this fixed name as an ordinary object,
 // rather than through the small-data base used for the surrounding globals.
-extern signed char LevelGen_OutputName[] asm("DAT_800da664")
-    __attribute__((aligned(4)));
+#define LEVELGEN_DECLARE_OUTPUT_NAME_ADDRESS_VIEW
+#include "LEVELGEN.h"
 
 // GCC 2.x emits a private copy of `CClass::~CClass` beside a private base
 // vtable in every owner that derives from CClass.  `MAIN.SYM` records 25 such
 // `_._6CClass` copies and names no base vtable, so both are file-local here.
-// The filesystem-safe spelling keeps the per-address target assembly reachable.
-static void LevelGen_ClassDestructor(CClass *self, int __in_chrg)
-    asm("__DOT__6CClass_8005A060");
+// The legal per-address identifier keeps the private target copy distinct.
+extern "C"
+{
+static void __DOT__6CClass_8005A060(CClass *self, int __in_chrg);
+}
 
 // C++ forbids taking a destructor's address, so the owner source provides an
 // addressable ABI alias for the symbol this TU defines below.
@@ -345,7 +364,7 @@ static int LevelGen_BaseVTable
     __attribute__((section(".sdata"), aligned(8))) = 0;
 static int LevelGen_BaseVTableIndex __attribute__((section(".sdata"))) = 0;
 static int LevelGen_BaseVTableDtor __attribute__((section(".sdata"))) =
-    (int)&LevelGen_ClassDestructor;
+    (int)&__DOT__6CClass_8005A060;
 
 /** Model-placement grid cleared by LevelGenerator::Init. */
 GridCell _14LevelGenerator_GridTab[24][24]
@@ -364,11 +383,11 @@ LevelGenerator::LevelGenerator(bool game_build)
     int i = 0x95;
     do
     {
-        LevelGen_EditorInModelCtor(ptr);
+        LevelGenConstructorABI::__13EditorInModel(ptr);
         i--;
         ptr++;
     } while (i != -1);
-    LevelGen_RailInfoCtor(&OutRails);
+    RailInfo_ctor(&OutRails);
     GameBuild = game_build;
     SourceRegion = -1;
     ShellRegion = -1;
@@ -1768,7 +1787,7 @@ u32 *LevelGenerator::CreatePSX(int *ret_region, bool refresh_models)
 
     ClearRegion(LevelGenerator::OutRegion, 0, 0);
     __builtin_memcpy(PSXRegion[LevelGenerator::OutRegion].Filename,
-                     LevelGen_OutputName, 5);
+                     DAT_800da664, 5);
     *ret_region = LevelGenerator::OutRegion;
 
     pSourcePSX = PSXRegion[SourceRegion].pPSX;
@@ -2070,11 +2089,11 @@ int LevelGenerator::CreateZonePacket(int *at)
 
     if (actual_create)
     {
-        for (int z = 0; z < 20; z++)
+        for (int j = 0; j < 20; j++)
         {
-            for (int x = 0; x < 20; x++)
+            for (int i = 0; i < 20; i++)
             {
-                ZoneTab[z][x].num = 0;
+                ZoneTab[j][i].num = 0;
             }
         }
     }
@@ -2089,16 +2108,16 @@ int LevelGenerator::CreateZonePacket(int *at)
             (i == 0) ? OutModelList : FloorModelList;
         for (; model != 0; model = model->Next)
         {
-            int iz1 = 20 - (model->ZCell * _14LevelGenerator_GridCellWidth) / zone_length;
+            int zz1 = 20 - (model->ZCell * _14LevelGenerator_GridCellWidth) / zone_length;
             int ix0 = (model->XCell * _14LevelGenerator_GridCellWidth) / zone_length;
             int ix1 = ((model->XCell + model->WCell) * _14LevelGenerator_GridCellWidth +
                        zone_length - 1) / zone_length;
-            int iz0 = 18 - ((model->ZCell + model->LCell) * _14LevelGenerator_GridCellWidth +
+            int zz0 = 18 - ((model->ZCell + model->LCell) * _14LevelGenerator_GridCellWidth +
                             zone_length - 1) / zone_length;
 
             for (int zx = ix0; zx < ix1; zx++)
             {
-                for (int zz = iz0; zz < iz1; zz++)
+                for (int zz = zz0; zz < zz1; zz++)
                 {
                     if (zx >= 0 && zz >= 0 && zx < 20 && zz < 20)
                     {
@@ -2177,31 +2196,17 @@ int LevelGenerator::CreateZonePacket(int *at)
         return ZoneBytes;
     }
 
-    LevelGenZonePacketHeader *header = (LevelGenZonePacketHeader *)at;
-    header->Type = 10;
-    header->PayloadBytes = ZoneBytes - 8;
-    header->MinX = -(_14LevelGenerator_GridCellWidth * 0xC000);
-    header->MinZ = header->MinX;
-    header->MaxX = _14LevelGenerator_GridCellWidth * 0xC000;
-    header->MaxZ = header->MaxX;
-    header->Width = 20;
-    header->Height = 20;
+    at[0] = 10;
+    at[1] = ZoneBytes - 8;
+    at[2] = -(_14LevelGenerator_GridCellWidth * 0xC000);
+    at[3] = at[2];
+    at[4] = _14LevelGenerator_GridCellWidth * 0xC000;
+    at[5] = at[4];
+    ((short *)at)[12] = 20;
+    ((short *)at)[13] = 20;
 
-    /*
-     * NOTE (measured 2026-08-05): the original reserves FOUR fixed words per
-     * cell, not two.  Its index advances by 3 at the `num` store (`addiu
-     * $t2,$t2,3`) plus 1 per item plus 1 for the terminator, and the walking
-     * pointer starts each cell with `addiu $a1,$a1,8` -- i.e. there is an
-     * `index += 2;` before the `num` store, and two words per cell are left
-     * unwritten.  That is what makes `ZoneBytes = entries*4 + 0x191C` add up
-     * (400 cells x 16 bytes + a 28-byte header = 0x191C).  Applied 2026-08-05
-     * together with the full-expression cell reads (the original reloads
-     * `ZoneTab` four times per cell, so there is no cached `ZoneCell *`) and
-     * the target's header-store order; the combination is what let the tail
-     * re-align.  Still 4 instructions short here: the original recomputes
-     * `zz*4` per outer iteration (`sll $t8,$s0,2`) instead of strength-
-     * reducing it, and keeps three extra giv copies in the n-loop preheader.
-    */
+    /* Each cell reserves two words before its count; the count and trailing
+     * zero make the four fixed words included in ZoneBytes. */
     int index = sizeof(LevelGenZonePacketHeader) / sizeof(int);
     for (i = 0; i < 20; i++)
     {
@@ -2465,89 +2470,56 @@ void LevelGenerator::UnhideFaces(EditorOutModel *das_model, bool on)
         int m;
         int n;
 
-        n = n0;
         m = m0 - 1;
-        if ((m >= 0) && (n < n1))
+        if (m >= 0)
         {
-            do
+            for (n = n0; n < n1; n++)
             {
                 if (OutModelMap[n][m].modelInSlot[s] != 0)
                 {
                     OutModelMap[n][m].modelInSlot[s]->UnhideSharedFaces(
                         on, das_model, 0);
                 }
-                n++;
-            } while (n < n1);
+            }
         }
 
-        n = n0;
         m = m1;
-        if ((m < 24) && (n < n1))
+        if (m < 24)
         {
-            do
+            for (n = n0; n < n1; n++)
             {
                 if (OutModelMap[n][m].modelInSlot[s] != 0)
                 {
                     OutModelMap[n][m].modelInSlot[s]->UnhideSharedFaces(
                         on, das_model, 2);
                 }
-                n++;
-            } while (n < n1);
+            }
         }
 
         n = n0 - 1;
-        /*
-         * Not improving with current approaches (2 real mismatches, 98.7%).
-         * The original compares `$s7` (m0) against `$s3` (m1) and only then
-         * copies into `$s0`; this form compares the copy.  Two edits tried and
-         * measured: hoisting `m = m0` inside the guard swaps the pair but costs
-         * 139 further mismatches (re-confirmed 2026-07-29), and writing the
-         * guard as `m0 < m1` while leaving the copy in place is a no-op --
-         * GCC knows `m == m0` there and folds it back to the copy.  Rewriting
-         * the block as a real `for (m = m0; m < m1; m++)` -- the shape GCC
-         * normally rotates into guard-on-init plus copy -- is likewise a no-op.
-         *
-         * Correct classification (2026-08-05): this is SCHEDULING, not
-         * expression shape.  The target's `move $s0,$s7` sits BETWEEN the `slt`
-         * and its `beqz`, filling the gap; ours emits it before the `slt`.  The
-         * two are independent -- the copy writes $s0, the compare reads
-         * $s7/$s3 -- so only the instruction scheduler picks the order, and no
-         * source spelling reaches it.
-         *
-         * 2026-08-05, three more measured and refuted: a real `while (m < m1)`
-         * loop inside `if (n >= 0)` with the copy left outside (no change);
-         * nested `if (n >= 0) { m = m0; if (m0 < m1) {...} }`, i.e. the inner
-         * guard reading m0 with the copy above it (no change -- cse still
-         * folds m0 to the copy); and swapping the `n = n0 - 1;` / `m = m0;`
-         * statement order (36 real, a full reallocation cascade).
-         */
-        m = m0;
-        if ((n >= 0) && (m < m1))
+        if (n >= 0)
         {
-            do
+            for (m = m0; m < m1; m++)
             {
                 if (OutModelMap[n][m].modelInSlot[s] != 0)
                 {
                     OutModelMap[n][m].modelInSlot[s]->UnhideSharedFaces(
                         on, das_model, 1);
                 }
-                m++;
-            } while (m < m1);
+            }
         }
 
         n = n1;
-        m = m0;
-        if ((n < 24) && (m < m1))
+        if (n < 24)
         {
-            do
+            for (m = m0; m < m1; m++)
             {
                 if (OutModelMap[n][m].modelInSlot[s] != 0)
                 {
                     OutModelMap[n][m].modelInSlot[s]->UnhideSharedFaces(
                         on, das_model, 3);
                 }
-                m++;
-            } while (m < m1);
+            }
         }
     }
 }
@@ -2613,7 +2585,7 @@ void LevelGenerator::HideWalls(bool hide)
 
     if (i < num_models)
     {
-        register int offset asm("$2") = i * 4;
+		register int offset asm("$2") = i * 4;
         register u32 *pModelTable asm("$4") =
             (u32 *)(offset + (int)model_table_base);
         SModel *wall;
@@ -2789,7 +2761,7 @@ void LevelGenerator::KillModel(int x, int z, int slot)
 
 // GCC emitted this private `CClass::~CClass` copy last in the owner's text, so
 // it stays at the end of the translation unit.
-static void LevelGen_ClassDestructor(CClass *self, int __in_chrg)
+static void __DOT__6CClass_8005A060(CClass *self, int __in_chrg)
 {
     self->vtable = &LevelGen_BaseVTable;
     if (__in_chrg & 1)

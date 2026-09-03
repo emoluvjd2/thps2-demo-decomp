@@ -1,6 +1,16 @@
 #ifndef CROWD_INC_H
 #define CROWD_INC_H
 
+#ifdef CROWD_OWNER_DECLARATIONS
+/**
+ * Pending crowd-reaction intensity consumed by the CROWD owner.
+ *
+ * The owner selector retains the original GP-relative external declaration
+ * without exposing unused state through the public crowd API.
+ */
+extern int Crowd_Bored;
+#endif
+
 /** Initialize the crowd-audio subsystem. */
 void Crowd_Init(void);
 
@@ -9,9 +19,6 @@ void Crowd_Start(void);
 
 /** Stop every active crowd voice. */
 void Crowd_Stop(void);
-
-/** Move one crowd-audio scalar toward its target without overshooting. */
-int Crowd_MoveTowards(int &value, int target, int step);
 
 /** Update the active crowd voice and boredom reactions. */
 void Crowd_Update(void);
@@ -24,8 +31,5 @@ void Crowd_Oww(int speed);
 
 /** Play a crowd surprise reaction for one score. */
 void Crowd_Ahh(int score);
-
-/** Play a negative crowd reaction at the requested volume. */
-void Crowd_Boo(int volume);
 
 #endif // CROWD_INC_H

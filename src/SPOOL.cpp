@@ -4,15 +4,11 @@
 // Address range: 0x800674F8 - 0x80069768
 // Compiled with cc1plus (GCC 2.91.66-psx). Compiler auto-mangles symbol names.
 
-extern "C" {
-
 /** One linked animation packet owned by the spooler. */
 struct AnimPacket {
     unsigned int *pPacket;
     struct AnimPacket *pNext;
 };
-
-}
 
 #include "FILEIO.h"
 
@@ -117,7 +113,6 @@ void ExtraAnims_AddSkatersAnims(void);
  * filename strings and EnvModelChecksums.  HashIndex and pCurrentTex form the
  * complete owner-local .sbss contribution.
  */
-extern "C" {
 #define SPOOLQUEUE_OWNER_DECLARATION
 #define SPOOLQUEUE_WITHIN_C_LINKAGE
 #include "SPOOLQUEUE.h"
@@ -126,6 +121,9 @@ SPSXRegion PSXRegion[40] __attribute__((section(".data"))) = {};
 Texture *TextureChecksumHashTable[512] __attribute__((section(".data"))) = {};
 unsigned int *Memories[40] __attribute__((section(".data"))) = {};
 
+#define ENVREGIONS_OWNER_DECLARATION
+#define ENVREGIONS_WITHIN_C_LINKAGE
+#include "ENVREGIONS.h"
 int EnvRegions[2] __attribute__((section(".sdata"))) = {-1, -1};
 static u32 *pCurrentTexWibPacket = 0;
 u32 *pTexWibPacket[2] __attribute__((section(".sdata"))) = {};
@@ -134,16 +132,18 @@ u32 *pTexWibPacket[2] __attribute__((section(".sdata"))) = {};
 #include "ENVIROLIST.h"
 Item *EnviroList = 0;
 int OtherEnvIndex = 0;
+#define SPOOLPOS_OWNER_DECLARATION
+#define SPOOLPOS_WITHIN_C_LINKAGE
+#include "SPOOLPOS.h"
 int SpoolPos = 0;
 static int FreePos = 0;
 AnimPacket *AnimPackets = 0;
 #define TOTALTEXTUREUSAGE_OWNER_DECLARATION
-#define TOTALTEXTUREUSAGE_WITHIN_C_LINKAGE
 #include "TOTALTEXTUREUSAGE.h"
 int TotalTextureUsage = 0;
 
 /** Lower-case PSX filename extension used while resolving packed assets. */
-static char Spool_PSXExtension_owner[8] asm("DAT_800daa08")
+static char DAT_800daa08[8]
     __attribute__((section(".sdata"))) = ".psx";
 
 /** Current asynchronous spool phase, recorded as local SpoolMode by MAIN.SYM. */
@@ -153,9 +153,9 @@ static int SpoolMode = 0;
  * Filename formats used when loading a model's PSH and enumerating its part
  * textures.
  */
-static char Spool_PSHNameFormat_owner[8] asm("s__s_psh_800daa14")
+static char s__s_psh_800daa14[8]
     __attribute__((section(".sdata"))) = "%s.psh";
-char Spool_PartNameFormat_owner[8] asm("s__spart__800daa1c")
+char s__spart__800daa1c[8]
     __attribute__((section(".sdata"))) = "%spart_";
 
 u32 *EnvModelChecksums[2] __attribute__((section(".sdata"))) = {};
@@ -164,22 +164,16 @@ static int HashIndex;
 static Texture *pCurrentTex;
 
 /** Diagnostic emitted after an animation packet has been compacted in place. */
-static char Spool_ShrinkingAnimationMessage_owner[36]
-    asm("s_Shrinking_animation_800b2bb0")
+static char s_Shrinking_animation_800b2bb0[36]
     __attribute__((section(".rdata"))) =
         "Shrinking animation %s.psx to %d\n";
-}
 
 // C-linkage data and PsyQ services.
 extern "C" {
-#define DEFAULTANIMATIONS_WITHIN_C_LINKAGE
 #define DEFAULTANIMATIONS_SIZED_DECLARATION
 #include "DEFAULTANIMATIONS.h"
-extern char SpoolPSXExtension[] asm("DAT_800daa08");
-extern char SpoolPSHNameFormat[] asm("s__s_psh_800daa14");
-extern char SpoolPartNameFormat[] asm("s__spart__800daa1c");
-extern char SpoolShrinkingAnimationMessage[]
-    asm("s_Shrinking_animation_800b2bb0");
+#define SPOOL_DECLARE_OWNER_ADDRESS_VIEWS
+#include "SPOOL.h"
 }
 
 // Address-ordered owner declarations retained for the original compiler's
@@ -1902,7 +1896,7 @@ int Spool_PSX(char *Name, int IsEnviro, int KeepTextures, int WhichHeap) {
     }
 
     PSXRegion[freeregion].WhichHeap = WhichHeap;
-    LoadNameExt(Name, SpoolPSXExtension);
+    LoadNameExt(Name, SpoolAddressViews::DAT_800daa08);
 
     if (IsEnviro != 2) {
         SpoolQ[FreePos].FileType = IsEnviro != 0;
@@ -2375,7 +2369,7 @@ void Spool_StripModel(int AnimRegion, s16 *pAnimationList) {
             (u32)((u8 *)pAnimPSX - (u8 *)PSXRegion[AnimRegion].pPSX);
         Mem_Shrink((void *)PSXRegion[AnimRegion].pPSX, NewLen);
         PSXRegion[AnimRegion].Size = NewLen;
-        printf(SpoolShrinkingAnimationMessage,
+        printf(SpoolAddressViews::s_Shrinking_animation_800b2bb0,
             &PSXRegion[AnimRegion], NewLen);
     }
 }
@@ -2470,8 +2464,8 @@ char * Spool_LoadPSH(
     char prefixString[16];
 
     // Build PSH filename and search pattern
-    sprintf(filename, SpoolPSHNameFormat, pPSHName);
-    sprintf(prefixString, SpoolPartNameFormat, pPSHName);
+    sprintf(filename, SpoolAddressViews::s__s_psh_800daa14, pPSHName);
+    sprintf(prefixString, SpoolAddressViews::s__spart__800daa1c, pPSHName);
     LowerCase(prefixString);
 
     // Load PSH file from disc, null-terminate, and lowercase

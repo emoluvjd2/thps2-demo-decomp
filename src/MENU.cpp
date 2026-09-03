@@ -17,8 +17,7 @@ struct Slice;
 #include "IMAGEBASE.h"
 
 /** Sliced image used for the optional menu arrows. */
-struct SlicedImage2 {
-    Image Image;
+struct SlicedImage2 : Image {
     Slice *SliceTab;
     short W;
     short H;
@@ -73,33 +72,22 @@ static inline void SetMenuItemXY(VMenuItem *item, int x, int y) {
     ((void (*)(VMenuItem *, int, int))item->vtable[3])(item, x, y);
 }
 
-// === External function declarations ===
+// === Named ABI call views ===
 #include <STDIO.H>
 #include <STRINGS.H>
-extern "C" void MenuItem_dtor(MenuItem *self, int __in_chrg) asm("_._8MenuItem");
-extern "C" VMenuItem *VMenuItem_ctor(VMenuItem *self, int id) asm("__9VMenuItemi");
-extern "C" TextMenuItem *TextMenuItem_ctor(TextMenuItem *self, int id, const char *text,
-                                           TextMenuProperties *properties)
-    asm("__12TextMenuItemiPCcR18TextMenuProperties");
-extern "C" TitleMenuItem *TitleMenuItem_ctor(
-    TitleMenuItem *self, int id, const char *text,
-    TextMenuProperties *properties)
-    asm("__13TitleMenuItemiPCcR18TextMenuProperties");
+#define MENU_DECLARE_ITEM_CONSTRUCTOR_ABI
+#include "MENU.h"
+#define VMenuItem_ctor MenuConstructorAbi::__9VMenuItemi
 #include "IMAGE.h"
 
 /** Font name whose menu-specific scale is selected below. */
-extern "C" {
-static char MenuInGameFontName[12] asm("s_ingame1_fnt_800dc1b0")
+static char s_ingame1_fnt_800dc1b0[12]
     __attribute__((section(".sdata"), aligned(4))) = "ingame1.fnt";
-}
 
 // MENU.H's private small-data tables belong to the original menu.obj.  Keep
 // them after the owner's font-name contribution in the target section order.
-static void Menu_DestroyTextMenuPropertiesAbi(
-    TextMenuProperties *self, int __in_chrg)
-    asm("_._18TextMenuProperties");
-static void Menu_ClassDestructor(CClass *self, int __in_chrg)
-    asm("__DOT__6CClass_800897F4");
+#define MENU_DECLARE_OWNER_SMALL_DATA_DESTRUCTOR_ABI
+#include "MENU.h"
 
 static int Menu_TextPropsVTable
     __attribute__((section(".sdata"), aligned(8))) = 0;
@@ -111,266 +99,143 @@ static int Menu_BaseVTable
     __attribute__((section(".sdata"), aligned(8))) = 0;
 static int Menu_BaseVTableIndex __attribute__((section(".sdata"))) = 0;
 static void (*Menu_BaseVTableDtor)(CClass *, int)
-    __attribute__((section(".sdata"))) = Menu_ClassDestructor;
+    __attribute__((section(".sdata"))) = __DOT__6CClass_800897F4;
 
-// === Free function declarations ===
-#include "MENUINPUT.h"
-
-// === Extern "C" forward declarations ===
-extern "C" VerticalMenu2 *Menu_VerticalMenu2_ctor(
-    VerticalMenu2 *, int, int, int, int, int, int, int)
-    asm("__13VerticalMenu2iiiiiii");
-extern "C" void Menu_VerticalMenu2_dtor(VerticalMenu2 *, int)
-    asm("_._13VerticalMenu2");
-extern "C" void Menu_VerticalMenu2_update(VerticalMenu2 *)
-    asm("update__13VerticalMenu2");
-extern "C" ScrollingMenu2 *Menu_ScrollingMenu2_ctor(
-    ScrollingMenu2 *, int, int, int, int, int, int)
-    asm("__14ScrollingMenu2iiiiii");
-extern "C" void Menu_ScrollingMenu2_dtor(ScrollingMenu2 *, int)
-    asm("_._14ScrollingMenu2");
-extern "C" void Menu_ScrollingMenu2_activate(ScrollingMenu2 *)
-    asm("activate__14ScrollingMenu2");
-extern "C" void Menu_ScrollingMenu2_draw(ScrollingMenu2 *)
-    asm("draw__14ScrollingMenu2");
-extern "C" void Menu_ScrollingMenu2_update(ScrollingMenu2 *)
-    asm("update__14ScrollingMenu2");
-extern "C" void Menu_ScrollingMenu2_addItem(ScrollingMenu2 *, VMenuItem *)
-    asm("addItem__14ScrollingMenu2P9VMenuItem");
-extern "C" TextMenuWrapper *TextMenuWrapper_ctor(
-    TextMenuWrapper *, const char **, int *, int, const char *, bool)
-    asm("__15TextMenuWrapperPCPcPiiPcb");
-extern "C" void Menu_TextMenuWrapper_dtor(TextMenuWrapper *, int)
-    asm("_._15TextMenuWrapper");
-extern "C" void Menu_TextMenuWrapper_HandleInput(TextMenuWrapper *)
-    asm("HandleInput__15TextMenuWrapper");
-extern "C" int Menu_TextMenuWrapper_TestComplete(TextMenuWrapper *)
-    asm("TestComplete__15TextMenuWrapper");
-extern "C" void Menu_DestroySelectMenuItemAbi(SelectMenuItem *, int)
-    asm("_._14SelectMenuItem");
-extern "C" int Menu_BasicMenu_getHighlighted(BasicMenu *)
-    asm("getHighlighted__9BasicMenu");
-extern "C" void Menu_BasicMenu_setArrows(
-    BasicMenu *, SlicedImage2 *, SlicedImage2 *, int)
-    asm("setArrows__9BasicMenuP12SlicedImage2T1i");
-extern "C" void Menu_SelectMenuItem_setXY(SelectMenuItem *, int, int)
-    asm("setXY__14SelectMenuItemii");
-extern "C" void Menu_SelectMenuItem_draw(SelectMenuItem *)
-    asm("draw__14SelectMenuItem");
-extern "C" void Menu_SelectMenuItem_processPress(SelectMenuItem *, int)
-    asm("processPress__14SelectMenuItemi");
+// === Named ABI owner and address views ===
+#define SCREENTOOLS_DECLARE_VERTICAL_MENU2_CONSTRUCTOR
+#define SCREENTOOLS_AGGREGATE_LAYOUT_ONLY
+#include "SCREENTOOLS.h"
+#undef SCREENTOOLS_AGGREGATE_LAYOUT_ONLY
+#define VerticalMenu2_ctor \
+    VerticalMenu2ConstructorABI::__13VerticalMenu2iiiiiii
+#define MENU_DECLARE_CONTAINER_OWNER_ABI_HEAD
+#define MENU_DECLARE_TEXT_WRAPPER_CONSTRUCTOR_ABI
+#define MENU_TEXT_WRAPPER_CONSTRUCTOR_RECEIVER TextMenuWrapper
+#define MENU_DECLARE_CONTAINER_OWNER_ABI_TAIL
+#include "MENU.h"
 
 // === MENU.H-emitted method bindings owned by menu.obj ===
-extern "C" void Menu_DestroyTitleMenuItemAbi(
-    TitleMenuItem *self, int __in_chrg) asm("_._13TitleMenuItem");
-static void Menu_DestroyVMenuItemAbi(VMenuItem *self, int __in_chrg)
-    asm("_._9VMenuItem");
+#define MENU_DECLARE_ITEM_OWNER_DESTRUCTOR_ABI
+#include "MENU.h"
 
 typedef void (*MenuVirtualFunction)(void);
 
-/*
- * Most address-only aliases use the table's erased function-pointer view to
- * avoid asking the old C++ front end to resolve overloaded members.  The
- * highlighted-id slot keeps its proven int return and receiver type, so its
- * two table entries explicitly adapt that typed address to the erased view.
- */
-extern "C" void MenuV_DtorTextMenuWrapper(void)
-    asm("_._15TextMenuWrapper");
-extern "C" void MenuV_DtorMenuWrapper(void)
-    asm("_._11MenuWrapper");
-extern "C" void MenuV_DtorScrollingMenu2(void)
-    asm("_._14ScrollingMenu2");
-extern "C" void MenuV_DtorVerticalMenu2(void)
-    asm("_._13VerticalMenu2");
-extern "C" void MenuV_DtorSelectMenuItem(void)
-    asm("_._14SelectMenuItem");
-extern "C" void MenuV_DtorTitleMenuItem(void)
-    asm("_._13TitleMenuItem");
-extern "C" void MenuV_DtorTextMenuItem(void)
-    asm("_._12TextMenuItem");
-extern "C" void MenuV_DtorBasicMenu(void)
-    asm("_._9BasicMenu");
-extern "C" void MenuV_DtorVMenuItem(void)
-    asm("_._9VMenuItem");
-extern "C" void MenuV_DtorMenuItem(void)
-    asm("_._8MenuItem");
-extern "C" void MenuV_HandleTextMenuWrapper(void)
-    asm("HandleInput__15TextMenuWrapper");
-extern "C" void MenuV_TestTextMenuWrapper(void)
-    asm("TestComplete__15TextMenuWrapper");
-extern "C" void MenuV_HandleMenuWrapper(void)
-    asm("HandleInput__11MenuWrapper");
-extern "C" void MenuV_TestMenuWrapper(void)
-    asm("TestComplete__11MenuWrapper");
-extern "C" int MenuV_GetHighlightedId(MenuWrapper *)
-    asm("GetHighlightedId__11MenuWrapper");
-extern "C" void MenuV_SetArrows(void)
-    asm("setArrows__9BasicMenuP12SlicedImage2T1i");
-extern "C" void MenuV_ActivateScrolling(void)
-    asm("activate__14ScrollingMenu2");
-extern "C" void MenuV_DrawScrolling(void)
-    asm("draw__14ScrollingMenu2");
-extern "C" void MenuV_UpdateScrolling(void)
-    asm("update__14ScrollingMenu2");
-extern "C" void MenuV_ProcessScrolling(void)
-    asm("processPress__14ScrollingMenu2i");
-extern "C" void MenuV_AddScrolling(void)
-    asm("addItem__14ScrollingMenu2P9VMenuItem");
-extern "C" void MenuV_ActivateVertical(void)
-    asm("activate__13VerticalMenu2");
-extern "C" void MenuV_DrawVertical(void)
-    asm("draw__13VerticalMenu2");
-extern "C" void MenuV_UpdateVertical(void)
-    asm("update__13VerticalMenu2");
-extern "C" void MenuV_ProcessVertical(void)
-    asm("processPress__13VerticalMenu2i");
-extern "C" void MenuV_AddVertical(void)
-    asm("addItem__13VerticalMenu2P9VMenuItem");
-extern "C" void MenuV_SetXYSelect(void)
-    asm("setXY__14SelectMenuItemii");
-extern "C" void MenuV_DrawSelect(void)
-    asm("draw__14SelectMenuItem");
-extern "C" void MenuV_ProcessSelect(void)
-    asm("processPress__14SelectMenuItemi");
-extern "C" void MenuV_SetXYText(void)
-    asm("setXY__12TextMenuItemii");
-extern "C" void MenuV_DrawText(void)
-    asm("draw__12TextMenuItem");
-extern "C" void MenuV_DrawTitle(void)
-    asm("draw__13TitleMenuItem");
-extern "C" void MenuV_SetHighlight(void)
-    asm("setHighlightState__8MenuItemb");
-extern "C" void MenuV_SetItemState(void)
-    asm("setItemState__8MenuItemi");
-extern "C" void MenuV_ProcessItem(void)
-    asm("processPress__8MenuItemi");
-extern "C" void MenuV_UpdateItem(void)
-    asm("update__8MenuItem");
-extern "C" void MenuV_ActivateBasic(void)
-    asm("activate__9BasicMenu");
-extern "C" void MenuV_DrawBasic(void)
-    asm("draw__9BasicMenu");
-extern "C" void MenuV_UpdateBasic(void)
-    asm("update__9BasicMenu");
-extern "C" void MenuV_ProcessBasic(void)
-    asm("processPress__9BasicMenui");
-extern "C" void MenuV_AddBasic(void)
-    asm("addItem__9BasicMenuP9VMenuItem");
-extern "C" void MenuV_SetXYItem(void)
-    asm("setXY__8MenuItemii");
-extern "C" void MenuV_DrawItem(void)
-    asm("draw__8MenuItem");
+#define MENU_DECLARE_OWNER_VTABLES
+#include "MENU.h"
+
+// GCC 2.x destructors cannot be named by a C++ address expression, so the two
+// natural destructor owners below retain erased ABI views for their tables.
+#define MENU_DECLARE_ERASED_BASE_DESTRUCTOR_ABI
+#include "MENU.h"
 
 /**
  * MENU diagnostic text and virtual dispatch tables in original read-only
  * section order.
  */
-extern "C" {
-
 static char processPress_fmt[24] __attribute__((section(".rdata"), aligned(4))) =
     "Highlighted is %d\n";
 
-extern MenuVirtualFunction const __vt_15TextMenuWrapper[]
+MenuVirtualFunction const __vt_15TextMenuWrapper[]
     __attribute__((section(".rdata"), aligned(4))) = {
     0,
     0,
-    MenuV_DtorTextMenuWrapper,
-    MenuV_HandleTextMenuWrapper,
-    MenuV_TestTextMenuWrapper,
-    reinterpret_cast<MenuVirtualFunction>(MenuV_GetHighlightedId),
+    (MenuVirtualFunction)&Menu_TextMenuWrapper_dtor,
+    (MenuVirtualFunction)&TextMenuWrapper::HandleInput,
+    (MenuVirtualFunction)&TextMenuWrapper::TestComplete,
+    (MenuVirtualFunction)&MenuWrapper::GetHighlightedId,
 };
 
-extern MenuVirtualFunction const __vt_11MenuWrapper[]
+MenuVirtualFunction const __vt_11MenuWrapper[]
     __attribute__((section(".rdata"), aligned(4))) = {
     0,
     0,
     MenuV_DtorMenuWrapper,
-    MenuV_HandleMenuWrapper,
-    MenuV_TestMenuWrapper,
-    reinterpret_cast<MenuVirtualFunction>(MenuV_GetHighlightedId),
+    (MenuVirtualFunction)&MenuWrapper::HandleInput,
+    (MenuVirtualFunction)&MenuWrapper::TestComplete,
+    (MenuVirtualFunction)&MenuWrapper::GetHighlightedId,
 };
 
-extern MenuVirtualFunction const __vt_14ScrollingMenu2[]
+MenuVirtualFunction const __vt_14ScrollingMenu2[]
     __attribute__((section(".rdata"), aligned(4))) = {
     0,
     0,
-    MenuV_DtorScrollingMenu2,
-    MenuV_SetArrows,
-    MenuV_ActivateScrolling,
-    MenuV_DrawScrolling,
-    MenuV_UpdateScrolling,
-    MenuV_ProcessScrolling,
-    MenuV_AddScrolling,
+    (MenuVirtualFunction)&Menu_ScrollingMenu2_dtor,
+    (MenuVirtualFunction)&BasicMenu::setArrows,
+    (MenuVirtualFunction)&MenuScrollingMenu2ABI::activate__14ScrollingMenu2,
+    (MenuVirtualFunction)&ScrollingMenu2::draw,
+    (MenuVirtualFunction)&MenuScrollingMenu2ABI::update__14ScrollingMenu2,
+    (MenuVirtualFunction)&ScrollingMenu2::processPress,
+    (MenuVirtualFunction)&ScrollingMenu2::addItem,
     0,
 };
 
-extern MenuVirtualFunction const __vt_13VerticalMenu2[]
+MenuVirtualFunction const __vt_13VerticalMenu2[]
     __attribute__((section(".rdata"), aligned(4))) = {
     0,
     0,
-    MenuV_DtorVerticalMenu2,
-    MenuV_SetArrows,
-    MenuV_ActivateVertical,
-    MenuV_DrawVertical,
-    MenuV_UpdateVertical,
-    MenuV_ProcessVertical,
-    MenuV_AddVertical,
+    (MenuVirtualFunction)&Menu_VerticalMenu2_dtor,
+    (MenuVirtualFunction)&BasicMenu::setArrows,
+    (MenuVirtualFunction)&VerticalMenu2::activate,
+    (MenuVirtualFunction)&VerticalMenu2::draw,
+    (MenuVirtualFunction)&VerticalMenu2::update,
+    (MenuVirtualFunction)&VerticalMenu2::processPress,
+    (MenuVirtualFunction)&VerticalMenu2::addItem,
     0,
 };
 
-extern MenuVirtualFunction const __vt_14SelectMenuItem[]
+MenuVirtualFunction const __vt_14SelectMenuItem[]
     __attribute__((section(".rdata"), aligned(4))) = {
     0,
     0,
-    MenuV_DtorSelectMenuItem,
-    MenuV_SetXYSelect,
-    MenuV_DrawSelect,
-    MenuV_SetHighlight,
-    MenuV_SetItemState,
-    MenuV_ProcessSelect,
-    MenuV_UpdateItem,
+    (MenuVirtualFunction)&Menu_DestroySelectMenuItemAbi,
+    (MenuVirtualFunction)&SelectMenuItem::setXY,
+    (MenuVirtualFunction)&SelectMenuItem::draw,
+    (MenuVirtualFunction)&MenuItem::setHighlightState,
+    (MenuVirtualFunction)&MenuItem::setItemState,
+    (MenuVirtualFunction)&SelectMenuItem::processPress,
+    (MenuVirtualFunction)&MenuItem::update,
     0,
 };
 
-extern MenuVirtualFunction const __vt_13TitleMenuItem[]
+MenuVirtualFunction const __vt_13TitleMenuItem[]
     __attribute__((section(".rdata"), aligned(4))) = {
     0,
     0,
-    MenuV_DtorTitleMenuItem,
-    MenuV_SetXYText,
-    MenuV_DrawTitle,
-    MenuV_SetHighlight,
-    MenuV_SetItemState,
-    MenuV_ProcessItem,
-    MenuV_UpdateItem,
+    (MenuVirtualFunction)&Menu_DestroyTitleMenuItemAbi,
+    (MenuVirtualFunction)&TextMenuItem::setXY,
+    (MenuVirtualFunction)&TitleMenuItem::draw,
+    (MenuVirtualFunction)&MenuItem::setHighlightState,
+    (MenuVirtualFunction)&MenuItem::setItemState,
+    (MenuVirtualFunction)&MenuItem::processPress,
+    (MenuVirtualFunction)&MenuItem::update,
     0,
 };
 
-extern MenuVirtualFunction const __vt_12TextMenuItem[]
+MenuVirtualFunction const __vt_12TextMenuItem[]
     __attribute__((section(".rdata"), aligned(4))) = {
     0,
     0,
-    MenuV_DtorTextMenuItem,
-    MenuV_SetXYText,
-    MenuV_DrawText,
-    MenuV_SetHighlight,
-    MenuV_SetItemState,
-    MenuV_ProcessItem,
-    MenuV_UpdateItem,
+    (MenuVirtualFunction)&Menu_DestroyTextMenuItemAbi,
+    (MenuVirtualFunction)&TextMenuItem::setXY,
+    (MenuVirtualFunction)&TextMenuItem::draw,
+    (MenuVirtualFunction)&MenuItem::setHighlightState,
+    (MenuVirtualFunction)&MenuItem::setItemState,
+    (MenuVirtualFunction)&MenuItem::processPress,
+    (MenuVirtualFunction)&MenuItem::update,
     0,
 };
 
-extern MenuVirtualFunction const __vt_9BasicMenu[]
+MenuVirtualFunction const __vt_9BasicMenu[]
     __attribute__((section(".rdata"), aligned(4))) = {
     0,
     0,
     MenuV_DtorBasicMenu,
-    MenuV_SetArrows,
-    MenuV_ActivateBasic,
-    MenuV_DrawBasic,
-    MenuV_UpdateBasic,
-    MenuV_ProcessBasic,
-    MenuV_AddBasic,
+    (MenuVirtualFunction)&BasicMenu::setArrows,
+    (MenuVirtualFunction)&BasicMenu::activate,
+    (MenuVirtualFunction)&BasicMenu::draw,
+    (MenuVirtualFunction)&BasicMenu::update,
+    (MenuVirtualFunction)&BasicMenu::processPress,
+    (MenuVirtualFunction)&BasicMenu::addItem,
     0,
 };
 
@@ -378,30 +243,28 @@ static MenuVirtualFunction __vt_9VMenuItem[]
     __attribute__((section(".rdata"), aligned(4))) = {
     0,
     0,
-    MenuV_DtorVMenuItem,
-    MenuV_SetXYItem,
-    MenuV_DrawItem,
-    MenuV_SetHighlight,
-    MenuV_SetItemState,
-    MenuV_ProcessItem,
-    MenuV_UpdateItem,
+    (MenuVirtualFunction)&Menu_DestroyVMenuItemAbi,
+    (MenuVirtualFunction)&MenuItem::setXY,
+    (MenuVirtualFunction)&MenuItem::draw,
+    (MenuVirtualFunction)&MenuItem::setHighlightState,
+    (MenuVirtualFunction)&MenuItem::setItemState,
+    (MenuVirtualFunction)&MenuItem::processPress,
+    (MenuVirtualFunction)&MenuItem::update,
     0,
 };
 
-extern MenuVirtualFunction const __vt_8MenuItem[]
+MenuVirtualFunction const __vt_8MenuItem[]
     __attribute__((section(".rdata"), aligned(4))) = {
     0,
     0,
-    MenuV_DtorMenuItem,
-    MenuV_SetXYItem,
-    MenuV_DrawItem,
-    MenuV_SetHighlight,
-    MenuV_SetItemState,
-    MenuV_ProcessItem,
-    MenuV_UpdateItem,
+    (MenuVirtualFunction)&MenuItem_dtor,
+    (MenuVirtualFunction)&MenuItem::setXY,
+    (MenuVirtualFunction)&MenuItem::draw,
+    (MenuVirtualFunction)&MenuItem::setHighlightState,
+    (MenuVirtualFunction)&MenuItem::setItemState,
+    (MenuVirtualFunction)&MenuItem::processPress,
+    (MenuVirtualFunction)&MenuItem::update,
 };
-
-}
 
 // === Function implementations (address order) ===
 
@@ -568,7 +431,7 @@ TextMenuProperties::TextMenuProperties() {
  * Address:   0x80087C58
  * Mangled:   __12TextMenuItemiPCcR18TextMenuProperties
  * Demangled: TextMenuItem::TextMenuItem(int, const char *, TextMenuProperties &)
- *            Note: kept as extern "C" — C++ ctor with base class call generates cleanup paths
+ *            Note: kept as a named ABI owner because natural C++ base construction generates cleanup paths
  *
  * @param self  Implicit object pointer.
  * @param id  Identifier.
@@ -576,7 +439,7 @@ TextMenuProperties::TextMenuProperties() {
  * @param properties  Shared font and styling properties.
  * @return `this` pointer (GCC 2.x ctor convention).
  */
-TextMenuItem *TextMenuItem_ctor(
+TextMenuItem *__12TextMenuItemiPCcR18TextMenuProperties(
     TextMenuItem *self, int id, const char *text, TextMenuProperties *properties) {
     VMenuItem_ctor(self, id);
     self->vtable = (int *)__vt_12TextMenuItem;
@@ -599,13 +462,11 @@ TextMenuItem *TextMenuItem_ctor(
  * Address:   0x80087D10
  * Mangled:   _._12TextMenuItem
  * Demangled: TextMenuItem::~TextMenuItem()
- *            Note: kept as extern "C" — C++ dtor ABI generates different code (in-charge flag)
+ *            Note: kept as a named ABI owner because natural C++ destruction changes the in-charge flag
  *
  * @param self  Implicit object pointer.
  * @param flag  GCC 2.x in-charge flag (bit 0 → also invoke `operator delete` on `this`).
  */
-extern "C" void Menu_DestroyTextMenuItemAbi(TextMenuItem *, int)
-    asm("_._12TextMenuItem");
 void Menu_DestroyTextMenuItemAbi(
     TextMenuItem *self, int __in_chrg) {
     self->vtable = (int *)__vt_12TextMenuItem;
@@ -685,7 +546,7 @@ void TextMenuItem::draw() {
  * Address:   0x80087F0C
  * Mangled:   __13TitleMenuItemiPCcR18TextMenuProperties
  * Demangled: TitleMenuItem::TitleMenuItem(int, const char *, TextMenuProperties &)
- *            Note: kept as extern "C" — C++ ctor with base class call generates cleanup paths
+ *            Note: kept as a named ABI owner because natural C++ base construction generates cleanup paths
  *
  * @param self  Implicit object pointer.
  * @param id  Identifier.
@@ -693,9 +554,9 @@ void TextMenuItem::draw() {
  * @param properties  Shared font and styling properties.
  * @return `this` pointer (GCC 2.x ctor convention).
  */
-extern "C" TitleMenuItem *TitleMenuItem_ctor(
+TitleMenuItem *__13TitleMenuItemiPCcR18TextMenuProperties(
     TitleMenuItem *self, int id, const char *text, TextMenuProperties *properties) {
-    TextMenuItem_ctor(self, id, text, properties);
+    __12TextMenuItemiPCcR18TextMenuProperties(self, id, text, properties);
     self->vtable = (int *)&__vt_13TitleMenuItem[0];
     self->Selectable = 0;
     int h = self->H;
@@ -761,13 +622,12 @@ void Menu_DestroySelectMenuItemAbi(
  * Mangled:   setXY__14SelectMenuItemii
  * Demangled: SelectMenuItem::setXY(int, int)
  *
- * @param self  Implicit object pointer.
  * @param x  X coordinate.
  * @param y  Y coordinate.
  */
-void Menu_SelectMenuItem_setXY(SelectMenuItem *self, int x, int y) {
-    self->X = x;
-    self->Y = y;
+void SelectMenuItem::setXY(int x, int y) {
+    X = x;
+    Y = y;
 }
 
 
@@ -780,153 +640,148 @@ void Menu_SelectMenuItem_setXY(SelectMenuItem *self, int x, int y) {
  * Demangled: SelectMenuItem::draw(void)
  *            Reuses the scale local as the denominator to mirror the original draw register lifetime.
  *
- * @param self  Implicit object pointer.
  */
-void Menu_SelectMenuItem_draw(SelectMenuItem *self) {
-    TextMenuProperties *props = self->TheProperties;
+void SelectMenuItem::draw(void) {
+    TextMenuProperties *props = TheProperties;
     props->TheFont.JustX = 0;
-    TextMenuProperties *props2 = self->TheProperties;
+    TextMenuProperties *props2 = TheProperties;
     props2->TheFont.JustY = 1;
-    if (self->Highlighted != 0) {
-        TextMenuProperties *p = self->TheProperties;
+    if (Highlighted != 0) {
+        TextMenuProperties *p = TheProperties;
         p->TheFont.Scale = p->BigScale;
     } else {
-        TextMenuProperties *p = self->TheProperties;
+        TextMenuProperties *p = TheProperties;
         p->TheFont.Scale = p->NormalScale;
     }
     int x;
-    if (self->JustX == 1 && self->AmHighlighted == 0) {
-        int scale = (int)self->TheProperties;
-        int w = self->W;
+    if (JustX == 1 && AmHighlighted == 0) {
+        int scale = (int)TheProperties;
+        int w = W;
         int scaled = w * ((TextMenuProperties *)scale)->NormalScale;
         scale = ((TextMenuProperties *)scale)->BigScale;
         scaled = scaled / scale;
-        x = self->X + (w >> 1) - (scaled >> 1);
+        x = X + (w >> 1) - (scaled >> 1);
     } else {
-        x = self->X;
+        x = X;
     }
-    int count = self->NumOptions;
+    int count = NumOptions;
     if (count > 0) {
         int i = 0;
-        char *str = self->Option[0];
+        char *str = Option[0];
         do {
-            TextMenuProperties *p = self->TheProperties;
-            if (i == 0 || i == self->InternalState) {
-                if (self->Highlighted != 0) {
+            TextMenuProperties *p = TheProperties;
+            if (i == 0 || i == InternalState) {
+                if (Highlighted != 0) {
                     p->TheFont.R = p->SelectedR;
-                    TextMenuProperties *p2 = self->TheProperties;
+                    TextMenuProperties *p2 = TheProperties;
                     p2->TheFont.G = p2->SelectedG;
-                    TextMenuProperties *p3 = self->TheProperties;
+                    TextMenuProperties *p3 = TheProperties;
                     p3->TheFont.B = p3->SelectedB;
                 } else {
                     p->TheFont.R = p->NormalR;
-                    TextMenuProperties *p2 = self->TheProperties;
+                    TextMenuProperties *p2 = TheProperties;
                     p2->TheFont.G = p2->NormalG;
-                    TextMenuProperties *p3 = self->TheProperties;
+                    TextMenuProperties *p3 = TheProperties;
                     p3->TheFont.B = p3->NormalB;
                 }
             } else {
                 p->TheFont.R = p->GrayR;
-                TextMenuProperties *p2 = self->TheProperties;
+                TextMenuProperties *p2 = TheProperties;
                 p2->TheFont.G = p2->GrayG;
-                TextMenuProperties *p3 = self->TheProperties;
+                TextMenuProperties *p3 = TheProperties;
                 p3->TheFont.B = p3->GrayB;
             }
-            TextMenuProperties *fnt = self->TheProperties;
-            int h = self->H;
-            int y = self->Y;
+            TextMenuProperties *fnt = TheProperties;
+            int h = H;
+            int y = Y;
             FontFromStorage(&fnt->TheFont)->draw(x, y + (h >> 1), str, 0);
             i++;
-            TextMenuProperties *fnt2 = self->TheProperties;
+            TextMenuProperties *fnt2 = TheProperties;
             x += FontFromStorage(&fnt2->TheFont)->width(str);
             str += 0x20;
-        } while (i < self->NumOptions);
+        } while (i < NumOptions);
     }
 }
 
 /**
- * processPress__14SelectMenuItemi (typed extern "C" ABI alias)
+ * Process a directional press while this selectable item is highlighted.
  *
  * Address:   0x800882C0
  * Mangled:   processPress__14SelectMenuItemi
  * Demangled: SelectMenuItem::processPress(int)
  *
- * @param self  Implicit object pointer.
  * @param press  Button press code.
  */
-void Menu_SelectMenuItem_processPress(SelectMenuItem *self, int press) {
-    if (self->Highlighted == 0) return;
+void SelectMenuItem::processPress(int press) {
+    if (Highlighted == 0) return;
     if (press != 0) goto up;
     {
-        int state = self->InternalState - 1;
-        self->InternalState = state;
+        int state = InternalState - 1;
+        InternalState = state;
         if (state > 0) return;
-        int wrap = self->NumOptions - 1;
-        self->InternalState = wrap;
+        int wrap = NumOptions - 1;
+        InternalState = wrap;
         return;
     }
 up:
     if (press != 1) return;
     {
-        int state = self->InternalState;
-        int max = self->NumOptions;
+        int state = InternalState;
+        int max = NumOptions;
         state++;
-        self->InternalState = state;
+        InternalState = state;
         if (state < max) return;
-        self->InternalState = press;
+        InternalState = press;
     }
 }
 
 
 /**
- * setArrows__9BasicMenuP12SlicedImage2T1i (typed extern "C" ABI alias)
+ * setArrows__9BasicMenuP12SlicedImage2T1i
  *
  * Address:   0x80088330
  * Mangled:   setArrows__9BasicMenuP12SlicedImage2T1i
  * Demangled: BasicMenu::setArrows(SlicedImage2 *, SlicedImage2 *, int)
  *            Sets up/down arrow references and configures their fields
  *
- * @param self  Implicit object pointer.
  * @param left  Up/left navigation arrow sprite.
  * @param right  Down/right navigation arrow sprite.
  * @param spacing  Horizontal offset applied to the arrows.
  */
-extern "C" void Menu_BasicMenu_setArrows(
-    BasicMenu *self, SlicedImage2 *left, SlicedImage2 *right, int spacing) {
-    BasicMenu *t0 = self;
-    t0->LeftArrow = left;
-    t0->RightArrow = right;
-    t0->ArrowSpace = spacing;
+void BasicMenu::setArrows(
+    SlicedImage2 *left, SlicedImage2 *right, int spacing) {
+    LeftArrow = left;
+    RightArrow = right;
+    ArrowSpace = spacing;
     if (left) {
-        left->Image.JustX = 2;
-        SlicedImage2 *a = t0->LeftArrow;
-        a->Image.JustY = 1;
+        left->JustX = 2;
+        SlicedImage2 *a = LeftArrow;
+        a->JustY = 1;
     }
     {
-        SlicedImage2 *d = t0->RightArrow;
+        SlicedImage2 *d = RightArrow;
         if (d) {
-            d->Image.JustX = 0;
-            SlicedImage2 *d2 = t0->RightArrow;
-            d2->Image.JustY = 1;
+            d->JustX = 0;
+            SlicedImage2 *d2 = RightArrow;
+            d2->JustY = 1;
         }
     }
 }
 
 
 /**
- * getHighlighted__9BasicMenu (typed extern "C" ABI alias)
+ * Return the identifier of the currently highlighted menu item.
  *
  * Address:   0x80088380
  * Mangled:   getHighlighted__9BasicMenu
  * Demangled: BasicMenu::getHighlighted(void)
  *            Searches items array for highlighted item, returns its id or -1
  *
- * @param self  Implicit object pointer.
  * @return Identifier of the highlighted item, or -1 when none is highlighted.
  */
-int Menu_BasicMenu_getHighlighted(BasicMenu *self) {
+int BasicMenu::getHighlighted(void) {
     int i = 0;
-    VMenuItem **ptr = self->Item;
+    VMenuItem **ptr = Item;
 
     do {
         VMenuItem *item = *ptr;
@@ -968,7 +823,7 @@ void BasicMenu::setHighlighted(int id) {
 
 
 /**
- * __13VerticalMenu2iiiiiii (typed extern "C" ABI alias)
+ * __13VerticalMenu2iiiiiii (typed ABI owner)
  *
  * Address:   0x800884A8
  * Mangled:   __13VerticalMenu2iiiiiii
@@ -984,7 +839,7 @@ void BasicMenu::setHighlighted(int id) {
  * @param spacing  Vertical gap between items.
  * @return `this` pointer (GCC 2.x ctor convention).
  */
-extern "C" VerticalMenu2 *Menu_VerticalMenu2_ctor(
+VerticalMenu2 *VerticalMenu2_ctor(
     VerticalMenu2 *self, int x, int y, int w, int h, int just_x, int just_y,
     int spacing) {
     int i = 0;
@@ -1012,7 +867,7 @@ extern "C" VerticalMenu2 *Menu_VerticalMenu2_ctor(
 
 
 /**
- * _._13VerticalMenu2 (typed extern "C" ABI alias)
+ * _._13VerticalMenu2 (typed ABI owner)
  *
  * Address:   0x80088518
  * Mangled:   _._13VerticalMenu2
@@ -1127,32 +982,31 @@ void VerticalMenu2::activate() {
  *
  */
 void VerticalMenu2::draw() {
-    VerticalMenu2 *menu = this;
-    SlicedImage2 *upArrow = menu->LeftArrow;
+    SlicedImage2 *upArrow = LeftArrow;
     if (upArrow != 0) {
-        VMenuItem *item = menu->Item[menu->Selected];
-        int x = item->X - menu->ArrowSpace;
+        VMenuItem *item = Item[Selected];
+        int x = item->X - ArrowSpace;
         int y = item->Y + (item->H >> 1);
-        int *vt = upArrow->Image.CClass.vtable;
+        int *vt = upArrow->CClass.vtable;
         ((void (*)(SlicedImage2 *, int, int, int))vt[5])(
-            upArrow, x, y + (menu->Spacing >> 1), 0);
+            upArrow, x, y + (Spacing >> 1), 0);
     }
-    VMenuItem **items = menu->Item;
-    SlicedImage2 *downArrow = menu->RightArrow;
+    VMenuItem **items = Item;
+    SlicedImage2 *downArrow = RightArrow;
     if (downArrow != 0) {
-        int itemOffset = menu->Selected * sizeof(*items);
+        int itemOffset = Selected * sizeof(*items);
         char *itemAddress = (char *)items;
         itemAddress += itemOffset;
         VMenuItem **itemSlot = (VMenuItem **)itemAddress;
         VMenuItem *item = *itemSlot;
-        int x = item->X + item->W + menu->ArrowSpace;
+        int x = item->X + item->W + ArrowSpace;
         int y = item->Y + (item->H >> 1);
-        int *vt = downArrow->Image.CClass.vtable;
+        int *vt = downArrow->CClass.vtable;
         ((void (*)(SlicedImage2 *, int, int, int))vt[5])(
-            downArrow, x, y + (menu->Spacing >> 1), 0);
+            downArrow, x, y + (Spacing >> 1), 0);
     }
     int i = 15;
-    VMenuItem **ptr = &menu->Item[15];
+    VMenuItem **ptr = &Item[15];
     do {
         VMenuItem *item = *ptr;
         if (item != 0) {
@@ -1165,26 +1019,25 @@ void VerticalMenu2::draw() {
 
 
 /**
- * update__13VerticalMenu2 (typed extern "C" ABI alias)
+ * Update each populated item in this vertical menu.
  *
  * Address:   0x80088878
  * Mangled:   update__13VerticalMenu2
  * Demangled: VerticalMenu2::update(void)
  *            Iterates items, calling each item's virtual update method at vtable[8]
  *
- * @param self  Implicit object pointer.
  */
-void Menu_VerticalMenu2_update(VerticalMenu2 *self) {
-    int count = self->HighestSlot;
+void VerticalMenu2::update(void) {
+    int count = HighestSlot;
     if (count > 0) {
         int i = 0;
-        VMenuItem **ptr = self->Item;
+        VMenuItem **ptr = Item;
         do {
             VMenuItem *item = *ptr;
             int *vtable = item->vtable;
             ((void (*)(VMenuItem *))vtable[8])(item);
             ptr++;
-            count = self->HighestSlot;
+            count = HighestSlot;
             i++;
         } while (i < count);
     }
@@ -1246,7 +1099,7 @@ void VerticalMenu2::addItem(VMenuItem *item) {
 
 
 /**
- * __14ScrollingMenu2iiiiii (typed extern "C" ABI alias)
+ * __14ScrollingMenu2iiiiii (typed ABI owner)
  *
  * Address:   0x80088A88
  * Mangled:   __14ScrollingMenu2iiiiii
@@ -1261,7 +1114,7 @@ void VerticalMenu2::addItem(VMenuItem *item) {
  * @param slide_amount  Distance moved during each scrolling step.
  * @return `this` pointer (GCC 2.x ctor convention).
  */
-extern "C" ScrollingMenu2 *Menu_ScrollingMenu2_ctor(
+ScrollingMenu2 *__14ScrollingMenu2iiiiii(
     ScrollingMenu2 *self, int x, int y, int w, int h, int just_x,
     int slide_amount) {
     int i = 0;
@@ -1290,7 +1143,7 @@ extern "C" ScrollingMenu2 *Menu_ScrollingMenu2_ctor(
 
 
 /**
- * _._14ScrollingMenu2 (typed extern "C" ABI alias)
+ * _._14ScrollingMenu2 (typed ABI owner)
  *
  * Address:   0x80088AF8
  * Mangled:   _._14ScrollingMenu2
@@ -1308,7 +1161,7 @@ void Menu_ScrollingMenu2_dtor(ScrollingMenu2 *self, int flag) {
 
 
 /**
- * activate__14ScrollingMenu2 (typed extern "C" ABI alias)
+ * activate__14ScrollingMenu2 (typed ABI owner)
  *
  * Address:   0x80088B28
  * Mangled:   activate__14ScrollingMenu2
@@ -1316,7 +1169,7 @@ void Menu_ScrollingMenu2_dtor(ScrollingMenu2 *self, int flag) {
  *
  * @param self  Implicit object pointer.
  */
-void Menu_ScrollingMenu2_activate(ScrollingMenu2 *self) {
+void MenuScrollingMenu2ABI::activate__14ScrollingMenu2(ScrollingMenu2 *self) {
     int arrow_x = self->ArrowSpace;
     SlicedImage2 *upArrow = self->LeftArrow;
     if (upArrow != 0) {
@@ -1370,53 +1223,52 @@ void Menu_ScrollingMenu2_activate(ScrollingMenu2 *self) {
 
 
 /**
- * draw__14ScrollingMenu2 (typed extern "C" ABI alias)
+ * Draw this scrolling menu and its navigation arrows.
  *
  * Address:   0x80088CD8
  * Mangled:   draw__14ScrollingMenu2
  * Demangled: ScrollingMenu2::draw(void)
  *
- * @param self  Implicit object pointer.
  */
-void Menu_ScrollingMenu2_draw(ScrollingMenu2 *self) {
-    int idx = self->Selected;
-    VMenuItem **items_base = self->Item;
+void ScrollingMenu2::draw(void) {
+    int idx = Selected;
+    VMenuItem **items_base = Item;
     char *itemAddress = (char *)items_base;
     itemAddress += idx * sizeof(*items_base);
     VMenuItem **itemSlot = (VMenuItem **)itemAddress;
     VMenuItem *item = *itemSlot;
     int halfH = item->H >> 1;
     int y = item->Y + halfH;
-    int startY = self->Y;
+    int startY = Y;
     if (y < startY) {
         y = startY;
     } else {
-        int endY = startY + self->H;
+        int endY = startY + H;
         if (y >= endY) {
             y = endY - 1;
         }
     }
-    SlicedImage2 *upArrow = self->LeftArrow;
+    SlicedImage2 *upArrow = LeftArrow;
     if (upArrow != 0) {
-        int curIdx = self->Selected;
+        int curIdx = Selected;
         char *itemAddress = (char *)items_base;
         itemAddress += curIdx * sizeof(*items_base);
         VMenuItem **itemSlot = (VMenuItem **)itemAddress;
         VMenuItem *curItem = *itemSlot;
-        int *vt = upArrow->Image.CClass.vtable;
-        int x = curItem->X - self->ArrowSpace;
+        int *vt = upArrow->CClass.vtable;
+        int x = curItem->X - ArrowSpace;
         ((void (*)(SlicedImage2 *, int, int, int))vt[5])(
             upArrow, x, y, 0);
     }
-    SlicedImage2 *downArrow = self->RightArrow;
+    SlicedImage2 *downArrow = RightArrow;
     if (downArrow != 0) {
-        int curIdx = self->Selected;
+        int curIdx = Selected;
         char *itemAddress = (char *)items_base;
         itemAddress += curIdx * sizeof(*items_base);
         VMenuItem **itemSlot = (VMenuItem **)itemAddress;
         VMenuItem *curItem = *itemSlot;
-        int x = curItem->X + curItem->W + self->ArrowSpace;
-        int *vt = downArrow->Image.CClass.vtable;
+        int x = curItem->X + curItem->W + ArrowSpace;
+        int *vt = downArrow->CClass.vtable;
         ((void (*)(SlicedImage2 *, int, int, int))vt[5])(
             downArrow, x, y, 0);
     }
@@ -1432,12 +1284,12 @@ void Menu_ScrollingMenu2_draw(ScrollingMenu2 *self) {
         i--;
         ptr--;
     } while (i >= 0);
-    SetClippingBox2(self->X, self->Y, self->W, self->H);
+    SetClippingBox2(X, Y, W, H);
 }
 
 
 /**
- * update__14ScrollingMenu2 (typed extern "C" ABI alias)
+ * update__14ScrollingMenu2 (typed ABI owner)
  *
  * Address:   0x80088E60
  * Mangled:   update__14ScrollingMenu2
@@ -1445,7 +1297,7 @@ void Menu_ScrollingMenu2_draw(ScrollingMenu2 *self) {
  *
  * @param self  Implicit object pointer.
  */
-void Menu_ScrollingMenu2_update(ScrollingMenu2 *self) {
+void MenuScrollingMenu2ABI::update__14ScrollingMenu2(ScrollingMenu2 *self) {
     int *offsets = self->RY;
     int idx = self->Selected;
     int idxOff = idx << 2;
@@ -1566,37 +1418,35 @@ void ScrollingMenu2::processPress(int press) {
 
 
 /**
- * addItem__14ScrollingMenu2P9VMenuItem (typed extern "C" ABI alias)
+ * Append one item and record its cumulative scroll offset.
  *
  * Address:   0x80089140
  * Mangled:   addItem__14ScrollingMenu2P9VMenuItem
  * Demangled: ScrollingMenu2::addItem(VMenuItem *)
  *            Appends an item and records its cumulative scroll offset.
  *
- * @param self  Implicit object pointer.
  * @param item  Menu item to append.
  */
-void Menu_ScrollingMenu2_addItem(
-    ScrollingMenu2 *self, VMenuItem *item) {
-    int count = self->HighestSlot;
-    VMenuItem **items = self->Item;
+void ScrollingMenu2::addItem(VMenuItem *item) {
+    int count = HighestSlot;
+    VMenuItem **items = Item;
     VMenuItem **itemSlot =
         (VMenuItem **)((char *)items + (count << 2));
     *itemSlot = item;
-    count = self->HighestSlot;
+    count = HighestSlot;
     register int idx asm("$8") = count << 2;
     if (count != 0) {
         goto nonzero;
     }
     {
-        self->RY[0] = 0;
+        RY[0] = 0;
         goto done_offsets;
     }
 nonzero:
     {
-        int *offsets = self->RY;
+        int *offsets = RY;
         int prevIdx = (count - 1) << 2;
-        register int *prevOffPtr asm("$7") =
+        register int *prevOffPtr =
             (int *)((char *)offsets + prevIdx);
         VMenuItem **prevItemPtr =
             (VMenuItem **)((char *)items + prevIdx);
@@ -1607,8 +1457,8 @@ nonzero:
         *offsetSlot = prevOff + height;
     }
 done_offsets:
-    count = self->HighestSlot;
-    self->HighestSlot = count + 1;
+    count = HighestSlot;
+    HighestSlot = count + 1;
 }
 
 
@@ -1627,7 +1477,7 @@ done_offsets:
  * @param use_scrolling_menu  Selects the scrolling rather than vertical layout.
  * @return `this` pointer (GCC 2.x ctor convention).
  */
-extern "C" TextMenuWrapper *TextMenuWrapper_ctor(
+TextMenuWrapper *__15TextMenuWrapperPCPcPiiPcb(
     TextMenuWrapper *self, const char **string_list, int *id_list,
     int num_items, const char *font_name, bool use_scrolling_menu)
 {
@@ -1639,14 +1489,16 @@ extern "C" TextMenuWrapper *TextMenuWrapper_ctor(
     {
         ScrollingMenu2 *menu = (ScrollingMenu2 *)::CClass::operator new(sizeof(ScrollingMenu2));
         if (menu != 0)
-            menu = Menu_ScrollingMenu2_ctor(menu, 0, 0x50, 0x200, 0x50, 1, 4);
+            menu = __14ScrollingMenu2iiiiii(
+                menu, 0, 0x50, 0x200, 0x50, 1, 4);
         self->Menu = menu;
     }
     else
     {
         VerticalMenu2 *menu = (VerticalMenu2 *)::CClass::operator new(sizeof(VerticalMenu2));
         if (menu != 0)
-            menu = Menu_VerticalMenu2_ctor(menu, 0, 0, 0x200, 0x100, 1, 1, 4);
+            menu = VerticalMenu2_ctor(
+                menu, 0, 0, 0x200, 0x100, 1, 1, 4);
         self->Menu = menu;
     }
 
@@ -1654,7 +1506,7 @@ extern "C" TextMenuWrapper *TextMenuWrapper_ctor(
         FontManager::GetFont(const_cast<char *>(font_name)));
     *(MenuAssignableFont *)&self->Props.TheFont = *font;
 
-    if (strcmp(font_name, MenuInGameFontName) == 0)
+    if (strcmp(font_name, s_ingame1_fnt_800dc1b0) == 0)
     {
         self->Props.BigScale = 0x1324;
         self->Props.NormalScale = 0x1000;
@@ -1685,7 +1537,7 @@ extern "C" TextMenuWrapper *TextMenuWrapper_ctor(
                     TitleMenuItem *menuItem =
                         (TitleMenuItem *)::CClass::operator new(sizeof(TitleMenuItem));
                     if (menuItem != 0)
-                        menuItem = TitleMenuItem_ctor(
+                        menuItem = __13TitleMenuItemiPCcR18TextMenuProperties(
                             menuItem, *idsPtr, *strPtr, properties);
                     *itemsPtr = menuItem;
                 }
@@ -1694,7 +1546,7 @@ extern "C" TextMenuWrapper *TextMenuWrapper_ctor(
                     TextMenuItem *menuItem =
                         (TextMenuItem *)::CClass::operator new(sizeof(TextMenuItem));
                     if (menuItem != 0)
-                        menuItem = TextMenuItem_ctor(
+                        menuItem = __12TextMenuItemiPCcR18TextMenuProperties(
                             menuItem, *idsPtr, *strPtr, properties);
                     *itemsPtr = menuItem;
                 }
@@ -1719,7 +1571,7 @@ extern "C" TextMenuWrapper *TextMenuWrapper_ctor(
 
 
 /**
- * _._15TextMenuWrapper (typed extern "C" ABI alias)
+ * _._15TextMenuWrapper (typed ABI owner)
  *
  * Address:   0x80089420
  * Mangled:   _._15TextMenuWrapper
@@ -1760,27 +1612,26 @@ void Menu_TextMenuWrapper_dtor(TextMenuWrapper *self, int flag) {
 
 
 /**
- * HandleInput__15TextMenuWrapper (typed extern "C" ABI alias)
+ * Forward the latest menu press through this wrapper's active menu.
  *
  * Address:   0x80089504
  * Mangled:   HandleInput__15TextMenuWrapper
  * Demangled: TextMenuWrapper::HandleInput(void)
  *
- * @param self  Implicit object pointer.
  */
-void Menu_TextMenuWrapper_HandleInput(TextMenuWrapper *self) {
+void TextMenuWrapper::HandleInput(void) {
     int press = Menu_GetPress();
     if ((unsigned int)(press - 2) < 2) {
         SFX_PlayX(0x90, 0x2000, 0);
     }
     {
-        BasicMenu *menu = self->Menu;
+        BasicMenu *menu = Menu;
         int *vt = menu->vtable;
         int fn = vt[7];
         ((void (*)(BasicMenu *, int))fn)(menu, press);
     }
     {
-        BasicMenu *menu = self->Menu;
+        BasicMenu *menu = Menu;
         int *vt = menu->vtable;
         int fn = vt[6];
         ((void (*)(BasicMenu *))fn)(menu);
@@ -1789,17 +1640,15 @@ void Menu_TextMenuWrapper_HandleInput(TextMenuWrapper *self) {
 
 
 /**
- * TestComplete__15TextMenuWrapper (typed extern "C" ABI alias)
+ * Test whether this wrapped menu accepted or cancelled input.
  *
  * Address:   0x80089590
  * Mangled:   TestComplete__15TextMenuWrapper
  * Demangled: TextMenuWrapper::TestComplete(void)
  *
- * @param self  Implicit object pointer.
  * @return 1 when the menu accepts or cancels input, otherwise 0.
  */
-// Shared TextMenuWrapper member function
-int Menu_TextMenuWrapper_TestComplete(TextMenuWrapper *self) {
+int TextMenuWrapper::TestComplete(void) {
     SControl *pad = &Pad[0];
     VMenuItem **ptr;
     VMenuItem *item;
@@ -1812,12 +1661,12 @@ do_work:
     pad->Start.Triggered = 0;
     pad->X.Triggered = 0;
     {
-        register int tmp_count asm("$3") = self->NumItems;
-        self->HighlightedId = -1;
+        register int tmp_count asm("$3") = NumItems;
+        HighlightedId = -1;
         if (tmp_count <= 0) goto sfx_91;
         count = tmp_count;
     }
-    ptr = self->ItemList;
+    ptr = ItemList;
     do {
         item = *ptr;
         if (item->Highlighted != 0) goto loop_break;
@@ -1828,14 +1677,14 @@ sfx_91:
     SFX_PlayX(0x91, 0x2000, 0);
     return 1;
 loop_break:
-    self->HighlightedId = item->ID;
+    HighlightedId = item->ID;
     goto sfx_91;
 check_pad1:
     {
         int p1 = pad->Triangle.Triggered;
         if (p1 != 0) {
             pad->Triangle.Triggered = 0;
-            self->HighlightedId = -1;
+            HighlightedId = -1;
             SFX_PlayX(0x93, 0x2000, 0);
             return 1;
         }
@@ -1937,7 +1786,7 @@ void MenuItem::setXY(int x, int y) {
 
 // GCC emitted this private `CClass::~CClass` copy last in the owner's text,
 // so it stays at the end of the translation unit.
-static void Menu_ClassDestructor(CClass *_this, int __in_chrg) {
+static void __DOT__6CClass_800897F4(CClass *_this, int __in_chrg) {
     _this->vtable = &Menu_BaseVTable;
     if (__in_chrg & 1) {
         ::CClass::operator delete(_this);

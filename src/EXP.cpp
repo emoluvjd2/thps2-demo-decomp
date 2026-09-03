@@ -34,6 +34,8 @@ struct CBit {
 
     /** Mark this bit for removal. */
     void Die();
+    /** Release bit storage through the shared CBit allocator. */
+    static void operator delete(void *storage);
 };
 
 #include "CFLATRIPPLE.h"
@@ -43,14 +45,6 @@ struct ExpTrigPair {
     short sine;
     short cosine;
 };
-
-/** One-word target anchor used for the flat-ripple dispatch table. */
-struct ExpFlatRippleVTable {
-    void (*Move)(struct CFlatRipple *);
-};
-
-typedef char Exp_FlatRippleVTable_size_must_be_4[
-    (sizeof(ExpFlatRippleVTable) == 4) ? 1 : -1];
 
 enum ExpRippleConstant {
     ExpModelDestructible = 2,
@@ -77,8 +71,9 @@ typedef char Exp_CFlatRipple_size_must_be_116[(sizeof(CFlatRipple) == 116) ? 1 :
 #include "SHATTER.h"
 #include "UTILS.h"
 
-// === Extern "C" forward declarations ===
-extern "C" ExpFlatRippleVTable __vt_11CFlatRipple;
+// === Forward declarations ===
+/** One-word target anchor used for the flat-ripple dispatch table. */
+extern void *__vt_11CFlatRipple;
 // === Function implementations (address order) ===
 
 /**
@@ -143,37 +138,36 @@ CFlatRipple::CFlatRipple(
     int NumSegs, int GrowRate)
     : CPolyLine(NumSegs)
 {
-    CFlatRipple *self = this;
     int i;
 
-    self->_vf = &__vt_11CFlatRipple;
+    _vf = &__vt_11CFlatRipple;
 
-    self->mPos = Pos;
-    self->mMaxRadius = MaxRadius;
-    self->mGrowRate = GrowRate;
+    mPos = Pos;
+    mMaxRadius = MaxRadius;
+    mGrowRate = GrowRate;
 
-    self->mStart = Pos;
+    mStart = Pos;
 
-    self->mR = r;
-    self->mG = g;
-    self->mB = b;
+    mR = r;
+    mG = g;
+    mB = b;
 
     i = 0;
-    if (0 < self->mNumSegs)
+    if (0 < mNumSegs)
     {
         do
         {
-            self->mSegs[i].r = r;
-            self->mSegs[i].g = g;
-            self->mSegs[i].b = b;
-            self->mSegs[i].End = Pos;
+            mSegs[i].r = r;
+            mSegs[i].g = g;
+            mSegs[i].b = b;
+            mSegs[i].End = Pos;
 
             i++;
-        } while (i < self->mNumSegs);
+        } while (i < mNumSegs);
     }
 
-    self->mAngle = Rnd(ExpFullTurn);
-    self->SetSemiTransparent();
+    mAngle = Rnd(ExpFullTurn);
+    SetSemiTransparent();
 }
 
 /** Restore the derived dispatch table before the base destructor runs. */
@@ -188,18 +182,16 @@ CFlatRipple::~CFlatRipple()
  */
 void CFlatRipple::Move()
 {
-    CFlatRipple *self = this;
-    self->mRadius += self->mGrowRate;
+    mRadius += mGrowRate;
 
-    if (self->mRadius >= self->mMaxRadius)
+    if (mRadius >= mMaxRadius)
     {
-        self->mRadius = self->mMaxRadius;
-        self->Die();
+        mRadius = mMaxRadius;
+        Die();
     }
 
-    int intensity = ((self->mMaxRadius - self->mRadius) << 8) /
-                    self->mMaxRadius;
-    int a = self->mAngle;
+    int intensity = ((mMaxRadius - mRadius) << 8) / mMaxRadius;
+    int a = mAngle;
     // Without this constraint cc1plus hoists the table-base load ahead of the
     // target's angle load (2 of 140 instructions differ).
     asm("" : "+r"(a));
@@ -215,30 +207,30 @@ void CFlatRipple::Move()
     trigOffset <<= 2;
     ExpTrigPair *initialTrig = reinterpret_cast<ExpTrigPair *>(
         trigOffset + trigTableAddress);
-    int angleStep = ExpFullTurn / self->mNumSegs;
-    self->mStart.vx =
-        self->mPos.vx +
-        (((self->mRadius * initialTrig->cosine) / ExpFullTurn) << 12);
+    int angleStep = ExpFullTurn / mNumSegs;
+    mStart.vx =
+        mPos.vx +
+        (((mRadius * initialTrig->cosine) / ExpFullTurn) << 12);
 
     int i = 0;
-    self->mStart.vz =
-        self->mPos.vz +
-        (((self->mRadius * initialTrig->sine) / ExpFullTurn) << 12);
+    mStart.vz =
+        mPos.vz +
+        (((mRadius * initialTrig->sine) / ExpFullTurn) << 12);
 
-    if (self->mNumSegs <= 0)
+    if (mNumSegs <= 0)
         return;
 
     do
     {
         int offset = i << 4;
-        self->mSegs[i].r = static_cast<u8>((self->mR * intensity) >> 8);
-        self->mSegs[i].g = static_cast<u8>((self->mG * intensity) >> 8);
-        self->mSegs[i].b = static_cast<u8>((self->mB * intensity) >> 8);
+        mSegs[i].r = static_cast<u8>((mR * intensity) >> 8);
+        mSegs[i].g = static_cast<u8>((mG * intensity) >> 8);
+        mSegs[i].b = static_cast<u8>((mB * intensity) >> 8);
         a += angleStep;
 
-        if (i == self->mNumSegs - 1)
+        if (i == mNumSegs - 1)
         {
-            self->mSegs[i].End = self->mStart;
+            mSegs[i].End = mStart;
         }
         else
         {
@@ -247,20 +239,20 @@ void CFlatRipple::Move()
             // Direct typed indexing commutes the target's address operands and
             // changes 21 instructions plus two branch relocations.
             SLineSeg *segment = reinterpret_cast<SLineSeg *>(
-                offset + reinterpret_cast<int>(self->mSegs));
+                offset + reinterpret_cast<int>(mSegs));
             segment->End.vx =
-                self->mPos.vx +
-                (((self->mRadius * loopTrig->cosine) / ExpFullTurn) << 12);
+                mPos.vx +
+                (((mRadius * loopTrig->cosine) / ExpFullTurn) << 12);
 
             segment = reinterpret_cast<SLineSeg *>(
-                offset + reinterpret_cast<int>(self->mSegs));
+                offset + reinterpret_cast<int>(mSegs));
             segment->End.vz =
-                self->mPos.vz +
-                (((self->mRadius * loopTrig->sine) / ExpFullTurn) << 12);
+                mPos.vz +
+                (((mRadius * loopTrig->sine) / ExpFullTurn) << 12);
         }
 
         i++;
-    } while (i < self->mNumSegs);
+    } while (i < mNumSegs);
 
     return;
 }

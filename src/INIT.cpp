@@ -47,20 +47,20 @@ struct CBody
 };
 
 #include "SVIEWPORT.h"
+#include "APOCALYPSEVIEWPORT.h"
 
 typedef char InitCItemLayout_size_must_be_0x4c[
     (sizeof(InitCItemLayout) == 0x4c) ? 1 : -1];
 typedef char InitCBodyPrefix_size_must_be_0x54[
     (sizeof(CBody) == 0x54) ? 1 : -1];
 // Absolute-addressed globals used by the initialization owner.
-extern "C" SViewport ApocalypseViewport;
-extern "C" int TopOfCode
-    __attribute__((section(".data")));
+#define INIT_DECLARE_TOP_OF_CODE_ABSOLUTE_VIEW
+#include "INIT.h"
 
 #define FRONTEND2STATE_ABSOLUTE_DECLARATIONS
 #define FRONTEND2STATE_DECLARE_MUSIC_LOOP_VOICE
 #include "FRONTEND2STATE.h"
-extern "C" SSaveGame LastGameState;
+#include "LASTGAMESTATE.h"
 #define FRONTTIMERS_TITLE_TIMEOUT_ABSOLUTE_DECLARATION
 #include "FRONTTIMERS.h"
 #define BITSTATE_DECLARE_TOTAL_BIT_USAGE
@@ -73,8 +73,8 @@ extern "C" SSaveGame LastGameState;
 #include "TOTALPALETTEUSAGE.h"
 #define TOTALTEXTUREUSAGE_ABSOLUTE_DECLARATION
 #include "TOTALTEXTUREUSAGE.h"
-extern "C" int TotalVabUsage
-    __attribute__((section(".data")));
+#define TOTALVABUSAGE_ABSOLUTE_DECLARATION
+#include "TOTALVABUSAGE.h"
 
 #include "MECHLIST.h"
 #include "CAMERALIST.h"
@@ -163,7 +163,8 @@ static inline unsigned int &Init_SuspendDistance(void)
 #include "CAMPT.h"
 
 // Absolute-addressed view of the owner-local startup rectangle.
-extern "C" RECT Init_BootClearRectAddress[] asm("DAT_800daaa4");
+#define INIT_DECLARE_STARTUP_RECT_ADDRESS_VIEW
+#include "INIT.h"
 
 // === External function declarations (C++ mangling) ===
 #include "MEM.h"
@@ -194,9 +195,6 @@ static char Init_DefaultTrigFileName[8]
 static const char Init_ContinueTRGName[24]
     __attribute__((section(".rdata"))) = "********blaablaa";
 
-extern "C" char *ContinueTRG;
-extern "C" int NumContinues;
-
 /** Active trigger filename initialized to the module's placeholder name. */
 char *TrigFileName
     __attribute__((section(".sdata"))) = Init_DefaultTrigFileName;
@@ -209,8 +207,14 @@ char *ContinueTRG
  * Full-screen clear rectangle copied to the stack during boot graphics
  * initialization.
  */
-static RECT Init_BootClearRect_owner asm("DAT_800daaa4")
+namespace InitAddressViewOwners
+{
+extern "C"
+{
+static RECT DAT_800daaa4
     __attribute__((section(".sdata"))) = {0, 0, 1024, 512};
+}
+}
 
 /** Number of trigger continuation requests pending at startup. */
 int NumContinues
@@ -457,7 +461,7 @@ void Init_AtStart(void) {
 
     // Clear the boot draw area using the startup RECT copied from data.
     {
-        RECT screen = Init_BootClearRectAddress[0];
+        RECT screen = DAT_800daaa4[0];
         ClearImage(&screen, 0, 0, 0);
     }
 

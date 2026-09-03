@@ -115,3 +115,80 @@ struct CCreateTexSpec {
 };
 
 #endif // CREATE_TEX_SPEC_LAYOUT
+
+#ifdef CREATE_DECLARE_VIEWPORT_OWNER_VIEW
+struct SViewport;
+
+/** CREATE-owned projection bounds used by the editor camera. */
+extern SViewport CreateViewport;
+
+#undef CREATE_DECLARE_VIEWPORT_OWNER_VIEW
+#endif
+
+#ifdef CREATE_DECLARE_OWNER_DESTRUCTOR_ABI
+struct CClass;
+struct MySkaterTextureInfo;
+
+/** Erased destructor entry used by CREATE's MySkater table image. */
+void Create_MySkaterDestructorSlot(void) asm("_._8MySkater");
+
+/** Typed destructor entry used by CREATE's texture-info table image. */
+static void Create_MySkaterTextureInfoDestructor(
+    MySkaterTextureInfo *info, int inCharge)
+    asm("_._19MySkaterTextureInfo");
+
+extern "C"
+{
+/** Owner-private CClass destructor instantiated in create.obj. */
+static void __DOT__6CClass_80073244(CClass *object, int inCharge);
+}
+
+#undef CREATE_DECLARE_OWNER_DESTRUCTOR_ABI
+#endif
+
+#ifdef CREATE_DECLARE_EARLY_CONSTRUCTOR_ABI
+struct CharacterEditor;
+struct MySkaterTextureInfo;
+
+namespace CreateEarlyConstructorAbi
+{
+/** Construct one CREATE-owned texture-info record. */
+extern "C" MySkaterTextureInfo *__19MySkaterTextureInfoUi(
+    MySkaterTextureInfo *info, unsigned int checksum);
+
+/** Construct CREATE's character editor through its target entry. */
+extern "C" CharacterEditor *__15CharacterEditor(CharacterEditor *editor);
+}
+
+#undef CREATE_DECLARE_EARLY_CONSTRUCTOR_ABI
+#endif
+
+#ifdef CREATE_DECLARE_CHARACTER_EDITOR_DESTRUCTOR_ABI
+/** Erased destructor entry used by CREATE's CharacterEditor table image. */
+void Create_CharacterEditorDestructorSlot(void) asm("_._15CharacterEditor");
+#undef CREATE_DECLARE_CHARACTER_EDITOR_DESTRUCTOR_ABI
+#endif
+
+#ifdef CREATE_DECLARE_MYSKATER_CONSTRUCTOR_ABI
+struct MySkater;
+
+namespace CreateMySkaterConstructorAbi
+{
+/** Construct CREATE's owner-local MySkater singleton. */
+extern "C" MySkater *__8MySkater(MySkater *skater);
+}
+
+#undef CREATE_DECLARE_MYSKATER_CONSTRUCTOR_ABI
+#endif
+
+#ifdef CREATE_DECLARE_GLOBAL_DTOR_ABI
+/** Target-named teardown hook for CREATE's MySkater singleton. */
+void Create_GlobalDtor_BodyPart(void) asm("_GLOBAL_.D.BodyPart");
+#undef CREATE_DECLARE_GLOBAL_DTOR_ABI
+#endif
+
+#ifdef CREATE_DECLARE_GLOBAL_INIT_ABI
+/** Target-named startup hook for CREATE's MySkater singleton. */
+void Create_GlobalInit_BodyPart(void) asm("_GLOBAL_.I.BodyPart");
+#undef CREATE_DECLARE_GLOBAL_INIT_ABI
+#endif

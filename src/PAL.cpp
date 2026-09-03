@@ -6,8 +6,6 @@
 // Compiled with cc1plus (GCC 2.91.66-psx). Compiler auto-mangles symbol names.
 
 // Owner-local declarations attributed to PAL.cpp by MAIN.SYM.
-extern "C" {
-
 typedef unsigned char u8;
 typedef unsigned short u16;
 typedef unsigned int u32;
@@ -25,19 +23,13 @@ typedef int undefined4;
 typedef unsigned long ulong;
 typedef unsigned char undefined3[3];
 
-struct tag_S_Pal;
-
-}
-
-extern "C" int Pal16X;
-extern "C" int Pal16Y;
 #define PAL256_OWNER_DECLARATIONS
 #include "PAL256.h"
 #undef PAL256_OWNER_DECLARATIONS
 #define TOTALPALETTEUSAGE_OWNER_DECLARATION
 #include "TOTALPALETTEUSAGE.h"
-extern "C" int TransparentPalForEditor;
-extern "C" tag_S_Pal *pPaletteList;
+#define TRANSPARENTPALFOREDITOR_OWNER_DECLARATION
+#include "TRANSPARENTPALFOREDITOR.h"
 
 #define PAL_OWNER_DECLARATIONS
 #define PAL_OWNER_LAYOUT
@@ -49,6 +41,9 @@ extern "C" tag_S_Pal *pPaletteList;
 #include <STDDEF.H>
 #include <LIBGTE.H>
 #include <LIBGPU.H>
+
+/** Target-era external compiler view of PAL's list head. */
+extern tag_S_Pal *pPaletteList;
 
 static u8 Free16Slots[Palette16SlotCount] __attribute__((section(".bss")));
 static u8 Free256Slots[Palette256SlotCount] __attribute__((section(".bss")));
@@ -204,8 +199,7 @@ void RemovePaletteEntry(tag_S_Pal *pEntry) {
     }
     // If we were the head, replace with our next
     if (pEntry == pPaletteList) {
-        tag_S_Pal *next = pEntry->pNext;
-        pPaletteList = next;
+        pPaletteList = pEntry->pNext;
     }
     Mem_Delete(pEntry);
     TotalPaletteUsage =
@@ -250,20 +244,17 @@ tag_S_Pal *Pal_FindPaletteEntry(u32 checksum) {
 void Pal_RemoveUnusedPalettes(void) {
     tag_S_Pal *pPal;
     tag_S_Pal *pNext;
-    u8 typeFlags;
 
     pPal = pPaletteList;
     while (pPal != 0) {
         pNext = pPal->pNext;
         if (pPal->Usage == 0) {
-            typeFlags = pPal->flags;
             // Free 16-color VRAM slot
-            if ((typeFlags & PaletteFlag16Colour) != 0) {
+            if ((pPal->flags & PaletteFlag16Colour) != 0) {
                 Free16Slots[pPal->slot] = 1;
-                typeFlags = pPal->flags;
             }
             // Free 256-color VRAM slot
-            if ((typeFlags & PaletteFlag256Colour) != 0) {
+            if ((pPal->flags & PaletteFlag256Colour) != 0) {
                 Free256Slots[pPal->slot] = 1;
             }
             RemovePaletteEntry(pPal);
@@ -475,11 +466,9 @@ tag_S_Pal *Pal_LoadPalette(
     // Swap transparent color to index 0
     if (Remap != 0 && transparent_encountered != 0) {
         u16 tmp;
-        u16 *transPtr;
-        transPtr = PAL_COLOUR_AT_INDEX(pData, transparent_index);
         tmp = *reinterpret_cast<u16 *>(pData);
-        u16 transColor = *transPtr;
-        *transPtr = tmp;
+        u16 transColor = *PAL_COLOUR_AT_INDEX(pData, transparent_index);
+        *PAL_COLOUR_AT_INDEX(pData, transparent_index) = tmp;
         *reinterpret_cast<u16 *>(pData) = transColor;
         pNew->RemapIndex = (u8)transparent_index;
     } else {

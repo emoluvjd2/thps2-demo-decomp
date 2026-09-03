@@ -16,20 +16,11 @@
 #error "Select the DemoTimer owner or absolute declaration view"
 #endif
 
-#if defined(DEMOTIMER_OWNER_DECLARATION) || \
-    defined(DEMOTIMER_WITHIN_C_LINKAGE)
-#define DEMOTIMER_DECL_LINKAGE extern
-#else
-#define DEMOTIMER_DECL_LINKAGE extern "C"
-#endif
-
 /** Countdown used while demo playback is active. */
-DEMOTIMER_DECL_LINKAGE int DemoTimer DEMOTIMER_DECL_ATTR;
+extern int DemoTimer DEMOTIMER_DECL_ATTR;
 
-#undef DEMOTIMER_DECL_LINKAGE
 #undef DEMOTIMER_DECL_ATTR
 #undef DEMOTIMER_ABSOLUTE_DECLARATION
 #undef DEMOTIMER_OWNER_DECLARATION
-#undef DEMOTIMER_WITHIN_C_LINKAGE
 
 #endif // DEMOTIMER_INC_H

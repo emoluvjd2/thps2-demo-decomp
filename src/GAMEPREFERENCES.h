@@ -8,4 +8,7 @@ struct GamePreferences {
     struct SOptions Options;
 };
 
+/** Persistent option values mirrored into the active career save. */
+extern GamePreferences GPreferences;
+
 #endif // GAMEPREFERENCES_INC_H

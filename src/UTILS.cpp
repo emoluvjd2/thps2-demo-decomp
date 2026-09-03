@@ -137,7 +137,6 @@ static inline short Utils_Cosine(int heading)
 #define BITSTATE_DECLARE_NON_RENDERED_BIT_LIST
 #include "BITSTATE.h"
 #include "MECHLIST.h"
-
 /**
  * Layout-compatible owner for the global explosion-centre vectors.
  *
@@ -172,10 +171,14 @@ int ExplosionPriority[3] __attribute__((section(".sdata"))) = {};
  *
  * The canonical SDK declaration is the integer-returning DrawSync above.
  * GCC 2.91 reorders the callback's pinned packet-width value when that unused
- * return is visible, changing two target instructions.  Keeping this named
- * view preserves the historical call schedule without a cast or new pin.
+ * return is visible, changing two target instructions.  A narrow C-linkage
+ * declaration preserves the historical call schedule without an ASM alias,
+ * cast, or new pin.
  */
-extern "C" void Utils_DrawSyncNoResult(int mode) asm("DrawSync");
+namespace UtilsDrawSyncAbi
+{
+extern "C" void DrawSync(int mode);
+}
 #include "SFX.h"
 
 static int RandSeed;
@@ -190,22 +193,13 @@ void Utils_VblankProcessing(void)
     if (GameFade != 0)
     {
         POLY_F4 aPoly;
-        // The callback exposes this command packet to the GPU immediately;
-        // ordinary storage changes eight target instructions.
-        volatile DR_TPAGE ptpage;
+        DR_TPAGE ptpage;
 
-        int modeCode = 0xE1000640;
-        int fade = GameFade - 1;
-        // cc1plus must reuse v1 across the packet's tag/code byte writes;
-        // an ordinary temporary changes nine instructions.
-        register int temporary asm("$3") = 0x01000000;
-        ptpage.tag = temporary;
-        temporary = 5;
-        ptpage.code[0] = modeCode;
-        setlen(&aPoly, temporary);
-        GameFade = fade;
-        temporary = 0x2A;
-        aPoly.code = temporary;
+        GameFade--;
+        ptpage.tag = 0x01000000;
+        ptpage.code[0] = 0xE1000640;
+        setlen(&aPoly, 5);
+        aPoly.code = 0x2A;
         if ((GameFade & 1) != 0)
         {
             aPoly.r0 = 0;
@@ -230,10 +224,10 @@ void Utils_VblankProcessing(void)
         aPoly.y2 = 240;
         aPoly.y3 = 240;
 
-        Utils_DrawSyncNoResult(0);
+        UtilsDrawSyncAbi::DrawSync(0);
         DrawPrim(const_cast<DR_TPAGE *>(&ptpage));
         DrawPrim(&aPoly);
-        Utils_DrawSyncNoResult(0);
+        UtilsDrawSyncAbi::DrawSync(0);
     }
 
     if (SFX_ReverbDepthSetTimer != 0)
@@ -301,29 +295,11 @@ void Utils_InitialRand(int a)
  */
 int Rnd(int n)
 {
-    int seed;
-    int mult;
-    // The target keeps the evolving addend in a3; ordinary allocation changes
-    // ten of this 23-instruction routine.
-    register int add asm("$7");
-    seed = RandSeed;
-    mult = RandA;
-    seed = seed * mult;
-    add = RandB;
-    seed = seed + add;
-    int r = seed & 0xFFFF;
-    r = r * n;
-    // Keeping the decrement constant in a2 preserves another eight words.
-    register int cnst asm("$6") = static_cast<int>(0xEFEFEFF0u);
-    mult = mult ^ seed;
-    mult = mult + (seed >> 4);
-    add = add + cnst;
-    RandSeed = seed;
-    seed = seed >> 3;
-    add = add + seed;
-    RandA = mult;
-    RandB = add;
-    return r >> 16;
+    RandSeed = RandSeed * RandA + RandB;
+    RandA = (RandA ^ RandSeed) + (RandSeed >> 4);
+    RandB -= 0x10101010;
+    RandB += RandSeed >> 3;
+    return ((RandSeed & 0xffff) * n) >> 16;
 }
 
 /**

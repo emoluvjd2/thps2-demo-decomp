@@ -59,4 +59,7 @@ typedef char CItem_size_must_be_76[(sizeof(CItem) == 76) ? 1 : -1];
 typedef char CItem_vtable_offset_must_be_72[
     ((unsigned long)&(((CItem *)0)->_vf) == 72) ? 1 : -1];
 
+/** First-word address view of CItem's linker-visible dispatch table. */
+extern "C" int __vt_5CItem;
+
 #endif // CITEM_INC_H

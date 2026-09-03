@@ -1,5 +1,6 @@
 // Per-TU header for MENU.cpp
 // Class definitions reconstructed from This Dust Remembers MAIN.H
+#ifndef MENU_ABI_DECLARATIONS_ONLY
 #ifndef MENU_INC_H
 #define MENU_INC_H
 
@@ -248,3 +249,138 @@ typedef char menu_wrapper_size_must_be_12[(sizeof(MenuWrapper) == 12) ? 1 : -1];
 typedef char menu_text_wrapper_size_must_be_272[(sizeof(TextMenuWrapper) == 272) ? 1 : -1];
 
 #endif // MENU_INC_H
+#endif // MENU_ABI_DECLARATIONS_ONLY
+
+#ifdef MENU_DECLARE_ITEM_CONSTRUCTOR_ABI
+
+/** Address the target MenuItem destructor used by derived owner bodies. */
+void MenuItem_dtor(MenuItem *self, int __in_chrg) asm("_._8MenuItem");
+
+namespace MenuConstructorAbi
+{
+/** Construct the VMenuItem base through its target C-linkage entry. */
+extern "C" VMenuItem *__9VMenuItemi(VMenuItem *self, int id);
+}
+
+/** Construct a text menu item through its target C-linkage entry. */
+extern "C" TextMenuItem *__12TextMenuItemiPCcR18TextMenuProperties(
+    TextMenuItem *self, int id, const char *text,
+    TextMenuProperties *properties);
+
+/** Construct a title menu item through its target C-linkage entry. */
+extern "C" TitleMenuItem *__13TitleMenuItemiPCcR18TextMenuProperties(
+    TitleMenuItem *self, int id, const char *text,
+    TextMenuProperties *properties);
+
+#undef MENU_DECLARE_ITEM_CONSTRUCTOR_ABI
+#endif
+
+#ifdef MENU_DECLARE_OWNER_SMALL_DATA_DESTRUCTOR_ABI
+
+/** Address the TextMenuProperties destructor held by MENU's small-data table. */
+static void Menu_DestroyTextMenuPropertiesAbi(
+    TextMenuProperties *self, int __in_chrg)
+    asm("_._18TextMenuProperties");
+
+extern "C" {
+/** Declare MENU's owner-private CClass destructor tail. */
+static void __DOT__6CClass_800897F4(CClass *self, int __in_chrg);
+}
+
+#undef MENU_DECLARE_OWNER_SMALL_DATA_DESTRUCTOR_ABI
+#endif
+
+#ifdef MENU_DECLARE_CONTAINER_OWNER_ABI_HEAD
+
+/** Address the VerticalMenu2 destructor used by MENU's owner-local table. */
+void Menu_VerticalMenu2_dtor(VerticalMenu2 *, int)
+    asm("_._13VerticalMenu2");
+
+/** Construct a scrolling menu through its target C-linkage entry. */
+extern "C" ScrollingMenu2 *__14ScrollingMenu2iiiiii(
+    ScrollingMenu2 *, int, int, int, int, int, int);
+
+/** Address the ScrollingMenu2 destructor used by MENU's owner-local table. */
+void Menu_ScrollingMenu2_dtor(ScrollingMenu2 *, int)
+    asm("_._14ScrollingMenu2");
+
+namespace MenuScrollingMenu2ABI
+{
+/** Activate a scrolling menu through its target C-linkage entry. */
+extern "C" void activate__14ScrollingMenu2(ScrollingMenu2 *);
+/** Update a scrolling menu through its target C-linkage entry. */
+extern "C" void update__14ScrollingMenu2(ScrollingMenu2 *);
+}
+
+#undef MENU_DECLARE_CONTAINER_OWNER_ABI_HEAD
+#endif
+
+#ifdef MENU_DECLARE_TEXT_WRAPPER_CONSTRUCTOR_ABI
+#ifndef MENU_TEXT_WRAPPER_CONSTRUCTOR_RECEIVER
+#error "Select the TextMenuWrapper constructor ABI receiver type"
+#endif
+
+/** Construct a text-menu wrapper through its target C-linkage entry. */
+extern "C" MENU_TEXT_WRAPPER_CONSTRUCTOR_RECEIVER *
+__15TextMenuWrapperPCPcPiiPcb(
+    MENU_TEXT_WRAPPER_CONSTRUCTOR_RECEIVER *, const char **, int *, int,
+    const char *, bool);
+
+#undef MENU_TEXT_WRAPPER_CONSTRUCTOR_RECEIVER
+#undef MENU_DECLARE_TEXT_WRAPPER_CONSTRUCTOR_ABI
+#endif
+
+#ifdef MENU_DECLARE_CONTAINER_OWNER_ABI_TAIL
+
+/** Address the TextMenuWrapper destructor used by MENU's owner-local table. */
+void Menu_TextMenuWrapper_dtor(TextMenuWrapper *, int)
+    asm("_._15TextMenuWrapper");
+/** Address the SelectMenuItem destructor used by MENU's owner-local table. */
+void Menu_DestroySelectMenuItemAbi(SelectMenuItem *, int)
+    asm("_._14SelectMenuItem");
+/** Address the TextMenuItem destructor used by MENU's owner-local table. */
+void Menu_DestroyTextMenuItemAbi(TextMenuItem *, int)
+    asm("_._12TextMenuItem");
+
+#undef MENU_DECLARE_CONTAINER_OWNER_ABI_TAIL
+#endif
+
+#ifdef MENU_DECLARE_ITEM_OWNER_DESTRUCTOR_ABI
+
+/** Address the TitleMenuItem destructor used by MENU's owner-local table. */
+void Menu_DestroyTitleMenuItemAbi(
+    TitleMenuItem *self, int __in_chrg) asm("_._13TitleMenuItem");
+/** Address the owner-private VMenuItem destructor tail. */
+static void Menu_DestroyVMenuItemAbi(VMenuItem *self, int __in_chrg)
+    asm("_._9VMenuItem");
+
+#undef MENU_DECLARE_ITEM_OWNER_DESTRUCTOR_ABI
+#endif
+
+#ifdef MENU_DECLARE_ERASED_BASE_DESTRUCTOR_ABI
+
+/** Erased address view of MenuWrapper's destructor for its virtual table. */
+void MenuV_DtorMenuWrapper(void)
+    asm("_._11MenuWrapper");
+/** Erased address view of BasicMenu's destructor for its virtual table. */
+void MenuV_DtorBasicMenu(void)
+    asm("_._9BasicMenu");
+
+#undef MENU_DECLARE_ERASED_BASE_DESTRUCTOR_ABI
+#endif
+
+#ifdef MENU_DECLARE_OWNER_VTABLES
+
+/** MENU-owned virtual tables with external linkage. */
+extern MenuVirtualFunction const __vt_15TextMenuWrapper[];
+extern MenuVirtualFunction const __vt_11MenuWrapper[];
+extern MenuVirtualFunction const __vt_14ScrollingMenu2[];
+extern MenuVirtualFunction const __vt_13VerticalMenu2[];
+extern MenuVirtualFunction const __vt_14SelectMenuItem[];
+extern MenuVirtualFunction const __vt_13TitleMenuItem[];
+extern MenuVirtualFunction const __vt_12TextMenuItem[];
+extern MenuVirtualFunction const __vt_9BasicMenu[];
+extern MenuVirtualFunction const __vt_8MenuItem[];
+
+#undef MENU_DECLARE_OWNER_VTABLES
+#endif

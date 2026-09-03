@@ -10,7 +10,7 @@
 #endif
 
 /** Start of the object file currently being interpreted. */
-extern "C" char *pCurrentObjFile CURRENTOBJFILE_DECL_ATTR;
+extern char *pCurrentObjFile CURRENTOBJFILE_DECL_ATTR;
 
 #undef CURRENTOBJFILE_DECL_ATTR
 #undef CURRENTOBJFILE_OWNER_DECLARATION

@@ -23,6 +23,9 @@ EPackInitType LastPackInitType = PACK512x240;
 int TotalPackUsage = 0;
 int ZapCalls = 0;
 
+// === Owner-local function declarations ===
+int Pack_Merge(TSPack *pMerge);
+
 // === Function implementations (address order) ===
 
 /**

@@ -5,14 +5,8 @@
 //
 // Compiled with cc1plus (GCC 2.91.66-psx). Compiler auto-mangles symbol names.
 
-#define __SKIP_CPANELDATA_EXTERNS__
-
 // PANEL-owned generated declarations and layouts. This was the only live
 // consumer of the former PANEL.h reconstruction boundary.
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 typedef unsigned char u8;
 typedef unsigned short u16;
 typedef unsigned int u32;
@@ -57,6 +51,8 @@ struct LevelGenerator;
 struct CBruce {
     /** Count completed half-turns for the active trick. */
     int Get180s();
+    /** Add one trick occurrence to the skater's history. */
+    int History_Add(char *name, int spinAndStance);
 };
 struct CBaddy;
 struct SModel;
@@ -119,26 +115,14 @@ enum EPausedStatus {
 
 #include "CTRICK.h"
 
-#ifdef __cplusplus
-}
-#endif
-
 #include "MAIN.h"
 #include "DB.h"
 #include "FRONT.h"
 #include "STATS.h"
 
-extern "C" int Cheat_BigScore;
-extern "C" unsigned int LastHoldingScore;
-extern "C" int SKATE_Display;
-extern "C" int SKATE_Pos;
-extern "C" int TAPES_Display;
-extern "C" int TAPES_Pos;
-extern "C" void *prim_added;
-
-extern "C" int Cheat_PanelOn __attribute__((section(".data")));
+#define CHEATPANELON_ABSOLUTE_DECLARATION
+#include "CHEATPANELON.h"
 #include "MECHLIST.h"
-extern "C" int Num_Mult_Values[];
 
 #include "CAREER.h"
 #include "FONTTOOLS.h"
@@ -248,6 +232,8 @@ struct CPanelData {
     /** Shared panel sprite used to mark a switch stance. */
     static Sprite2 *mpSwitchSprite;
 
+    /** Rebuild the three-line message for the current trick chain. */
+    void TrickMessageRefresh();
     /** Return the spin multiplier displayed at the start of one trick run. */
     int TQ_SpinDisplay(int index);
     /** Accumulate the spin multiplier for the run containing one trick. */
@@ -409,28 +395,14 @@ typedef char panel_career_view_size_must_be_2400[
 
 /** Readable, typed ABI bridges to services owned by other translation units. */
 #include "PDOUBLEBUFFER.h"
-extern "C" {
-#define FRONTSTATUS_WITHIN_C_LINKAGE
 #include "FRONTSTATUS.h"
-#define OTENTRY_WITHIN_C_LINKAGE
 #include "OTENTRY.h"
-
-CPanelData *PanelData_Construct(CPanelData *panel, CBruce *player)
-    asm("__10CPanelDataP6CBruce");
-void PanelData_RefreshTrickMessage(CPanelData *panel)
-    asm("TrickMessageRefresh__10CPanelData");
-
-}
 
 #include "SPOOL.h"
 
 void Horse_DisplayWords(int *letters);
 #include "VIDEO.h"
 
-extern "C" {
-int Panel_AddTrickHistory(CBruce *player, char *name, int spinAndStance)
-    asm("History_Add__6CBrucePci");
-}
 #include "SFX.h"
 #include "TRICKTIPS.h"
 #include "LOCALTXT.h"
@@ -438,47 +410,59 @@ int Panel_AddTrickHistory(CBruce *player, char *name, int spinAndStance)
 #include <STDDEF.H>
 #include <LIBGTE.H>
 #include <LIBGPU.H>
+#define PANEL_DECLARE_DATA_CONSTRUCTOR_ABI
+#define PANEL_DATA_CONSTRUCTOR_RECEIVER CPanelData
+#define PANEL_DATA_CONSTRUCTOR_PLAYER CBruce
 #define PANEL_PRIMITIVE_API
 #include "PANEL.h"
 #undef PANEL_PRIMITIVE_API
 #include <STDIO.H>
 #include <STRINGS.H>
 
+/** Return caller-owned storage for explicit member construction. */
 inline void *operator new(unsigned int, void *storage)
 {
     return storage;
 }
 
 /** Diagnostic emitted while constructing the player's panel state. */
-static char PanelConstructorDiagnostic[] asm("str_cpanel_print")
+static char str_cpanel_print[]
     __attribute__((section(".rdata"))) =
         "CPanelData::CPanelData() called\n";
 
 /**
  * Complete PANEL small-data prefix through the S-K-A-T-E label strings.
  *
- * Public globals retain their canonical linker symbols. Owner-private storage
- * keeps its exact assembler labels without adding target-absent XDEFs.
+ * Public globals retain their canonical linker symbols. Private storage uses
+ * the target's natural identifiers without adding target-absent XDEFs.  The
+ * namespace-scoped C-linkage owners remain lexically distinct from the
+ * external-linkage address views required at selected call sites.
  */
 static SAnimFrame *PanelAnim = 0;
 Sprite2 *CPanelData::mpSwitchSprite = 0;
 int LowMemoryIndicatorTimer = 0;
 
-static char Panel_AnimName_owner[8] asm("str_panel_anim")
+namespace PanelAddressViewOwners
+{
+extern "C"
+{
+static char str_panel_anim[8]
     __attribute__((section(".sdata"))) = "Font";
-static char Panel_InitDiagnostic_owner[16] asm("str_panel_sfx")
+}
+}
+static char str_panel_sfx[16]
     __attribute__((section(".sdata"))) = "Panel_Init()\n";
-static char Panel_TimerFontName_owner[12] asm("str_panel_font1")
+static char str_panel_font1[12]
     __attribute__((section(".sdata"))) = "time.fnt";
-static char Panel_ScoreFontName_owner[12] asm("str_panel_font2")
+static char str_panel_font2[12]
     __attribute__((section(".sdata"))) = "score.fnt";
-static char Panel_TrickFontName_owner[16] asm("str_panel_font3")
+static char str_panel_font3[16]
     __attribute__((section(".sdata"))) = "s2tricks.fnt";
-static char Panel_MessageFontName_owner[12] asm("str_panel_messfont")
+static char str_panel_messfont[12]
     __attribute__((section(".sdata"))) = "ingame1.fnt";
-static char Panel_SwitchSpriteName_owner[16] asm("str_panel_sprite")
+static char str_panel_sprite[16]
     __attribute__((section(".sdata"))) = "s2switch.bmp";
-static char Panel_UninitDiagnostic_owner[16] asm("str_panel_uninit")
+static char str_panel_uninit[16]
     __attribute__((section(".sdata"))) = "Panel_Uninit()\n";
 
 int TAPES_Display = 0;
@@ -486,16 +470,22 @@ int TAPES_Pos = 0x214;
 int SKATE_Display = 0;
 int SKATE_Pos = 0x214;
 
-static char Panel_LetterS_owner[4] asm("str_letter_S")
+namespace PanelAddressViewOwners
+{
+extern "C"
+{
+static char str_letter_S[4]
     __attribute__((section(".sdata"))) = "S";
-static char Panel_LetterK_owner[4] asm("str_letter_K")
+static char str_letter_K[4]
     __attribute__((section(".sdata"))) = "K";
-static char Panel_LetterA_owner[4] asm("str_letter_A")
+static char str_letter_A[4]
     __attribute__((section(".sdata"))) = "A";
-static char Panel_LetterT_owner[4] asm("str_letter_T")
+static char str_letter_T[4]
     __attribute__((section(".sdata"))) = "T";
-static char Panel_LetterE_owner[4] asm("str_letter_E")
+static char str_letter_E[4]
     __attribute__((section(".sdata"))) = "E";
+}
+}
 
 /** Percentage retained as repeated tricks depreciate through a combo. */
 int Depreciation_Values[5] __attribute__((section(".data"))) = {
@@ -523,63 +513,97 @@ static char Panel_ScoreOverflow_owner[8] asm("$LC0")
  * this owner emits in .sdata.  Referencing the definitions directly changes
  * those sites to GP-relative code (measured below in the owning functions).
  */
-extern "C" {
-extern char Panel_AnimName_reference[] asm("str_panel_anim");
+extern char str_panel_anim[];
 extern char Panel_ScoreOverflow_reference[] asm("$LC0");
-extern char Panel_LetterS_reference[] asm("str_letter_S");
-extern char Panel_LetterK_reference[] asm("str_letter_K");
-extern char Panel_LetterA_reference[] asm("str_letter_A");
-extern char Panel_LetterT_reference[] asm("str_letter_T");
-extern char Panel_LetterE_reference[] asm("str_letter_E");
-extern char Panel_ScoreFormat_reference[] asm("str_score_fmt");
-extern char Panel_MultiplierFormat_reference[] asm("str_mult_fmt");
-extern char Panel_GoalCounterName_reference[] asm("str_goalcounter_name");
-extern char Panel_SpinFormat_reference[] asm("str_tmr_spin");
-extern char Panel_TrickNameFormat_reference[] asm("str_tmr_name");
-extern char Panel_ContinueFormat_reference[] asm("str_tmr_cont");
-extern char Panel_BreakSpinFormat_reference[] asm("str_tmr_break_spin");
-extern char Panel_BreakFormat_reference[] asm("str_tmr_break");
-}
+extern char str_letter_S[];
+extern char str_letter_K[];
+extern char str_letter_A[];
+extern char str_letter_T[];
+extern char str_letter_E[];
+extern char str_score_fmt[];
+extern char str_mult_fmt[];
+extern char str_goalcounter_name[];
+extern char str_tmr_spin[];
+extern char str_tmr_name[];
+extern char str_tmr_cont[];
+extern char str_tmr_break_spin[];
+extern char str_tmr_break[];
 
 /**
  * PANEL score, timer, goal, and trick-chain formats in their original
  * small-data order.
  */
-static char Panel_ScoreFormat_owner[4] asm("str_score_fmt")
+namespace PanelAddressViewOwners
+{
+extern "C"
+{
+static char str_score_fmt[4]
     __attribute__((section(".sdata"))) = "%ld";
+}
+}
 static char Panel_HalfMultiplierFormat[8]
     __attribute__((section(".sdata"))) = " x%d.5";
-static char Panel_MultiplierFormat_owner[8] asm("str_mult_fmt")
+namespace PanelAddressViewOwners
+{
+extern "C"
+{
+static char str_mult_fmt[8]
     __attribute__((section(".sdata"))) = " x%d";
-static char Panel_TimeFormat_owner[12] asm("str_time_fmt")
+}
+}
+static char str_time_fmt[12]
     __attribute__((section(".sdata"))) = "%ld:%02ld";
-static char Panel_GoalCounterName_owner[8] asm("str_goalcounter_name")
+namespace PanelAddressViewOwners
+{
+extern "C"
+{
+static char str_goalcounter_name[8]
     __attribute__((section(".sdata"))) = "spank";
-static char Panel_GoalCounterFormat_owner[12] asm("str_goalcounter_fmt")
+}
+}
+static char str_goalcounter_fmt[12]
     __attribute__((section(".sdata"))) = "%d OF 5 %s";
 
-static char Panel_PerfectSpinFormat_owner[16] asm("str_tmr_perfect_spin")
+static char str_tmr_perfect_spin[16]
     __attribute__((section(".sdata"))) = "~PERFECT& %d %s";
-static char Panel_PerfectFormat_owner[16] asm("str_tmr_perfect")
+static char str_tmr_perfect[16]
     __attribute__((section(".sdata"))) = "~PERFECT& %s";
-static char Panel_SloppySpinFormat_owner[16] asm("str_tmr_sloppy_spin")
+static char str_tmr_sloppy_spin[16]
     __attribute__((section(".sdata"))) = "|SLOPPY` %d %s";
-static char Panel_SloppyFormat_owner[12] asm("str_tmr_sloppy")
+static char str_tmr_sloppy[12]
     __attribute__((section(".sdata"))) = "|SLOPPY` %s";
-static char Panel_SpinFormat_owner[8] asm("str_tmr_spin")
+namespace PanelAddressViewOwners
+{
+extern "C"
+{
+static char str_tmr_spin[8]
     __attribute__((section(".sdata"))) = "%d %s";
-static char Panel_TrickNameFormat_owner[4] asm("str_tmr_name")
+static char str_tmr_name[4]
     __attribute__((section(".sdata"))) = "%s";
-static char Panel_ContinueSpinFormat_owner[12] asm("str_tmr_cont_spin")
+}
+}
+static char str_tmr_cont_spin[12]
     __attribute__((section(".sdata"))) = "%s + %d %s";
-static char Panel_ContinueFormat_owner[8] asm("str_tmr_cont")
+namespace PanelAddressViewOwners
+{
+extern "C"
+{
+static char str_tmr_cont[8]
     __attribute__((section(".sdata"))) = "%s + %s";
-static char Panel_OverflowFormat_owner[12] asm("str_tmr_overflow")
+}
+}
+static char str_tmr_overflow[12]
     __attribute__((section(".sdata"))) = "%s + ...";
-static char Panel_BreakSpinFormat_owner[8] asm("str_tmr_break_spin")
+namespace PanelAddressViewOwners
+{
+extern "C"
+{
+static char str_tmr_break_spin[8]
     __attribute__((section(".sdata"))) = "+ %d %s";
-static char Panel_BreakFormat_owner[8] asm("str_tmr_break")
+static char str_tmr_break[8]
     __attribute__((section(".sdata"))) = "+ %s";
+}
+}
 
 /**
  * Zero-initialized PANEL state that follows the formatting strings.
@@ -605,19 +629,6 @@ static inline int PanelShadowBottom(int y, int length)
     int offset = length + 1;
     return y + offset;
 }
-
-// === Free function declarations ===
-void Panel_Line(int x0, int y0, int x1, int y1, int Color);
-POLY_G4 *DrawGouraudPoly(int x, int y, int w, int h, unsigned char rtop, unsigned char gtop, unsigned char btop, unsigned char rbottom, unsigned char gbottom, unsigned char bbottom, int sort);
-void DisplayTapesSkate(void);
-void GraffitiColor(CBruce *pBruce);
-void DisplayScore(CBruce *pBruce, unsigned short xpos, unsigned short ypos);
-void DisplaySwitchness(CBruce *pBruce, unsigned short xpos, unsigned short ypos);
-void DisplayHolding(CBruce *pBruce, unsigned short xpos, unsigned short ypos);
-void DisplayTime(CBruce *pBruce, unsigned short xpos, unsigned short ypos);
-void Panel_GetViewportMessOffset(int viewportMode, short *pOffsetX, short *pOffsetY);
-void DisplayOutOfBounds(CBruce *pBruce, unsigned short xpos, unsigned short ypos);
-void Panel_ReplayInstructions(void);
 
 // === Function implementations (address order) ===
 
@@ -716,14 +727,14 @@ void Panel_addPrim(void *prim)
 // Loads animations, fonts, creates a Sprite2 for panel display, inits falling text
 void Panel_Init(void)
 {
-    PanelAnim = Spool_FindAnim(Panel_AnimName_reference);
-    printf(Panel_InitDiagnostic_owner);
-    FontManager::LoadFont(Panel_TimerFontName_owner);
-    FontManager::LoadFont(Panel_ScoreFontName_owner);
-    FontManager::LoadFont(Panel_TrickFontName_owner);
-    GGameFont = Mess_LoadFont(Panel_MessageFontName_owner, 2, 2, -1);
+    PanelAnim = Spool_FindAnim(str_panel_anim);
+    printf(str_panel_sfx);
+    FontManager::LoadFont(str_panel_font1);
+    FontManager::LoadFont(str_panel_font2);
+    FontManager::LoadFont(str_panel_font3);
+    GGameFont = Mess_LoadFont(str_panel_messfont, 2, 2, -1);
     Sprite2 *ptr = new Sprite2(
-        Panel_SwitchSpriteName_owner, 1, 0, 0);
+        str_panel_sprite, 1, 0, 0);
     CPanelData::mpSwitchSprite = ptr;
     FallingTextEffect::InitSprite();
 }
@@ -735,10 +746,10 @@ void Panel_Init(void)
 // Unloads fonts, destroys panel sprite, frees falling text
 void Panel_Uninit(void)
 {
-    printf(Panel_UninitDiagnostic_owner);
-    FontManager::UnloadFont(Panel_TimerFontName_owner);
-    FontManager::UnloadFont(Panel_ScoreFontName_owner);
-    FontManager::UnloadFont(Panel_TrickFontName_owner);
+    printf(str_panel_uninit);
+    FontManager::UnloadFont(str_panel_font1);
+    FontManager::UnloadFont(str_panel_font2);
+    FontManager::UnloadFont(str_panel_font3);
     Mess_SetCurrentFont(GGameFont);
     Mess_UnloadFont();
     Sprite2 *sprite = CPanelData::mpSwitchSprite;
@@ -816,22 +827,18 @@ POLY_FT4 *Panel_DrawTexturedPoly(SAnimFrame *pFrame)
 void Panel_SetStretchedScreenCoords(int x, int y, POLY_FT4 *pPol,
                                     SAnimFrame *pFrame)
 {
-    int scaledX = static_cast<int>(pFrame->OffX) * 512 / 320;
-    unsigned int w9 = static_cast<unsigned int>(pFrame->Width) << 9;
-    int y_top = y + static_cast<int>(pFrame->OffY);
-    unsigned int Height = pFrame->Height;
-    pPol->y0 = y_top;
-    int scaledW = static_cast<int>(w9) / 320;
-    pPol->y1 = y_top;
-    int y_bot = y_top + Height;
-    pPol->y2 = y_bot;
-    pPol->y3 = y_bot;
-    int x_left = x + scaledX;
-    pPol->x0 = x_left;
-    pPol->x2 = x_left;
-    register int x_right asm("$2") = x_left + scaledW;
-    pPol->x1 = x_right;
-    pPol->x3 = x_right;
+    int Width = static_cast<int>(pFrame->Width) * 512 / 320;
+    int Height = pFrame->Height;
+    int OffX = static_cast<int>(pFrame->OffX) * 512 / 320;
+    int OffY = pFrame->OffY;
+    pPol->x0 = x + OffX;
+    pPol->y0 = y + OffY;
+    pPol->x1 = x + OffX + Width;
+    pPol->y1 = y + OffY;
+    pPol->x2 = x + OffX;
+    pPol->y2 = y + OffY + Height;
+    pPol->x3 = x + OffX + Width;
+    pPol->y3 = y + OffY + Height;
 }
 
 /**
@@ -969,27 +976,27 @@ void DisplayTapesSkate(void)
             if (player->mPanelData.SKATE[0] != 0)
             {
                 Mess_DrawPanelText(SKATE_Pos, 80,
-                                   Panel_LetterS_reference, 0, 0, 0x100);
+                                   str_letter_S, 0, 0, 0x100);
             }
             if (player->mPanelData.SKATE[1] != 0)
             {
                 Mess_DrawPanelText(SKATE_Pos, 105,
-                                   Panel_LetterK_reference, 0, 0, 0x100);
+                                   str_letter_K, 0, 0, 0x100);
             }
             if (player->mPanelData.SKATE[2] != 0)
             {
                 Mess_DrawPanelText(SKATE_Pos, 130,
-                                   Panel_LetterA_reference, 0, 0, 0x100);
+                                   str_letter_A, 0, 0, 0x100);
             }
             if (player->mPanelData.SKATE[3] != 0)
             {
                 Mess_DrawPanelText(SKATE_Pos, 155,
-                                   Panel_LetterT_reference, 0, 0, 0x100);
+                                   str_letter_T, 0, 0, 0x100);
             }
             if (player->mPanelData.SKATE[4] != 0)
             {
                 Mess_DrawPanelText(SKATE_Pos, 180,
-                                   Panel_LetterE_reference, 0, 0, 0x100);
+                                   str_letter_E, 0, 0, 0x100);
             }
         }
         if (TAPES_Display != 0)
@@ -1201,7 +1208,7 @@ void DisplayScore(CBruce *pBruce, unsigned short xpos, unsigned short ypos)
                 Value = player->mTags;
                 GraffitiColor(pBruce);
             }
-            sprintf(score, Panel_ScoreFormat_reference, Value);
+            sprintf(score, str_score_fmt, Value);
         }
         player->mPanelData.mScoreFont.draw(x + 125, y - 4, score, 0);
     }
@@ -1252,7 +1259,7 @@ void DisplaySwitchness(CBruce *pBruce, unsigned short xpos, unsigned short ypos)
 /** Formats the multiplier text into its fixed-size panel buffer. */
 static inline void Panel_FormatMultiplier(char (&buffer)[15], int multiplier)
 {
-    sprintf(buffer, Panel_MultiplierFormat_reference, multiplier >> 1);
+    sprintf(buffer, str_mult_fmt, multiplier >> 1);
 }
 
 void DisplayHolding(CBruce *pBruce, unsigned short xpos, unsigned short ypos)
@@ -1289,7 +1296,7 @@ void DisplayHolding(CBruce *pBruce, unsigned short xpos, unsigned short ypos)
         if (HoldingScore != 0 || bailing != 0)
         {
             char score[15];
-            sprintf(score, Panel_ScoreFormat_reference,
+            sprintf(score, str_score_fmt,
                     bailing != 0
                         ? static_cast<unsigned int>(LastHoldingScore)
                         : HoldingScore);
@@ -1397,7 +1404,7 @@ void DisplayTime(CBruce *pBruce, unsigned short xpos, unsigned short ypos)
                 mins = 0;
             }
             {
-                sprintf(time, Panel_TimeFormat_owner, mins, secs);
+                sprintf(time, str_time_fmt, mins, secs);
                 if (GGame == 7)
                 {
                     if (mins != 0)
@@ -1568,7 +1575,7 @@ void Panel_ReplayInstructions(void)
         Mess_SetTextJustify(0);
         int width = 256;
         int y = 220;
-        register int width_last asm("$3") = 256;
+        int width_last = 256;
         Mess_DrawPanelText(width, y, GameText.pReplayInstructions,
                            0, 0, width_last);
     }
@@ -1712,9 +1719,8 @@ int CPanelData::TotalTrickScore()
  */
 int CPanelData::TotalScore()
 {
-    CPanelData *self = this;
-    int base = self->TotalTrickScore();
-    int count = self->mTQStack;
+    int base = TotalTrickScore();
+    int count = mTQStack;
     int result;
     if (count < 15)
     {
@@ -1962,7 +1968,7 @@ void Panel_HoldTrick(CBruce *pPlayer, int Points)
     {
         player->mPanelData.mTQ[player->mPanelData.mTQStack - 1].point_value +=
             Points;
-        PanelData_RefreshTrickMessage(&player->mPanelData);
+        player->mPanelData.TrickMessageRefresh();
     }
 }
 
@@ -2036,7 +2042,7 @@ int Panel_Letter(int Letter)
 // Demangled: Panel_Tape(int)
 void Panel_Tape(int Tape)
 {
-    static char buf[32] asm("buf.253") __attribute__((section(".bss")));
+    static char buf[32] __attribute__((section(".bss")));
 
     TAPES_Display = 40;
     Career_GiveTape(GLevel, Tape);
@@ -2056,7 +2062,7 @@ void Panel_Tape(int Tape)
     case 1:
         SFX_PlayX(0x13, 0x2000, 0);
         sprintf(buf, GameText.p5GoalsTape,
-                Panel_GoalCounterName_reference);
+                str_goalcounter_name);
         Mess_Message(buf, Messprog_Goal, 1, 0, 0);
         return;
     case 3:
@@ -2081,7 +2087,7 @@ void Panel_Tape(int Tape)
  */
 void Panel_GoalCounter(int N)
 {
-    static char Msg[32] asm("Msg.256") __attribute__((section(".bss")));
+    static char Msg[32] __attribute__((section(".bss")));
 
     if (GGame == 1)
     {
@@ -2094,9 +2100,9 @@ void Panel_GoalCounter(int N)
         }
         else
         {
-            sprintf(Msg, Panel_GoalCounterFormat_owner,
+            sprintf(Msg, str_goalcounter_fmt,
                     player->mPanelData.Goals,
-                    Panel_GoalCounterName_reference);
+                    str_goalcounter_name);
             Mess_Message(Msg, Messprog_Zoom, 1, 0, 0);
         }
     }
@@ -2124,12 +2130,17 @@ void CTrick::Set(Message *m, char *n, int p)
     locked = 0;
 }
 
-// ====== 0x800669E0 __10CPanelDataP6CBruce ======================================
-// CPanelData constructor ABI entry point.
-// Address: 0x800669E0
-// Demangled: CPanelData::(CBruce *)
-CPanelData *PanelData_Construct(CPanelData *self,
-                                             CBruce *pBruce)
+/**
+ * Construct one gameplay panel and its owned fonts and text effects.
+ *
+ * Address: 0x800669E0
+ * Mangled: __10CPanelDataP6CBruce
+ * Demangled: CPanelData::CPanelData(CBruce *)
+ *
+ * @param pBruce Skater whose score and trick state the panel presents.
+ */
+CPanelData *__10CPanelDataP6CBruce(CPanelData *self,
+                                   CBruce *pBruce)
 {
     self->mpBruce = pBruce;
     self->mTotalScore = 0;
@@ -2151,12 +2162,12 @@ CPanelData *PanelData_Construct(CPanelData *self,
         self->SKATE[i++] = 0;
     } while (i < 5);
 
-    printf(PanelConstructorDiagnostic);
+        printf(str_cpanel_print);
     self->Goals = 0;
 
     *reinterpret_cast<PanelAssignableFont *>(&self->mTimerFont) =
         *reinterpret_cast<PanelAssignableFont *>(
-            FontManager::GetFont(Panel_TimerFontName_owner));
+            FontManager::GetFont(str_panel_font1));
     self->mTimerFont.JustX = 1;
     self->mTimerFont.JustY = 3;
     self->mTimerFont.setRGB(0x80, 0x30, 0x30);
@@ -2169,7 +2180,7 @@ CPanelData *PanelData_Construct(CPanelData *self,
 
     *reinterpret_cast<PanelAssignableFont *>(&self->mScoreFont) =
         *reinterpret_cast<PanelAssignableFont *>(
-            FontManager::GetFont(Panel_ScoreFontName_owner));
+            FontManager::GetFont(str_panel_font2));
     self->mScoreFont.JustX = 2;
     self->mScoreFont.JustY = 3;
     self->mScoreFont.setRGB(0x80, 0x80, 0x80);
@@ -2183,7 +2194,7 @@ CPanelData *PanelData_Construct(CPanelData *self,
 
     *reinterpret_cast<PanelAssignableFont *>(&self->mTrickFont) =
         *reinterpret_cast<PanelAssignableFont *>(
-            FontManager::GetFont(Panel_TrickFontName_owner));
+            FontManager::GetFont(str_panel_font3));
     self->mTrickFont.JustX = 1;
     self->mTrickFont.JustY = 3;
     self->mTrickFont.setRGB(0x80, 0x80, 0x80);
@@ -2204,11 +2215,10 @@ CPanelData *PanelData_Construct(CPanelData *self,
  * Mangled: TrickMessageRefresh__10CPanelData
  * Demangled: CPanelData::TrickMessageRefresh(void)
  *
- * @param self  Panel state whose queued trick names are formatted.
  */
-void PanelData_RefreshTrickMessage(CPanelData *self)
+void CPanelData::TrickMessageRefresh()
 {
-    char *p = self->mTrickName;
+    char *p = this->mTrickName;
     char tbuf[96];
     int lineWidth;
     int steadyScale;
@@ -2216,11 +2226,11 @@ void PanelData_RefreshTrickMessage(CPanelData *self)
 
     currLine = 0;
 
-    self->mTrickName2[0] = 0;
-    self->mTrickName3[0] = 0;
+    this->mTrickName2[0] = 0;
+    this->mTrickName3[0] = 0;
 
     int viewport = ViewportMode * 2 +
-                   reinterpret_cast<PanelBruceScoreView *>(self->mpBruce)
+                   reinterpret_cast<PanelBruceScoreView *>(this->mpBruce)
                        ->mPanelData.mPlayerNum;
     if (viewport < 2)
     {
@@ -2246,110 +2256,110 @@ width_done:
     if (GNumberOfPlayers >= 2)
         steadyScale = 0x940;
 
-    if (self->mTQStack == 0)
+    if (this->mTQStack == 0)
     {
-        self->mTrickName[0] = 0;
+        this->mTrickName[0] = 0;
         return;
     }
 
-    int last = self->mTQStack - 1;
-    if (self->mTQ[last].locked == 0)
+    int last = this->mTQStack - 1;
+    if (this->mTQ[last].locked == 0)
     {
-        if (self->mTQ[last].spins !=
-            reinterpret_cast<PanelBruceScoreView *>(self->mpBruce)
+        if (this->mTQ[last].spins !=
+            reinterpret_cast<PanelBruceScoreView *>(this->mpBruce)
                 ->mNum180Spins)
         {
-            self->mTQ[last].spins =
-                reinterpret_cast<PanelBruceScoreView *>(self->mpBruce)
+            this->mTQ[last].spins =
+                reinterpret_cast<PanelBruceScoreView *>(this->mpBruce)
                     ->mNum180Spins;
         }
     }
 
-    if (reinterpret_cast<PanelBruceScoreView *>(self->mpBruce)
+    if (reinterpret_cast<PanelBruceScoreView *>(this->mpBruce)
             ->mPerfectLanding != 0)
     {
-        if (self->TQ_SpinDisplay(0) != 0)
+        if (this->TQ_SpinDisplay(0) != 0)
         {
-            sprintf(p, Panel_PerfectSpinFormat_owner,
-                    self->TQ_SpinDisplay(0) * 180,
-                    self->mTQ[0].name);
+            sprintf(p, str_tmr_perfect_spin,
+                    this->TQ_SpinDisplay(0) * 180,
+                    this->mTQ[0].name);
         }
         else
         {
-            sprintf(p, Panel_PerfectFormat_owner, self->mTQ[0].name);
+            sprintf(p, str_tmr_perfect, this->mTQ[0].name);
         }
     }
-    else if (reinterpret_cast<PanelBruceScoreView *>(self->mpBruce)
+    else if (reinterpret_cast<PanelBruceScoreView *>(this->mpBruce)
                  ->mSloppyLanding != 0)
     {
-        if (self->TQ_SpinDisplay(0) != 0)
+        if (this->TQ_SpinDisplay(0) != 0)
         {
-            sprintf(p, Panel_SloppySpinFormat_owner,
-                    self->TQ_SpinDisplay(0) * 180,
-                    self->mTQ[0].name);
+            sprintf(p, str_tmr_sloppy_spin,
+                    this->TQ_SpinDisplay(0) * 180,
+                    this->mTQ[0].name);
         }
         else
         {
-            sprintf(p, Panel_SloppyFormat_owner, self->mTQ[0].name);
+            sprintf(p, str_tmr_sloppy, this->mTQ[0].name);
         }
     }
     else
     {
-        if (self->TQ_SpinDisplay(0) != 0)
+        if (this->TQ_SpinDisplay(0) != 0)
         {
-            sprintf(p, Panel_SpinFormat_reference,
-                    self->TQ_SpinDisplay(0) * 180,
-                    self->mTQ[0].name);
+            sprintf(p, str_tmr_spin,
+                    this->TQ_SpinDisplay(0) * 180,
+                    this->mTQ[0].name);
         }
         else
         {
-            sprintf(p, Panel_TrickNameFormat_reference, self->mTQ[0].name);
+            sprintf(p, str_tmr_name, this->mTQ[0].name);
         }
     }
 
     {
         int i = 1;
-        self->mTrickFont.Scale = steadyScale;
-        if (i < self->mTQStack)
+        this->mTrickFont.Scale = steadyScale;
+        if (i < this->mTQStack)
         {
             do
             {
-                if (self->TQ_SpinDisplay(i) != 0)
+                if (this->TQ_SpinDisplay(i) != 0)
                 {
-                    sprintf(tbuf, Panel_ContinueSpinFormat_owner, p,
-                            self->TQ_SpinDisplay(i) * 180,
-                            self->mTQ[i].name);
+                    sprintf(tbuf, str_tmr_cont_spin, p,
+                            this->TQ_SpinDisplay(i) * 180,
+                            this->mTQ[i].name);
                 }
                 else
                 {
-                    sprintf(tbuf, Panel_ContinueFormat_reference, p,
-                            self->mTQ[i].name);
+                    sprintf(tbuf, str_tmr_cont, p,
+                            this->mTQ[i].name);
                 }
 
-                if (lineWidth < self->mTrickFont.width(tbuf))
+                if (lineWidth < this->mTrickFont.width(tbuf))
                 {
                     ++currLine;
                     if (currLine == 1)
-                        p = self->mTrickName2;
+                        p = this->mTrickName2;
                     else if (currLine == 2)
-                        p = self->mTrickName3;
+                        p = this->mTrickName3;
 
                     if (currLine == 3)
                     {
-                        sprintf(p, Panel_OverflowFormat_owner, p);
+                        sprintf(p, str_tmr_overflow, p);
                         return;
                     }
 
-                    if (self->TQ_SpinDisplay(i) != 0)
+                    if (this->TQ_SpinDisplay(i) != 0)
                     {
-                        sprintf(p, Panel_BreakSpinFormat_reference,
-                                self->TQ_SpinDisplay(i) * 180,
-                                self->mTQ[i].name);
+                        sprintf(p, str_tmr_break_spin,
+                                this->TQ_SpinDisplay(i) * 180,
+                                this->mTQ[i].name);
                     }
                     else
                     {
-                        sprintf(p, Panel_BreakFormat_reference,
-                                self->mTQ[i].name);
+                        sprintf(p, str_tmr_break,
+                                this->mTQ[i].name);
                     }
                 }
                 else
@@ -2358,7 +2368,7 @@ width_done:
                 }
 
                 ++i;
-            } while (i < self->mTQStack);
+            } while (i < this->mTQStack);
         }
     }
 }
@@ -2380,7 +2390,7 @@ void CPanelData::TrickMessage()
     {
         mTrickTextEffect.init();
         mpTextEffect = &mTrickTextEffect.TextEffect;
-        PanelData_RefreshTrickMessage(this);
+        TrickMessageRefresh();
     }
 }
 
@@ -2400,43 +2410,42 @@ void CPanelData::TrickMessage()
  */
 void CPanelData::Trick(char *pName, int Points, int Lock, int Dep)
 {
-    CPanelData *self = this;
     int Flipped;
 
     if (Cheat_BigScore != 0)
     {
         Points = Points * 10;
     }
-    int count = self->mTQStack;
+    int count = mTQStack;
     if (count == 0)
     {
-        int oldTotal = self->mTotalScore;
-        int landed = self->mLandedTotal;
-        self->mLandedTotal = 0;
-        self->mLandedMultiplier = 0;
-        self->mHoldingTankFlashTimer = 0;
-        self->mTotalScore = oldTotal + landed;
+        int oldTotal = mTotalScore;
+        int landed = mLandedTotal;
+        mLandedTotal = 0;
+        mLandedMultiplier = 0;
+        mHoldingTankFlashTimer = 0;
+        mTotalScore = oldTotal + landed;
     }
-    self->mTQ[count].Set(0, pName, Points);
-    count = self->mTQStack;
+    mTQ[count].Set(0, pName, Points);
+    count = mTQStack;
     if (count <= 0)
     {
         goto check_lock;
     }
     {
         int prevIdx = count - 1;
-        int prevState = self->mTQ[prevIdx].locked;
+        int prevState = mTQ[prevIdx].locked;
         if (prevState != 0)
         {
             goto check_lock;
         }
         // Previous trick has state 0 - get 180s
-        CBruce *bruce = self->mpBruce;
+        CBruce *bruce = mpBruce;
         int halfTurns = bruce->Get180s();
         // Store halfTurns in the previous entry's spin slot
-        int cnt2 = self->mTQStack;
-        self->mTQ[cnt2 - 1].spins = halfTurns;
-        CBruce *bruce2 = self->mpBruce;
+        int cnt2 = mTQStack;
+        mTQ[cnt2 - 1].spins = halfTurns;
+        CBruce *bruce2 = mpBruce;
         PanelBruce(bruce2)->mNum180Spins = 0;
         goto after_lock;
     }
@@ -2446,24 +2455,24 @@ check_lock:
         goto skip_lock;
     if (Lock == 1)
     {
-        CBruce *bruce = self->mpBruce;
+        CBruce *bruce = mpBruce;
         int halfTurns = bruce->Get180s();
-        CBruce *bruce2 = self->mpBruce;
+        CBruce *bruce2 = mpBruce;
         PanelBruce(bruce2)->mNum180Spins = halfTurns;
-        count = self->mTQStack;
+        count = mTQStack;
     }
     {
-        CBruce *bruce3 = self->mpBruce;
+        CBruce *bruce3 = mpBruce;
         int val = PanelBruce(bruce3)->mNum180Spins;
-        self->mTQ[count].spins = val;
+        mTQ[count].spins = val;
     }
 after_lock:
-    count = self->mTQStack;
+    count = mTQStack;
 }
 skip_lock:
 {
     // Switchness check
-    PanelBruceScoreView *bruce = PanelBruce(self->mpBruce);
+    PanelBruceScoreView *bruce = PanelBruce(mpBruce);
     unsigned int flags = bruce->mExtraFlags;
     int skaterType = bruce->mSkaterType;
     Flipped = (flags >> 1) & 1;
@@ -2472,32 +2481,32 @@ skip_lock:
     int isZero = stats[skaterType].Ability[11] < 1;
     if (Flipped != isZero)
     {
-        self->mTQ[count].switched = 1;
+        mTQ[count].switched = 1;
     }
     else
     {
-        self->mTQ[count].switched = 0;
+        mTQ[count].switched = 0;
     }
     // History_Add
-    int cnt3 = self->mTQStack;
-    CBruce *bruce4 = self->mpBruce;
-    char *name = self->mTQ[cnt3].name;
-    int bc = self->mTQ[cnt3].spins;
-    int sc = self->mTQ[cnt3].switched;
-    int histVal = Panel_AddTrickHistory(bruce4, name, bc * 2 + sc);
+    int cnt3 = mTQStack;
+    CBruce *bruce4 = mpBruce;
+    char *name = mTQ[cnt3].name;
+    int bc = mTQ[cnt3].spins;
+    int sc = mTQ[cnt3].switched;
+    int histVal = bruce4->History_Add(name, bc * 2 + sc);
     // Store results
-    int cnt4 = self->mTQStack;
-    self->mTQ[cnt4].count = histVal;
-    int cnt5 = self->mTQStack;
-    self->mTQ[cnt5].locked = Lock;
-    int cnt6 = self->mTQStack;
-    self->mTQ[cnt6].depreciate = Dep;
-    int cnt7 = self->mTQStack;
+    int cnt4 = mTQStack;
+    mTQ[cnt4].count = histVal;
+    int cnt5 = mTQStack;
+    mTQ[cnt5].locked = Lock;
+    int cnt6 = mTQStack;
+    mTQ[cnt6].depreciate = Dep;
+    int cnt7 = mTQStack;
     if (cnt7 < 19)
     {
-        self->mTQStack = cnt7 + 1;
+        mTQStack = cnt7 + 1;
     }
-    self->TrickMessage();
+    TrickMessage();
 }
 }
 
@@ -2578,8 +2587,7 @@ void CPanelData::Bail()
  */
 void CPanelData::OutOfBounds()
 {
-    CPanelData *self = this;
-    self->mOutOfBounds = Rnd(4) + 1;
-    self->mOutOfBoundsText.init();
-    self->mOutOfBoundsText.SetBloodiness(0);
+    mOutOfBounds = Rnd(4) + 1;
+    mOutOfBoundsText.init();
+    mOutOfBoundsText.SetBloodiness(0);
 }

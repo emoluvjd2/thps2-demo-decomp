@@ -40,25 +40,26 @@ static CTextWindow *WinList = 0;
 // vtable in every owner that derives from CClass.  `MAIN.SYM` records 25 such
 // `_._6CClass` copies and names no base vtable, so both are file-local here.
 // The filesystem-safe spelling keeps the per-address target assembly reachable.
-static void TextWin_ClassDestructor(CClass *self, int flags)
-    asm("__DOT__6CClass_8006AAB0");
+extern "C" {
+static void __DOT__6CClass_8006AAB0(CClass *self, int flags);
+}
 
 // C++ forbids taking a destructor's address, so the public vtable slot uses an
 // addressable declaration of the symbol this owner already defines.
-extern "C" void TextWin_DestructorAbi(CTextWindow *, int)
+void TextWin_DestructorAbi(CTextWindow *, int)
     asm("_._11CTextWindow");
 
 // Consecutive eight-byte-aligned small-data words per vtable rather than
 // arrays, so -G8 still yields the target's `addiu $vX, $gp, off` form.
-extern "C" int __vt_11CTextWindow
+int __vt_11CTextWindow
     __attribute__((section(".sdata"), aligned(8))) = 0;
 static int TextWin_VTableIndex = 0;
 static int TextWin_VTableDtor = (int)&TextWin_DestructorAbi;
 
-static int TextWin_BaseVTableAnchor asm("__vt_11CTextWindow_base")
+static int __vt_11CTextWindow_base
     __attribute__((section(".sdata"), aligned(8))) = 0;
 static int TextWin_BaseVTableIndex = 0;
-static int TextWin_BaseVTableDtor = (int)&TextWin_ClassDestructor;
+static int TextWin_BaseVTableDtor = (int)&__DOT__6CClass_8006AAB0;
 // === Function implementations (address order) ===
 
 /**
@@ -82,7 +83,7 @@ CTextWindow::~CTextWindow() {
     }
     Mem_Delete(mpLineData);
     Mem_Delete(mpLineFlags);
-    CClass.vtable = &TextWin_BaseVTableAnchor;
+    CClass.vtable = &__vt_11CTextWindow_base;
 }
 
 /**
@@ -91,9 +92,9 @@ CTextWindow::~CTextWindow() {
  * GCC emitted this private copy last in the owner's text, so it remains at
  * the end of the translation unit.
  */
-static void TextWin_ClassDestructor(CClass *self, int flags)
+static void __DOT__6CClass_8006AAB0(CClass *self, int flags)
 {
-    self->vtable = &TextWin_BaseVTableAnchor;
+    self->vtable = &__vt_11CTextWindow_base;
     if (flags & 1)
     {
         CClass::operator delete(self);

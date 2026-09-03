@@ -80,6 +80,21 @@ char *Spool_LoadPSH(
 
 #endif // SPOOL_INC_H
 
+#if defined(SPOOL_DECLARE_OWNER_ADDRESS_VIEWS)
+/** Absolute-address views of SPOOL's owner-local filename strings. */
+namespace SpoolAddressViews
+{
+extern "C"
+{
+extern char DAT_800daa08[];
+extern char s__s_psh_800daa14[];
+#include "SPOOLPARTPREFIX.h"
+extern char s_Shrinking_animation_800b2bb0[];
+}
+}
+#undef SPOOL_DECLARE_OWNER_ADDRESS_VIEWS
+#endif
+
 #if defined(SPOOL_QUEUE_LAYOUT) && !defined(SPOOL_QUEUE_LAYOUT_EMITTED)
 #define SPOOL_QUEUE_LAYOUT_EMITTED
 

@@ -15,7 +15,7 @@ struct CBody;
 #define CAMERALIST_DECL_ATTR __attribute__((section(".data")))
 #endif
 
-extern "C" CBody *CameraList CAMERALIST_DECL_ATTR;
+extern CBody *CameraList CAMERALIST_DECL_ATTR;
 
 #undef CAMERALIST_DECL_ATTR
 

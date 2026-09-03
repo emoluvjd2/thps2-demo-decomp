@@ -338,9 +338,9 @@ void M3dColij_LineToThisItemCached(Item *pItem, SLineInfo *pInfo, SColCache *pCo
     pFaceCache = &FaceCache[pColCache->FirstFace];
     Faces = pColCache->Faces;
     pModel = PSXRegion[pItem->Region].ppModels[pItem->Model];
-    Normals = pModel->Vertices + pModel->NumVertices;
-    pVerts = pModel->Vertices;
     NumNormals = pModel->NumNormals;
+    pVerts = pModel->Vertices;
+    Normals = pModel->Vertices + pModel->NumVertices;
     pFace = (u32 *)(Normals + NumNormals);
     tNear = pInfo->tNear;
     CollidedTriggerModel = -1;
@@ -359,9 +359,9 @@ void M3dColij_LineToThisItemCached(Item *pItem, SLineInfo *pInfo, SColCache *pCo
         {
             u32 faceHeader = pFace[3];
 
-            if (!(faceHeader & M3dColij_OneMask))
-            if (~(faceHeader | M3dColij_ZeroMask) == 0)
-            if ((((faceHeader >> 16) & 3) ^ 1) != 0)
+            if (!(faceHeader & M3dColij_OneMask) &&
+                ~(faceHeader | M3dColij_ZeroMask) == 0 &&
+                (((faceHeader >> 16) & 3) ^ 1) != 0)
             {
                 u16 FaceFlags;
                 u8 *pVertexIndex;
@@ -464,19 +464,19 @@ void M3dColij_LineToThisItemCached(Item *pItem, SLineInfo *pInfo, SColCache *pCo
                     Dy = L1y - L0y;
                     Dz = L1z - L0z;
 
-                    V0x = x0 - L0x;
-                    V0y = y0 - L0y;
+                    V0x = x0 - L0x,
+                    V0y = y0 - L0y,
                     V0z = z0 - L0z;
-                    V1x = x1 - L0x;
-                    V1y = y1 - L0y;
+                    V1x = x1 - L0x,
+                    V1y = y1 - L0y,
                     V1z = z1 - L0z;
-                    V2x = x2 - L0x;
-                    V2y = y2 - L0y;
+                    V2x = x2 - L0x,
+                    V2y = y2 - L0y,
                     V2z = z2 - L0z;
 
+                    V3z = z3 - L0z,
+                    V3y = y3 - L0y,
                     V3x = x3 - L0x;
-                    V3y = y3 - L0y;
-                    V3z = z3 - L0z;
 
                     contained = 0;
 
@@ -559,19 +559,13 @@ void M3dColij_LineToThisItemCached(Item *pItem, SLineInfo *pInfo, SColCache *pCo
                                 Qz = pInfo->EndCoords.vz -
                                      pInfo->StartCoords.vz;
 
-                                sxd = 1;
-                                if (Qx < 0)
-                                    sxd = -1;
+                                sxd = Qx < 0 ? -1 : 1;
                                 xd = (Qx ^ (Qx >> 31)) - (Qx >> 31);
 
-                                syd = 1;
-                                if (Qy < 0)
-                                    syd = -1;
+                                syd = Qy < 0 ? -1 : 1;
                                 yd = (Qy ^ (Qy >> 31)) - (Qy >> 31);
 
-                                szd = 1;
-                                if (Qz < 0)
-                                    szd = -1;
+                                szd = Qz < 0 ? -1 : 1;
                                 zd = (Qz ^ (Qz >> 31)) - (Qz >> 31);
 
                                 xd1 = sxd *
@@ -581,16 +575,17 @@ void M3dColij_LineToThisItemCached(Item *pItem, SLineInfo *pInfo, SColCache *pCo
                                 zd1 = szd *
                                       M3dMaths_MulDiv64(zd, t, 0x4000);
 
+                                xd1 += pInfo->StartCoords.vx;
+                                yd1 += pInfo->StartCoords.vy;
+                                zd1 += pInfo->StartCoords.vz;
+
                                 tNear = t;
                                 pInfo->tNear = t;
+                                pInfo->Position.vx = xd1;
+                                pInfo->Position.vy = yd1;
+                                pInfo->Position.vz = zd1;
                                 pInfo->pItem = pItem;
-                                pInfo->Position.vx =
-                                    pInfo->StartCoords.vx + xd1;
-                                pInfo->Position.vy =
-                                    pInfo->StartCoords.vy + yd1;
                                 pInfo->pFace = pFace;
-                                pInfo->Position.vz =
-                                    pInfo->StartCoords.vz + zd1;
                                 pInfo->Model = pItem->Model;
                                 pInfo->Distance =
                                     Mips_FixMul(LineLen, t) >> 2;
@@ -605,6 +600,7 @@ void M3dColij_LineToThisItemCached(Item *pItem, SLineInfo *pInfo, SColCache *pCo
                 }
             }
         }
+
     }
 
     if (CollidedTriggerModel != -1)
@@ -620,54 +616,32 @@ void M3dColij_LineToThisItemCached(Item *pItem, SLineInfo *pInfo, SColCache *pCo
 /**
  * Checks whether a face span fits at the circular cache tail.
  *
- * FitFacesAtCacheEnd is the sole retained assembly body in this owner. Clean
- * C++ reproduces every instruction but not the target's first cache-tail
- * branch relocation, so the exact pre-existing body remains canonical here.
- *
  * @param faces Number of face records to append.
  * @return Nonzero when the span can be added without overlapping live data.
  */
-asm(
-    ".set noreorder\n"
-    ".globl FitFacesAtCacheEnd__Fi\n"
-    "FitFacesAtCacheEnd__Fi:\n"
-    "lw $3,0x489C($28)\n"
-    "nop\n"
-    "slti $2,$3,0x14\n"
-    "bne $2,$0,1f\n"
-    "nop\n"
-    "sw $0,0x489C($28)\n"
-    "addu $3,$0,$0\n"
-    "1:\n"
-    "lw $2,0x48A0($28)\n"
-    "nop\n"
-    "beq $3,$2,4f\n"
-    "addu $2,$0,$0\n"
-    "lw $3,0x48A4($28)\n"
-    "lw $5,0x48A8($28)\n"
-    "nop\n"
-    "slt $2,$5,$3\n"
-    "beq $2,$0,2f\n"
-    "addu $2,$3,$4\n"
-    "slti $2,$2,0x1F5\n"
-    "bne $2,$0,3f\n"
-    "slt $2,$5,$3\n"
-    "sw $0,0x48A4($28)\n"
-    "addu $3,$0,$0\n"
-    "2:\n"
-    "slt $2,$5,$3\n"
-    "3:\n"
-    "bne $2,$0,4f\n"
-    "addiu $2,$0,1\n"
-    "addu $3,$3,$4\n"
-    "slt $3,$5,$3\n"
-    "bne $3,$0,4f\n"
-    "addu $2,$0,$0\n"
-    "addiu $2,$0,1\n"
-    "4:\n"
-    "jr $31\n"
-    "nop\n"
-    ".set reorder\n");
+int FitFacesAtCacheEnd(int faces)
+{
+    if (ItemCacheIndex >= 20)
+        ItemCacheIndex = 0;
+
+    if (ItemCacheIndex == ItemCacheStart)
+        return 0;
+
+    if (FaceCacheStart < FaceCacheIndex && FaceCacheIndex + faces > 500)
+        FaceCacheIndex = 0;
+
+    int faceIndex = FaceCacheIndex;
+    int faceStart = FaceCacheStart;
+
+    if (faceStart < faceIndex)
+        goto fits;
+
+    if (faceStart < faceIndex + faces)
+        return 0;
+
+fits:
+    return 1;
+}
 
 /**
  * Removes the oldest item and its face span from the circular cache.

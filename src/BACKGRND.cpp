@@ -51,6 +51,16 @@ struct CBody : public CItem {
     ~CBody();
     void AttachTo(CBody **list);
     void DeleteFrom(CBody **list);
+    /** Mark this body dead. */
+    void Die();
+    /** Run this body's per-frame behavior. */
+    void EveryFrame();
+    /** Configure lighting before this body is drawn. */
+    void DoLightingSetup();
+    /** Apply one hit and report whether it was accepted. */
+    int Hit(int damage, const CVector &knock, int whatHit);
+    /** Release resources owned by this body. */
+    void DeleteStuff();
 };
 
 /** Background body plus the monotonically assigned background-list index. */
@@ -79,18 +89,10 @@ enum {
     BACKGROUND_BODY_FLAGS_CLEARED_ON_INIT = 6
 };
 
-// === Extern "C" forward declarations ===
-extern "C" void Background_DestructorAbi(CBackground *, int)
+// C++ forbids taking a destructor's address, so this manual vtable retains an
+// owner-local addressable view of the natural destructor symbol.
+void Background_DestructorAbi(CBackground *background, int inCharge)
     asm("_._11CBackground");
-extern "C" void Background_AIAbi(CBackground *) asm("AI__11CBackground");
-extern "C" void Background_CBodyDie(CBody *) asm("Die__5CBody");
-extern "C" void Background_CBodyDoLightingSetup(CBody *)
-    asm("DoLightingSetup__5CBody");
-extern "C" int Background_CBodyHit(
-    CBody *, int damage, const CVector &knock, int whatHit)
-    asm("Hit__5CBodyiRC7CVectori");
-extern "C" void Background_CBodyDeleteStuff(CBody *)
-    asm("DeleteStuff__5CBody");
 
 /** Typed dispatch-table layout emitted for CBackground. */
 struct BackgroundVtable {
@@ -112,12 +114,12 @@ BackgroundVtable __vt_11CBackground
     __attribute__((section(".rdata"))) = {
         {0, 0},
         Background_DestructorAbi,
-        Background_CBodyDie,
-        Background_AIAbi,
-        CBody_EveryFrame,
-        Background_CBodyDoLightingSetup,
-        Background_CBodyHit,
-        Background_CBodyDeleteStuff,
+        (void (*)(CBody *))&CBody::Die,
+        (void (*)(CBackground *))&CBackground::AI,
+        (void (*)(CBody *))&CBody::EveryFrame,
+        (void (*)(CBody *))&CBody::DoLightingSetup,
+        (int (*)(CBody *, int, const CVector &, int))&CBody::Hit,
+        (void (*)(CBody *))&CBody::DeleteStuff,
     };
 
 // === Function implementations (address order) ===

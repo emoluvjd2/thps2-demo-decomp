@@ -23,10 +23,6 @@ void GameFMV_SyncFMV(int DecodeData);
 
 #ifdef GAMEFMV_OWNER_DECLARATIONS
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 // Primitive types
 typedef unsigned char u8;
 typedef unsigned short u16;
@@ -65,41 +61,53 @@ struct SMovieDetails {
     int musicScale;
 };
 
-#ifdef __cplusplus
-}
+// === Variables (gp-relative in this TU) ===
+extern int CycleTracks;       // 0x800DBD84
+#define GAMEFMVSTATE_OWNER_DECLARATION
+#define GAMEFMVSTATE_DECLARE_ACTIVE
+#include "GAMEFMVSTATE.h"
+#define GAMEFMVSTATE_OWNER_DECLARATION
+#define GAMEFMVSTATE_DECLARE_CURRENT_FRAME
+#include "GAMEFMVSTATE.h"
+extern u8 GameFMV_CurrentTrack;       // 0x800DBDB9
+extern int GameFMV_EndFrame;       // 0x800DBD9C
+#define GAMEFMVSTATE_OWNER_DECLARATION
+#define GAMEFMVSTATE_DECLARE_END_X
+#include "GAMEFMVSTATE.h"
+extern int GameFMV_FrameBufferCopyActive;       // 0x800DBBC8
+extern u16 GameFMV_Height;       // 0x800DBDB0
+extern u8 GameFMV_Is24Bit;       // 0x800DBDB8
+extern int GameFMV_MusicScale;       // 0x800DBDBC
+extern int GameFMV_NumSoundSources;       // 0x800DBDB4
+extern int GameFMV_RewindSwitch;       // 0x800DBBC0
+extern int GameFMV_RingBufferSectors;       // 0x800DBDA4
+extern u8 GameFMV_SliceBuffers;       // 0x800DBDA8
+extern int GameFMV_StartSector;       // 0x800DBD98
+#define GAMEFMVSTATE_OWNER_DECLARATION
+#define GAMEFMVSTATE_DECLARE_START_X
+#include "GAMEFMVSTATE.h"
+#define GAMEFMVSTATE_OWNER_DECLARATION
+#define GAMEFMVSTATE_DECLARE_START_Y
+#include "GAMEFMVSTATE.h"
+extern int GameFMV_VLCBufferSize;       // 0x800DBDA0
+extern u16 GameFMV_Width;       // 0x800DBDAE
+#ifndef GAMEFMV_DEFINE_OWNER_LOCAL_DECODER_STATE
+extern int alreadyHandledPause;       // 0x800DBD88
+extern int currentDecodeBuffer;       // 0x800DBBCC
+extern int currentVlcBuffer;           // 0x800DBBD0
+#endif
+extern RECT decodeSlice;       // 0x800DBDC0
+/** Typed prefix view of the two decoder-buffer pointers at 0x800DBDC8. */
+struct GameFMVVlcBufferPrefix {
+    unsigned int *first;
+};
+extern GameFMVVlcBufferPrefix vlcBuffer;
+#ifndef GAMEFMV_DEFINE_OWNER_LOCAL_DECODER_STATE
+extern int pRingBuffer;               // 0x800DC8C8
+extern int sendVLC;                    // 0x800DBBD4
 #endif
 
-// === Variables (gp-relative in this TU) ===
-extern "C" int CycleTracks;       // 0x800DBD84
-extern "C" int GameFMV_Active;       // 0x800DBBC4
-extern "C" int GameFMV_CurrentFrame;       // 0x800DBD90
-extern "C" u8 GameFMV_CurrentTrack;       // 0x800DBDB9
-extern "C" int GameFMV_EndFrame;       // 0x800DBD9C
-extern "C" u16 GameFMV_EndX;       // 0x800DBDAC
-extern "C" int GameFMV_FrameBufferCopyActive;       // 0x800DBBC8
-extern "C" u16 GameFMV_Height;       // 0x800DBDB0
-extern "C" u8 GameFMV_Is24Bit;       // 0x800DBDB8
-extern "C" int GameFMV_IsMovie;       // 0x800DBBBC
-extern "C" int GameFMV_MusicScale;       // 0x800DBDBC
-extern "C" int GameFMV_NumSoundSources;       // 0x800DBDB4
-extern "C" int GameFMV_RewindSwitch;       // 0x800DBBC0
-extern "C" int GameFMV_RingBufferSectors;       // 0x800DBDA4
-extern "C" u8 GameFMV_SliceBuffers;       // 0x800DBDA8
-extern "C" int GameFMV_StartSector;       // 0x800DBD98
-extern "C" s16 GameFMV_StartX;       // 0x800DBD94
-extern "C" s16 GameFMV_StartY;       // 0x800DBDAA
-extern "C" int GameFMV_VLCBufferSize;       // 0x800DBDA0
-extern "C" u16 GameFMV_Width;       // 0x800DBDAE
-extern "C" int alreadyHandledPause;       // 0x800DBD88
-extern "C" int currentDecodeBuffer;       // 0x800DBBCC
-extern "C" int currentVlcBuffer;           // 0x800DBBD0
-extern "C" RECT decodeSlice;       // 0x800DBDC0
-extern "C" int vlcBuffer;       // 0x800DBDC8
-extern "C" int pRingBuffer;               // 0x800DC8C8
-extern "C" int sendVLC;                    // 0x800DBBD4
-
 // === Variables (absolute in this TU) ===
-extern "C" unsigned short *decodeSliceBuffer[11]; // 0x800C61CC
 #define SOUNDLEVELS_DECLARE_MIDILEVEL
 #include "SOUNDLEVELS.h"
 #include "MUSICSTOPPED.h"
@@ -110,3 +118,10 @@ extern "C" unsigned short *decodeSliceBuffer[11]; // 0x800C61CC
 #endif // GAMEFMV_OWNER_DECLARATIONS
 
 #endif // GAMEFMV_INC_H
+
+#ifdef GAMEFMV_DECLARE_DECODER_ADDRESS_VIEWS
+/** Two-pointer decoder-buffer view retaining the target external-record size. */
+extern unsigned int *GameFMV_VlcBuffers[2] asm("vlcBuffer");
+
+#undef GAMEFMV_DECLARE_DECODER_ADDRESS_VIEWS
+#endif

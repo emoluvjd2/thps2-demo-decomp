@@ -10,20 +10,23 @@
 #include <LIBGTE.H>
 #include <LIBGPU.H>
 
-extern "C" void FrontPreLoaderDestructorSlot(FrontPreLoader *, int)
+// C++ forbids taking a destructor's address, so the manual vtable slot retains
+// an owner-local addressable view of the natural destructor symbol.
+void FrontPreLoaderDestructorSlot(FrontPreLoader *, int)
     asm("_._14FrontPreLoader");
 // GCC 2.x emits a private copy of `CClass::~CClass` last in every owner that
 // derives from CClass.  `MAIN.SYM` records 25 such `_._6CClass` copies, all
 // file-local, so this owner defines its own instead of importing another
 // object's copy at a different address.
-static void FrontPreLoaderCClassDestructorSlot(CClass *, int)
-    asm("__DOT__6CClass_8006B53C");
-
 extern "C" {
+static void __DOT__6CClass_8006B53C(CClass *, int);
 
 /** Front-end PRE filename format stored immediately before the loader tables. */
-static char FrontPreFilenameFormatOwner[4] asm("FrontPre_preManagerAddr")
+namespace FrontPreAddressViewOwners
+{
+static char FrontPre_preManagerAddr[4]
     __attribute__((section(".sdata"))) = "%s";
+}
 
 /**
  * FrontPreLoader's dispatch table and the local CClass base table.
@@ -41,25 +44,18 @@ static void (*FrontPreLoaderVtableDestructor)(FrontPreLoader *, int)
 static int FrontPreLoaderVtableEnd
     __attribute__((section(".sdata"))) = 0;
 
-static int FrontPreLoaderBaseVtableOwner asm("DAT_800daae0")
+static int DAT_800daae0
     __attribute__((section(".sdata"))) = 0;
 static int FrontPreLoaderBaseVtableReserved
     __attribute__((section(".sdata"))) = 0;
 static void (*FrontPreLoaderBaseVtableDestructor)(CClass *, int)
-    __attribute__((section(".sdata"))) = FrontPreLoaderCClassDestructorSlot;
+    __attribute__((section(".sdata"))) = __DOT__6CClass_8006B53C;
 
 }
 
-/** Pointer-only interface to the spool manager methods used by this owner. */
-struct Spooler {
-    static Spooler *SpoolMgr __attribute__((section(".data")));
-    void Reset();
-    int AddFile(char *filename, int ignoreExtension);
-    void Spooool();
-    void Update();
-    int IsFileLoaded(int slot);
-    void *GetFile(int slot);
-};
+#define SPOOLER_ABSOLUTE_MANAGER_DECLARATION
+#include "SPOOLER.h"
+#undef SPOOLER_ABSOLUTE_MANAGER_DECLARATION
 
 enum {
     FrontPreInitialTimeout = 3,
@@ -71,29 +67,16 @@ enum {
     FrontPreScreenHeight = 240,
 };
 
-extern "C"
-{
-    // PSY-Q classifies this external table from its declared scalar size.  Keep
-    // a four-byte address anchor so the original gp-relative access survives;
-    // callers use the typed table view below.
-    extern int preInfo;
+#define FRONTPRE_DECLARE_PRE_INFO_OWNER_VIEW
+#include "FRONTPRE.h"
 
-    // The target loads this local sdata string through its absolute address,
-    // so this unbounded alias is the caller-side view used by BeginLoad.
-    extern char FrontPreFilenameFormatAbsolute[]
-        asm("FrontPre_preManagerAddr");
-
-}
+#define FRONTPRE_DECLARE_FILENAME_FORMAT_ABSOLUTE_VIEW
+#include "FRONTPRE.h"
 
 // DB owns this small-data pointer, but FRONTPRE addresses it absolutely.
 #include "PDOUBLEBUFFER.h"
 
-extern "C"
-{
-#define PREMGR_WITHIN_C_LINKAGE
 #include "PREMGR.h"
-
-}
 
 /** Return the typed view of the front-end PRE selection table. */
 static inline _FrontPreInfo *GetFrontPreInfoTable()
@@ -117,7 +100,7 @@ FrontPreLoader::FrontPreLoader()
  */
 FrontPreLoader::~FrontPreLoader()
 {
-    CClass.vtable = &FrontPreLoaderBaseVtableOwner;
+    CClass.vtable = &DAT_800daae0;
 }
 
 /**
@@ -149,7 +132,7 @@ int FrontPreLoader::BeginLoad(int whichScreen)
 
     {
         mActive = 1;
-        sprintf(mFileName, FrontPreFilenameFormatAbsolute, pInfo->pFileName);
+        sprintf(mFileName, FrontPre_preManagerAddr, pInfo->pFileName);
 
         Spooler::SpoolMgr->Reset();
         mSpoolID = Spooler::SpoolMgr->AddFile(mFileName, 0);
@@ -218,9 +201,9 @@ int FrontPreLoader::DoneLoading()
  * GCC emitted this private base-destructor copy last in the owner's text, so
  * its definition remains at the end of the translation unit.
  */
-static void FrontPreLoaderCClassDestructorSlot(CClass *_this, int __in_chrg)
+static void __DOT__6CClass_8006B53C(CClass *_this, int __in_chrg)
 {
-    _this->vtable = &FrontPreLoaderBaseVtableOwner;
+    _this->vtable = &DAT_800daae0;
     if (__in_chrg & 1)
     {
         CClass::operator delete(_this);

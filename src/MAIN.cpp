@@ -8,6 +8,7 @@
 #define MAIN_OWNER_DECLARATIONS
 #include "MAIN.h"
 #undef MAIN_OWNER_DECLARATIONS
+#include "APOCALYPSEVIEWPORT.h"
 #include "GSKATER_STATE.h"
 #include "BADDY.h"
 #include "VIDEO.h"
@@ -31,6 +32,7 @@
 #include "SHATTER.h"
 #include "STATS.h"
 #include "MECH.h"
+#include "BOARDSTATSSTATE.h"
 #include "TRICKOB.h"
 #include "TRICKTIPS.h"
 #include "OB.h"
@@ -38,6 +40,8 @@
 #include "CSUPER.h"
 #include "M3D.h"
 #include "UTILS.h"
+#include "VBLANKUPDATEBAR.h"
+#include "STARTSCREEN.h"
 #include "FONT.h"
 #include <STDDEF.H>
 #include <LIBGTE.H>
@@ -48,8 +52,6 @@ inline void *operator new(unsigned int, void *address)
 {
     return address;
 }
-
-struct Sprite;
 
 /** Exact-size camera view used by MAIN's construction and query paths. */
 struct CCamera
@@ -76,16 +78,13 @@ typedef CCamera MainCreationCamera;
  * the two compiler-generated switch tables. Keeping even the currently unused
  * memory-report labels preserves the original table and literal order.
  */
-extern "C"
-{
     static char Main_checksumSuccessFormat[]
         __attribute__((section(".rdata"))) =
         "FOUND Valid checksum %lx , score %d, on the %dth try\n";
     static char Main_randomAttemptsFormat[]
         __attribute__((section(".rdata"))) =
         "Tried\t%d randoms numbers, \n";
-    static char Main_dumpAutoTestFormatOwner[]
-        asm("sDumpAutoTestFmt")
+    static char sDumpAutoTestFmt[]
         __attribute__((section(".rdata"))) =
         "L-%d, P1-%d, P2-%d, G-%d";
     static char Main_memoryRowFormat[]
@@ -124,7 +123,6 @@ extern "C"
     static char Main_notEndCodeTweakJumpMessage[]
         __attribute__((section(".rdata"))) =
         "not .... ENDCODE_TWEAKJUMP\n";
-}
 
 /**
  * MAIN's initialized small-data prefix.
@@ -133,8 +131,6 @@ extern "C"
  * through PatchY. Keeping the real owners together also preserves the
  * owner-local Released/LoopTimer/FPS string fragment which follows it.
  */
-extern "C"
-{
     int Cheat_FlipScreen __attribute__((section(".sdata"))) = 0;
     short *GTricks __attribute__((section(".sdata"))) = 0;
     char Code_String[9] __attribute__((section(".sdata"))) = "12345678";
@@ -153,13 +149,10 @@ extern "C"
     int Mick_MapMode __attribute__((section(".sdata"))) = 0;
     int Mick_MapDoit __attribute__((section(".sdata"))) = 0;
     int SelectedSkater2 __attribute__((section(".sdata"))) = 0;
-}
 
 /** Optional auto-test restart label displayed over the current frame. */
 static char *pAutoTestRestartName __attribute__((section(".sdata"))) = 0;
 
-extern "C"
-{
     EEndCode EndCode __attribute__((section(".sdata"))) = ENDCODE_NONE;
     int TTime __attribute__((section(".sdata"))) = 0;
     int EveryOther __attribute__((section(".sdata"))) = 0;
@@ -168,10 +161,14 @@ extern "C"
     int CurrentWaterLevel2 __attribute__((section(".sdata"))) = 0x7fffffff;
     int CurrentDualShockLevel __attribute__((section(".sdata"))) = 2;
     int GameFrozen __attribute__((section(".sdata"))) = 0;
+#define CHEATPANELON_OWNER_DECLARATION
+#include "CHEATPANELON.h"
     int Cheat_PanelOn __attribute__((section(".sdata"))) = 1;
     int Cheat_L2KillsBaddies __attribute__((section(".sdata"))) = 0;
     int Cheat_LevelSelect __attribute__((section(".sdata"))) = 0;
     int Cheat_AutoTest __attribute__((section(".sdata"))) = 0;
+#define FRONTCHEATS_OWNER_DECLARATION
+#include "FRONTCHEATS.h"
     int Cheat_RestartSkip __attribute__((section(".sdata"))) = 0;
     int Cheat_GameInfo __attribute__((section(".sdata"))) = 0;
     int Cheat_FPS __attribute__((section(".sdata"))) = 0;
@@ -184,14 +181,12 @@ extern "C"
     int MusicStopped __attribute__((section(".sdata"))) = 0;
     VECTOR Zero __attribute__((section(".sdata"))) = {0, 0, 0, 0};
     #define TOTALCCLASSUSAGE_OWNER_DECLARATION
-    #define TOTALCCLASSUSAGE_WITHIN_C_LINKAGE
     #include "TOTALCCLASSUSAGE.h"
     int TotalCClassUsage __attribute__((section(".sdata"))) = 0;
     int Mick_Darkness __attribute__((section(".sdata"))) = 0;
     int ViewportMode __attribute__((section(".sdata"))) = 0;
     int PatchX __attribute__((section(".sdata"))) = 16;
     int PatchY __attribute__((section(".sdata"))) = 150;
-}
 
 /** Select-button edge latch owned by Display. */
 static int Display_Released asm("Released.30")
@@ -200,22 +195,32 @@ static int Display_Released asm("Released.30")
 /** MAIN-owned frame-loop state stored alongside the FPS counters. */
 static unsigned int LoopTimer __attribute__((section(".sdata"))) = 0;
 
+int FPSIndex __attribute__((section(".sdata"))) = 0;
+
+/**
+ * MAIN-private storage that also needs compiler-distinct absolute address
+ * views remains namespace-scoped while retaining its target C symbols.
+ */
+namespace MainAddressViewOwners
+{
 extern "C"
 {
-    int FPSIndex __attribute__((section(".sdata"))) = 0;
-}
-
-/** Format used by the optional frame-rate diagnostic. */
-static char Main_fpsFormatOwner[] asm("Main_fpsFormat")
+static char Main_fpsFormat[]
     __attribute__((section(".sdata"))) = " %d FPS";
+}
+}
 
 /**
  * Small diagnostic strings retained by the original main.obj data image.
  */
+namespace MainAddressViewOwners
+{
 extern "C"
 {
     static char DefaultPSH[]
         __attribute__((section(".sdata"))) = "sk2anim";
+}
+}
     static char Main_gameFontName[]
         __attribute__((section(".sdata"))) = "ingame1.fnt";
     int MemTotal __attribute__((section(".sdata"))) = 0;
@@ -247,22 +252,28 @@ extern "C"
         __attribute__((section(".sdata"))) = "Free Memory";
     int DemoDiskMode __attribute__((section(".sdata"))) = 0;
 
-    static char Main_startupBanner[] asm("s_xxx_main_800d976c")
+namespace MainAddressViewOwners
+{
+extern "C"
+{
+    static char s_xxx_main_800d976c[]
         __attribute__((section(".sdata"))) = "xxx main\n";
-    static char Main_startupStep9Owner[] asm("DAT_800d9778")
+    static char DAT_800d9778[]
         __attribute__((section(".sdata"))) = "9,";
-    static char Main_startupStep10Owner[] asm("DAT_800d977c")
+    static char DAT_800d977c[]
         __attribute__((section(".sdata"))) = "10,";
-    static char Main_startupStep11Owner[] asm("DAT_800d9780")
+    static char DAT_800d9780[]
         __attribute__((section(".sdata"))) = "11,";
-    static char Main_startupStep12Owner[] asm("DAT_800d9784")
+    static char DAT_800d9784[]
         __attribute__((section(".sdata"))) = "12,";
-    static char Main_startupStep13Owner[] asm("DAT_800d9788")
+    static char DAT_800d9788[]
         __attribute__((section(".sdata"))) = "13\n";
-    static char Main_s2bgd0[] asm("s_s2bgd0_bmp_800d978c")
+    static char s_s2bgd0_bmp_800d978c[]
         __attribute__((section(".sdata"))) = "s2bgd0.bmp";
-    static char Main_s2market[] asm("s_s2market_bmp_800d9798")
+    static char s_s2market_bmp_800d9798[]
         __attribute__((section(".sdata"))) = "s2market.bmp";
+}
+}
 
     void *OldSP __attribute__((section(".sdata"))) = 0;
     int CurrentGameLevel __attribute__((section(".sdata"))) = 0;
@@ -332,7 +343,6 @@ extern "C"
     Sprite *pPausedSprite __attribute__((section(".sdata"))) = 0;
     int MemDumpLoop __attribute__((section(".sdata"))) = 0;
     int DemoSize __attribute__((section(".sdata"))) = 0;
-}
 
 #include "PAD.h"
 
@@ -428,7 +438,6 @@ typedef char Main_Texture_prefix_size_must_be_32[
     (sizeof(MainTexture) == 32) ? 1 : -1];
 
 extern char Main_fpsFormat[];
-extern "C" const char sDumpAutoTestFmt[];
 
 // FILEIO is a natural C++ owner interface; keep it outside the C-linkage
 // declarations that follow.
@@ -439,30 +448,35 @@ extern "C" const char sDumpAutoTestFmt[];
 /** Draw every active transient bit effect. */
 void Bit_Display(void);
 
+/** Method-only view of the skater interface used by MAIN. */
+struct CBruce
+{
+    /** Save and temporarily adjust this skater's render transform. */
+    void TempTransform();
+    /** Restore this skater's saved render transform. */
+    void TempRestore();
+    /** Initialize item data and the skater-specific hook packet. */
+    void InitItem(char *filename);
+    /** Fill one displayed-stat slot for this skater. */
+    void GetStats(int skaterSlot);
+};
+
 // === External declarations (C linkage) ===
 extern "C"
 {
     #include <STDIO.H>
     #include <STRINGS.H>
+    #include <LIBAPI.H>
 
-    void Bruce_TempTransform(CBruce *skater) asm("TempTransform__6CBruce");
-    void Bruce_TempRestore(CBruce *skater) asm("TempRestore__6CBruce");
-    unsigned int SetSp(unsigned int stackPointer);
-
-    #define STARTUPGAMESTATE_WITHIN_C_LINKAGE
     #include "STARTUPGAMESTATE.h"
-    #define FRONTFLOWSTATE_WITHIN_C_LINKAGE
     #define FRONTFLOWSTATE_DECLARE_BACKOUT
     #include "FRONTFLOWSTATE.h"
-    #define STARTSCREEN_ABSOLUTE_DECLARATION
-    #define STARTSCREEN_WITHIN_C_LINKAGE
-    #include "STARTSCREEN.h"
     #include "GENERATELEVEL.h"
-    extern char Main_startupStep9[] asm("DAT_800d9778");
-    extern char Main_startupStep10[] asm("DAT_800d977c");
-    extern char Main_startupStep11[] asm("DAT_800d9780");
-    extern char Main_startupStep12[] asm("DAT_800d9784");
-    extern char Main_startupStep13[] asm("DAT_800d9788");
+    extern char DAT_800d9778[];
+    extern char DAT_800d977c[];
+    extern char DAT_800d9780[];
+    extern char DAT_800d9784[];
+    extern char DAT_800d9788[];
     // Draw_Rect / Mick_Darken globals (absolute addressing)
     // db.obj owns pPoly at 0x800DA344; no pPoly_arr array view is needed in MAIN.
     // db.obj owns pPoly at 0x800DA344; no pPoly2_arr array view is needed in MAIN.
@@ -520,39 +534,18 @@ int Horse_Reset(void);
 
 // === Free function declarations ===
 
-void DumpAutoTest(void);
-void Mick_Darken(void);
-void FlipPrimitives(void);
-int Display_Viewport(SViewport *pViewport, int ViewportNumber);
-void Draw_Rect(int X0, int Y0, int X1, int Y1, int X2, int Y2, int X3, int Y3, int c);
-void BlackOut(int x, int y, int w, int h);
-void Display(void);
-int FPS_Init(void);
-int FPS_Display(void);
-int PlayAway_Init(void);
-void SetSkater(CBruce *pBruce, char *filename);
-void Game_Init(void);
-void System_Logic(void);
-void CheckEndGame(void);
-void CheckSkatersStop(void);
-void Game_Logic(void);
-void Game_Display(void);
-int MainLoop_End(void);
 void UnloadGTricks(void);
-extern "C" void PadEnableCom(int);
 #include "DB.h"
-void PlayAway(void);
 
 // CClass memory tracking counter (gp+0x19E4)
-// Used[1] is the global memory-usage counter at 0x800DA4C0.  Keep two scalar
-// aliases so GCC performs the two loads around Mem_Delete exactly as before.
-extern "C" int CClassDelete_Used asm("Used+4")
-    __attribute__((section(".data")));
-extern "C" int CClassDelete_UsedAfter asm("Used+4")
+// Used[1] is the global memory-usage counter at 0x800DA4C0.  This scalar
+// address view preserves the two target loads around Mem_Delete.
+extern int CClassDelete_Used asm("Used+4")
     __attribute__((section(".data")));
 
 /** Eight-character header view of MAIN's nine-byte encoded-check buffer. */
-extern char Main_ChecksumCodeString[8] asm("Code_String");
+#define COMPCHECK_DECLARE_CHECKSUM_STRING_VIEW
+#include "COMPCHECK_H.h"
 
 static const u32 CHECKSUM_RANDOM_MULTIPLIER = 0xF26D;
 static const u32 CHECKSUM_POLYNOMIAL = 0x4517215A;
@@ -693,8 +686,8 @@ void DumpAutoTest(void)
     // Copy "previous" stats to "current"
     {
         int a = GAutoLevel;
-        register int b asm("$2") = GAutoPlayer1;
-        register int c asm("$4") = GAutoPlayer2;
+        int b = GAutoPlayer1;
+        int c = GAutoPlayer2;
         int d = GAutoGame;
         GAutoLevela = a;
         GAutoPlayer1a = b;
@@ -753,7 +746,7 @@ void CClass::operator delete(void *p)
 {
     int Before = CClassDelete_Used;
     Mem_Delete(p);
-    Before -= CClassDelete_UsedAfter;
+    Before -= CClassDelete_Used;
     TotalCClassUsage -= Before;
 }
 
@@ -766,12 +759,11 @@ void CClass::operator delete(void *p)
  *            Recomputes the active polygon buffer end from the current double buffer.
  */
 #include "PDOUBLEBUFFER.h"
-extern "C" int POLYBUFFERSIZE_dataA asm("POLYBUFFERSIZE") __attribute__((section(".data")));
 void CalcPolyBufferEnd(void)
 {
     PolyBufferEnd = reinterpret_cast<unsigned char *>(
         (reinterpret_cast<unsigned int>(reinterpret_cast<MainDoubleBuffer *>(pDoubleBuffer)->Polys) +
-         POLYBUFFERSIZE_dataA - 256) & 0x7FFFFFFF);
+         POLYBUFFERSIZE - 256) & 0x7FFFFFFF);
 }
 
 /**
@@ -1308,10 +1300,10 @@ int Display_Viewport(SViewport *pViewport, int ViewportNumber)
     M3d_Render(EnvironmentalObjectList);
 
     OldSP = reinterpret_cast<void *>(SetSp(0x1F8003C0));
-    Bruce_TempTransform(GSkater[0]);
+    GSkater[0]->TempTransform();
     if (GSkater[1] != 0)
     {
-        Bruce_TempTransform(GSkater[1]);
+        GSkater[1]->TempTransform();
     }
     SetSp(reinterpret_cast<unsigned int>(OldSP));
 
@@ -1333,10 +1325,10 @@ int Display_Viewport(SViewport *pViewport, int ViewportNumber)
     M3d_Render(MechList);
 
     OldSP = reinterpret_cast<void *>(SetSp(0x1F8003C0));
-    Bruce_TempRestore(GSkater[0]);
+    GSkater[0]->TempRestore();
     if (GSkater[1] != 0)
     {
-        Bruce_TempRestore(GSkater[1]);
+        GSkater[1]->TempRestore();
     }
     SetSp(reinterpret_cast<unsigned int>(OldSP));
 
@@ -1789,8 +1781,6 @@ int PlayAway_Init(void)
 // Address: 0x800348DC
 // Demangled: SetSkater(CBruce *, char *)
 #include "CREATE.h"
-extern "C" void CBruce_InitItem(CBruce *skater, char *filename)
-    asm("InitItem__6CBrucePc");
 /** CBruce prefix through the create-a-skater discriminator. */
 struct MainSetSkaterBruce
 {
@@ -1806,7 +1796,7 @@ typedef char Main_SetSkaterBruce_prefix_size_must_be_0xDAC[
  * Keeping this declaration distinct from the small-data owner preserves the
  * original caller's address materialization without duplicating storage.
  */
-extern "C" char SetSkaterDefaultPSH[] asm("DefaultPSH");
+extern char DefaultPSH[];
 void SetSkater(CBruce *pBruce, char *filename)
 {
     if (Create_UseSkater(
@@ -1815,13 +1805,13 @@ void SetSkater(CBruce *pBruce, char *filename)
         Create_BuildSkater(reinterpret_cast<CSuper *>(pBruce));
         return;
     }
-    CBruce_InitItem(pBruce, filename);
+    pBruce->InitItem(filename);
     char *PSH_AnimHierarchy[32];
     int mAnimPartCount = 0;
     char *PSH_ModelHierarchy[32];
     int mModelPartCount = 0;
     char *pData1 = Spool_LoadPSH(
-        SetSkaterDefaultPSH, PSH_AnimHierarchy, &mAnimPartCount, 32);
+        DefaultPSH, PSH_AnimHierarchy, &mAnimPartCount, 32);
     char *pData2 = Spool_LoadPSH(
         filename, PSH_ModelHierarchy, &mModelPartCount, 32);
     reinterpret_cast<CSuper *>(pBruce)->CalculateAnimOrder(
@@ -1859,14 +1849,6 @@ typedef char MainCreationBruce_size_check[
 typedef char MainCreationCamera_size_check[
     (sizeof(MainCreationCamera) == 0x684) ? 1 : -1];
 
-extern "C" MainCreationBruce *Main_CBruce_ctor(MainCreationBruce *)
-    asm("__6CBruce");
-extern "C" void Main_GetStats(MainCreationBruce *, int)
-    asm("GetStats__6CBrucei");
-
-/** First of the two adjacent board-stat records at the GBoardStats symbol. */
-extern "C" BoardStats GBoardStats __attribute__((section(".data")));
-
 void CreateSkatersAndCameras(void)
 {
     TrickTips_Init();
@@ -1890,7 +1872,9 @@ void CreateSkatersAndCameras(void)
                 (MainCreationBruce *)::CItem::operator new(
                     sizeof(MainCreationBruce));
             if (pBruce != 0)
-                pBruce = Main_CBruce_ctor(pBruce);
+                pBruce = reinterpret_cast<MainCreationBruce *>(
+                    CBruceConstructorABI::__6CBruce(
+                        reinterpret_cast<CBruceCtorSlice *>(pBruce)));
             int selectedSkater = SelectedSkater;
             GSkater[i] = reinterpret_cast<CBruce *>(pBruce);
             pBruce->mIndex = i;
@@ -1915,7 +1899,7 @@ void CreateSkatersAndCameras(void)
             if (stats[pBruce->mSkaterType].Ability[11] == 0)
                 pBruce->mExtraFlags |= 2;
             pBruce->mpBoardStats = bs;
-            Main_GetStats(pBruce, i);
+            reinterpret_cast<CBruce *>(pBruce)->GetStats(i);
             i++;
             bs++;
         } while (i < NumberOfOnscreenSkaters);
@@ -1988,14 +1972,7 @@ struct MainGameInitSkater
 };
 
 #include "LOCALTXT.h"
-
-extern "C"
-{
-    extern unsigned char DemoName[];
-    extern int Game_Init_VblankUpdateBar asm("VblankUpdateBar")
-        __attribute__((section(".data")));
-
-}
+#include "DEMONAME.h"
 
 void ResetOT(void);
 void SetClippingBox(int x, int y, int w, int h);
@@ -2037,7 +2014,7 @@ void Game_Init(void)
             int LoadError;
 
             Front_SetLoadAction(LOAD_VIDEO);
-            Game_Init_VblankUpdateBar = 1;
+            VblankUpdateBar = 1;
             if (GVideoRestart.NumSkaters == 1)
             {
                 LoadError =
@@ -2048,7 +2025,7 @@ void Game_Init(void)
                 LoadError = Card_Load(
                     THPS_VIDEO_FILE, GVInfo1.pBlockStart, GVInfo2.pBlockStart);
             }
-            Game_Init_VblankUpdateBar = 0;
+            VblankUpdateBar = 0;
             if (LoadError != 0)
             {
                 Mess_SetCurrentFont(Main_gameFontName);
@@ -2126,7 +2103,7 @@ void Game_Init(void)
         int LoadError;
         SVideoHead *VH;
 
-        Game_Init_VblankUpdateBar = 1;
+        VblankUpdateBar = 1;
         LoadError = Card_LoadReplayFromCD(
             GVInfo1.pBlockStart, GVInfo2.pBlockStart, (char *)DemoName);
         DemoName[4]++;
@@ -2134,7 +2111,7 @@ void Game_Init(void)
         {
             DemoName[4] = 0x41;
         }
-        Game_Init_VblankUpdateBar = 0;
+        VblankUpdateBar = 0;
         if (LoadError != 0)
         {
             EndCode = ENDCODE_LOADVIDEOFAILED;
@@ -2709,7 +2686,7 @@ int MainLoop_End(void)
     {
         Pause(1);
     }
-    register int currentVblank asm("$2") = Vblanks;
+    int currentVblank = Vblanks;
     GStartTime = currentVblank;
     PollHost();
 }
@@ -2761,16 +2738,16 @@ done:
  */
 int main(void)
 {
-    printf(Main_startupBanner);
-    printf(Main_startupStep9);
+    printf(MainAddressViewOwners::s_xxx_main_800d976c);
+    printf(DAT_800d9778);
     Options_Init();
-    printf(Main_startupStep10);
+    printf(DAT_800d977c);
     Career_Init();
-    printf(Main_startupStep11);
+    printf(DAT_800d9780);
     Init_AtStart();
-    printf(Main_startupStep12);
+    printf(DAT_800d9784);
     Init_Restart(PACK512x240, 16);
-    printf(Main_startupStep13);
+    printf(DAT_800d9788);
     Db_Init();
 
     Pad_Update();
@@ -2794,7 +2771,7 @@ int main(void)
         GameFMV_PlayMovie(-25);
     }
 
-    Front_DisplayScreen(Main_s2bgd0);
+    Front_DisplayScreen(MainAddressViewOwners::s_s2bgd0_bmp_800d978c);
 
     Pad_Update();
     int i = 0;
@@ -2958,7 +2935,7 @@ play_game:
         Init_Restart(PACK512x240, 16);
         Db_Init();
         GNumberOfPlayers = 1;
-        Front_DisplayScreen(Main_s2market);
+        Front_DisplayScreen(MainAddressViewOwners::s_s2market_bmp_800d9798);
         Pad_Update();
 
         Pad[0].Start.Triggered = 0;
@@ -2990,8 +2967,6 @@ play_game:
     return 0;
 }
 
-extern "C"
-{
     /** Uppercase digits used by the checksum/debug formatting helpers. */
     char HexDigits[17] __attribute__((section(".data"))) =
         "ABCFHJKLMNPSTVXY";
@@ -3046,8 +3021,6 @@ extern "C"
 
     /** Temporary controller state used while remapping or restoring input. */
     SControl TempPad __attribute__((section(".data"))) = {};
-
-}
 
 
 /**

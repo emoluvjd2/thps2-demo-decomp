@@ -20,14 +20,6 @@ void Ob_QuickAI(CBody **ppBody);
 
 #endif // OB_OWNER_LOCAL_SERVICE_DECLS
 
-/** Interleave expensive body AI samples across frames. */
-extern "C" void CBody_InterleaveAI(CBody *body)
-    asm("InterleaveAI__5CBody");
-
-/** Run the base body's empty per-frame virtual default. */
-extern "C" void CBody_EveryFrame(CBody *body)
-    asm("EveryFrame__5CBody");
-
 #ifdef OB_OWNER_DECLARATIONS
 
 #include "globals.h"
@@ -84,7 +76,6 @@ struct SJoint {
 #endif
 
 // === Variables (gp-relative in this TU) ===
-extern "C" unsigned int SuspendDistance;       // 0x800D9B48
 extern "C" CSVector ZeroSVector;       // 0x800D9B40
 extern "C" CVector ZeroVector;       // 0x800D9B34
 

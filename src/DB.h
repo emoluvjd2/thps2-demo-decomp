@@ -48,16 +48,15 @@ typedef char SDoubleBuffer_size_must_be_0xAC[
 #endif
 
 /** Packed clear colour installed in both display-buffer draw environments. */
-extern "C" unsigned int Db_SkyColor DB_SHARED_STATE_DECL_ATTR; // 0x800DA324
+extern unsigned int Db_SkyColor DB_SHARED_STATE_DECL_ATTR; // 0x800DA324
 
 /** Current write cursor in the active polygon command buffer. */
-extern "C" unsigned int *pPoly DB_SHARED_STATE_DECL_ATTR; // 0x800DA344
+extern unsigned int *pPoly DB_SHARED_STATE_DECL_ATTR; // 0x800DA344
 
 #undef DB_SHARED_STATE_DECL_ATTR
 
 int Db_OTSize(void);
 void Db_UpdateSky(void);
-void Db_CallBack(void);
 void Db_Vblank(void);
 void Db_WaitRender(void);
 void Db_Render(void);
@@ -68,3 +67,16 @@ void Db_FlipClear(void);
 void Db_DisplayDraw(void);
 
 #endif // DB_INC_H
+
+#ifdef DB_DECLARE_OWNER_ADDRESS_VIEWS
+/**
+ * Foreign display state addressed GP-relatively by the DB owner.
+ *
+ * This selector preserves DB.cpp's original declaration encounter without
+ * advertising these compiler views through the public display API.
+ */
+extern int Db_Background;
+extern int CurrentOTSize;
+
+#undef DB_DECLARE_OWNER_ADDRESS_VIEWS
+#endif

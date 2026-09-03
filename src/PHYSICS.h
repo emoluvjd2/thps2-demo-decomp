@@ -22,3 +22,9 @@ extern "C" int GHighTags2 PHYSICS_SHARED_SCORE_DECL_ATTR; // 0x800D7D64
 #undef PHYSICS_SHARED_SCORE_DECL_ATTR
 
 #endif // PHYSICS_INC_H
+
+#ifdef PHYSICS_DECLARE_DIAGNOSTIC_POOL
+/** Owner-local diagnostic strings retained in PHYSICS.obj. */
+extern const PhysicsDiagnostics PhysicsDiagnosticPool;
+#undef PHYSICS_DECLARE_DIAGNOSTIC_POOL
+#endif
