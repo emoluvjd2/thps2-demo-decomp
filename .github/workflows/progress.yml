@@ -1,0 +1,78 @@
+name: Progress report
+
+# Publishes the decomp.dev progress report.
+#
+# The report is committed at build/report.json rather than built here, because
+# this repository deliberately cannot build. Producing either the target or the
+# base objects requires the original executable, the Sony PSY-Q 4.6 SDK headers,
+# and ASPSX/PSYLINK -- none of which is redistributable, so none of which is in
+# this repository or reachable from a GitHub-hosted runner.
+#
+# build/report.json is generated from the project's canonical measurement gate,
+# which refuses to publish against stale or incomplete artifacts, and is
+# refreshed in the same commit as the source it describes. It validates against
+# objdiff's own report parser.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  report:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out
+        uses: actions/checkout@v4
+
+      - name: Validate the report
+        run: |
+          python3 - <<'PY'
+          import json, sys
+          from pathlib import Path
+
+          path = Path("build/report.json")
+          if not path.is_file():
+              sys.exit("ERROR: build/report.json is missing")
+
+          report = json.loads(path.read_text())
+          if report.get("version") != 2:
+              sys.exit(f"ERROR: unexpected report version {report.get('version')!r}")
+
+          measures = report.get("measures") or {}
+          units = report.get("units") or []
+          required = ("total_code", "matched_code", "total_functions",
+                      "matched_functions", "total_units")
+          missing = [k for k in required if k not in measures]
+          if missing:
+              sys.exit(f"ERROR: measures missing {missing}")
+          if not units:
+              sys.exit("ERROR: report contains no units")
+          if measures["total_units"] != len(units):
+              sys.exit("ERROR: total_units disagrees with the unit list")
+
+          total = int(measures["total_functions"])
+          matched = int(measures["matched_functions"])
+          if not 0 <= matched <= total or total == 0:
+              sys.exit(f"ERROR: implausible function counts {matched}/{total}")
+
+          # The per-unit function counts must add up to the headline, or the
+          # report is internally inconsistent and decomp.dev would show a
+          # number the project cannot reproduce.
+          summed = sum(int(u["measures"]["total_functions"]) for u in units)
+          if summed != total:
+              sys.exit(f"ERROR: unit functions sum to {summed}, headline says {total}")
+
+          print(f"{matched}/{total} functions exact "
+                f"({matched / total * 100:.6f}%) across {len(units)} units")
+          PY
+
+      - name: Upload progress report
+        uses: actions/upload-artifact@v4
+        with:
+          name: SLUS_900.86_report
+          path: build/report.json
+          if-no-files-found: error

@@ -23,6 +23,21 @@ requires the target disassembly and debug symbols, which are target-derived and
 deliberately excluded. What is published is the source those results were
 produced from.
 
+### Progress reporting
+
+`build/report.json` is a [decomp.dev](https://decomp.dev) progress report in
+objdiff's report schema, uploaded by `.github/workflows/progress.yml` as the
+`SLUS_900.86_report` artifact.
+
+It is committed rather than built in CI, because this repository deliberately
+cannot build: producing either the target or the base objects needs the
+original executable, the Sony PSY-Q SDK headers and ASPSX/PSYLINK, none of
+which is redistributable. The report is generated from the project's canonical
+measurement gate — which refuses to publish against stale or incomplete
+artifacts — and is refreshed in the same commit as the source it describes. CI
+validates its schema, internal consistency and unit totals before publishing
+it.
+
 ## Not included
 
 This repository intentionally excludes:
