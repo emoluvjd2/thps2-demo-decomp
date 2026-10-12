@@ -2,6 +2,8 @@
 
 **Note:** I'm aware that at the moment this codebase is more akin to AI slop than an proper decompilation. This started out as a personal research project into the PSX animation format rather than a full-blown decompilation. The current state of this repo serves as a snapshot for interested parties, but my end-goal is to deliver something user-friendly and most importantly, readable. I intend to spend a lot more time cleaning things up in the future once fully matched, though I have started some of that already.
 
+---
+
 Source-only work-in-progress reconstruction of the PlayStation THPS2 demo.
 
 This minimal public snapshot contains the recovered C/C++ under `src/` and the
